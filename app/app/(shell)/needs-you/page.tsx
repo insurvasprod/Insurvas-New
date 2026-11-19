@@ -1,3 +1,5 @@
+import { Suspense, type ReactNode } from "react";
+
 import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { MoreMenu } from "@/components/app/book/files/more-menu";
 import { InfoTip } from "@/components/ui/info-tip";
@@ -6,6 +8,7 @@ import { ReviewOldest } from "@/components/app/book/needs-you/review-oldest";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { Callout } from "@/components/app/settings/primitives";
+import { PageLoading } from "@/components/ui/page-loading";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { scopeFor } from "@/lib/agency/visibility";
 import { actAsPage, actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
@@ -35,17 +38,19 @@ export default async function NeedsYouPage({ searchParams }: { searchParams: Pro
   const [scope, radar] = await Promise.all([needsYouScope(guard), guardPage("chargeback_radar")]);
   const lapseRisk = radar.entitled && actAsPage(radar, ["owner", "producer", "retention"]);
   const { view: asked, file: fileId, group: askedGroup, q } = await searchParams;
-  // Files › "Open all in Needs you": only what that one file left (an unknown file shows everything).
-  const [list, file] = await Promise.all([loadNeedsYou(scope), fileId && isRecordUuid(fileId) ? loadFileFilter(scope.tenantId, fileId) : null]);
   const me = { userId: scope.userId, keeper: scope.keeper };
+  // Speed pass 2026-11-12: the title, the rail and the views draw at once; the list (every source read, about 4 s
+  // on a large book) streams in under them. Its read starts here and each part below waits for it.
+  const read = Promise.all([loadNeedsYou(scope), fileId && isRecordUuid(fileId) ? loadFileFilter(scope.tenantId, fileId) : null]).then(([list, file]) => {
+    const keep = (items: NeedsYouItem[]) => (file ? items.filter((entry) => fromFile(entry, file)) : items);
+    return { list, file, itemsOf: (v: NeedsYouView) => keep(v === "closed" ? list.closed : viewItems(list.open, v, me)) };
+  });
   // A producer's own items are the whole of what they see, so Agency would repeat Mine.
   const views: NeedsYouView[] = scope.keeper ? ["mine", "agency", "insurvas", "closed"] : ["mine", "closed"];
   const view: NeedsYouView = isNeedsYouView(asked) && views.includes(asked) ? asked : scope.keeper ? "agency" : "mine";
-  const keep = (items: NeedsYouItem[]) => (file ? items.filter((entry) => fromFile(entry, file)) : items);
-  const itemsOf = (v: NeedsYouView) => keep(v === "closed" ? list.closed : viewItems(list.open, v, me));
-  const fileQuery = file ? `&file=${file.fileId}` : "";
-  const items = itemsOf(view);
-  const oldest = view === "closed" ? null : items[0] ?? null;
+  // The file filter is in the address, so the views' links keep it without waiting for the file's own read.
+  const fileQuery = fileId && isRecordUuid(fileId) ? `&file=${fileId}` : "";
+  const tabsOf = (count: (v: NeedsYouView) => number | null) => <ViewTabs label="Needs you views" value={view} tabs={views.map((v) => ({ key: v, label: VIEW_LABELS[v], count: v === "closed" ? null : count(v), href: `/app/needs-you?view=${v}${fileQuery}` }))} />;
 
   // Round 6 (owner 2026-11-06): the two older views go in More, not as loose links under the table.
   const more = [
@@ -60,12 +65,37 @@ export default async function NeedsYouPage({ searchParams }: { searchParams: Pro
         Every decision the carrier files leave for a person: a client to pick, a sale no carrier has, money that doesn&apos;t match, an agent code nobody owns. Each row&apos;s button says what to do; it opens the Review page at that item, and the row leaves the list when it is decided.
         <br /><br /><b>Mine</b> is what is assigned to you. <b>Agency</b> is everyone&apos;s. <b>Waiting on Insurvas</b> is a status word only Insurvas can map; nothing to do. <b>Closed</b> is the last 30 days. The oldest first; amber after 30 days, red after 90.
       </InfoTip>}
-      tabs={<ViewTabs label="Needs you views" value={view} tabs={views.map((v) => ({ key: v, label: VIEW_LABELS[v], count: v === "closed" ? null : itemsOf(v).length, href: `/app/needs-you?view=${v}${fileQuery}` }))} />}
-      actions={<>{oldest ? <ReviewOldest fileId={file?.fileId ?? null} view={view} /> : null}<MoreMenu items={more} /></>}
+      tabs={<Suspense fallback={tabsOf(() => null)}><NeedsYouTabs read={read} tabsOf={tabsOf} /></Suspense>}
+      actions={<><Suspense fallback={null}><Oldest read={read} view={view} /></Suspense><MoreMenu items={more} /></>}
     >
+      <Suspense fallback={<PageLoading header={false} strip={false} />}>
+        <NeedsYouBody read={read} view={view} group={(NEEDS_YOU_GROUPS as readonly string[]).includes(askedGroup ?? "") ? (askedGroup as NeedsYouGroup) : "all"} readOnly={guard.entitlement.access === "read_only"} q={q} />
+      </Suspense>
+    </DataInPage>
+  );
+}
+
+type NeedsYouRead = Promise<{ list: Awaited<ReturnType<typeof loadNeedsYou>>; file: Awaited<ReturnType<typeof loadFileFilter>> | null; itemsOf: (v: NeedsYouView) => NeedsYouItem[] }>;
+
+/** The views with their counts, once the list is read (the fallback draws the same tabs without counts). */
+async function NeedsYouTabs({ read, tabsOf }: { read: NeedsYouRead; tabsOf: (count: (v: NeedsYouView) => number | null) => ReactNode }) {
+  const { itemsOf } = await read;
+  return tabsOf((v) => itemsOf(v).length);
+}
+
+/** "Review the oldest", only when the view has something open. */
+async function Oldest({ read, view }: { read: NeedsYouRead; view: NeedsYouView }) {
+  const { itemsOf, file } = await read;
+  return view !== "closed" && itemsOf(view)[0] ? <ReviewOldest fileId={file?.fileId ?? null} view={view} /> : null;
+}
+
+async function NeedsYouBody({ read, view, group, readOnly, q }: { read: NeedsYouRead; view: NeedsYouView; group: NeedsYouGroup | "all"; readOnly: boolean; q: string | undefined }) {
+  const { list, file, itemsOf } = await read;
+  return (
+    <>
       {/* Round 3: the sources that could not be read, as one line. */}
       {list.notes.length > 0 && <Callout tone="warning" title={list.notes.join(" · ")} />}
-      <NeedsYouList items={items} view={view} initialGroup={(NEEDS_YOU_GROUPS as readonly string[]).includes(askedGroup ?? "") ? (askedGroup as NeedsYouGroup) : "all"} readOnly={guard.entitlement.access === "read_only"} fromFile={file ? { name: file.name, clearHref: `/app/needs-you?view=${view}` } : null} initialQuery={searchParam(q) ?? ""} />
-    </DataInPage>
+      <NeedsYouList items={itemsOf(view)} view={view} initialGroup={group} readOnly={readOnly} fromFile={file ? { name: file.name, clearHref: `/app/needs-you?view=${view}` } : null} initialQuery={searchParam(q) ?? ""} />
+    </>
   );
 }

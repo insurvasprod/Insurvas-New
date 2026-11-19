@@ -13,7 +13,7 @@ import {
 } from "@/components/app/settings/money/setting-kit";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { checkboxControl, inputControl, Switch } from "@/components/ui/field";
+import { inputControl, Switch } from "@/components/ui/field";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -27,6 +27,7 @@ import { ACTION_LABELS, HOLD_SCOPE_LABELS, NOT_LEGAL_ADVICE, RECORD_TYPES, descr
 import type { ComplianceSettings } from "@/lib/compliance/settingsStore";
 import { cn } from "@/lib/utils";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * LA-6.8 · compliance settings. Every save goes to /api/app/compliance/settings, which validates it, enforces the
  * platform caps and writes an audit row. Coverage over silence: an unset licensed state is a row of the deadlines
@@ -257,7 +258,7 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
       control: (v, set) => (
         <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
           <legend className="sr-only">Accepted ways to verify identity</legend>
-          {VERIFICATION_METHODS.map((m) => <label key={m} className="flex items-start gap-2 text-sm text-[var(--ink)]"><input type="checkbox" className={cn(checkboxControl, "mt-0.5")} checked={((v["deletion.methods"] as string[]) ?? []).includes(m)} onChange={(e) => set("deletion.methods", toggle((v["deletion.methods"] as string[]) ?? [], m, e.target.checked))} />{METHOD_LABELS[m]}</label>)}
+          {VERIFICATION_METHODS.map((m) => <label key={m} className="flex items-start gap-2 text-sm text-[var(--ink)]"><CheckBox className="mt-0.5" checked={((v["deletion.methods"] as string[]) ?? []).includes(m)} onChange={(e) => set("deletion.methods", toggle((v["deletion.methods"] as string[]) ?? [], m, e.target.checked))} />{METHOD_LABELS[m]}</label>)}
         </fieldset>
       ),
       check: (v) => (((v["deletion.methods"] as string[]) ?? []).length ? null : "Keep at least one way to verify identity."),
@@ -290,7 +291,7 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
       control: (v, set) => (
         <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
           <legend className="sr-only">Gap checks</legend>
-          {GAP_CATEGORIES.map((g) => <label key={g.key} className="flex items-center gap-2 text-sm text-[var(--ink)]"><input type="checkbox" className={checkboxControl} checked={((v["report.gapChecks"] as string[]) ?? []).includes(g.key)} onChange={(e) => set("report.gapChecks", toggle((v["report.gapChecks"] as string[]) ?? [], g.key, e.target.checked))} />{g.label}</label>)}
+          {GAP_CATEGORIES.map((g) => <label key={g.key} className="flex items-center gap-2 text-sm text-[var(--ink)]"><CheckBox checked={((v["report.gapChecks"] as string[]) ?? []).includes(g.key)} onChange={(e) => set("report.gapChecks", toggle((v["report.gapChecks"] as string[]) ?? [], g.key, e.target.checked))} />{g.label}</label>)}
         </fieldset>
       ),
     },
@@ -307,7 +308,7 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
       control: (v, set) => (
         <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
           <legend className="sr-only">Dashboard tiles</legend>
-          {TILE_KEYS.map((k) => <label key={k} className="flex items-center gap-2 text-sm text-[var(--ink)]"><input type="checkbox" className={checkboxControl} checked={!((v["dashboard.hiddenTiles"] as string[]) ?? []).includes(k)} onChange={(e) => set("dashboard.hiddenTiles", toggle((v["dashboard.hiddenTiles"] as string[]) ?? [], k, !e.target.checked))} />{TILE_LABELS[k]}</label>)}
+          {TILE_KEYS.map((k) => <label key={k} className="flex items-center gap-2 text-sm text-[var(--ink)]"><CheckBox checked={!((v["dashboard.hiddenTiles"] as string[]) ?? []).includes(k)} onChange={(e) => set("dashboard.hiddenTiles", toggle((v["dashboard.hiddenTiles"] as string[]) ?? [], k, !e.target.checked))} />{TILE_LABELS[k]}</label>)}
         </fieldset>
       ),
     },

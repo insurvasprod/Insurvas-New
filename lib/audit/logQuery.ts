@@ -2,6 +2,7 @@ import "server-only";
 
 import { AUDIT_ACTIONS, AUDIT_ACTION_LABELS, type AuditAction } from "@/lib/audit/actions";
 import { AUDIT_LOG_PAGE_SIZE } from "@/lib/audit/constants";
+import { auditLensActions } from "@/lib/audit/lenses";
 import { isMoneyAction } from "@/lib/audit/moneyActions";
 import {
   formatUtc,
@@ -79,17 +80,14 @@ export async function listStaff(viewer: AuditViewer): Promise<StaffMember[]> {
   return (data ?? []) as StaffMember[];
 }
 
-export async function fetchAuditLogPage(
-  viewer: AuditViewer,
-  filters: AuditLogFilters,
-  staff: StaffMember[] | null = null,
-): Promise<AuditLogPage> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function filteredQuery(viewer: AuditViewer, filters: AuditLogFilters, count: boolean): any {
   const supabase = getSupabaseServiceClient();
 
   // "estimated", not "exact": an exact count is a full scan of a table past 45,000 rows on every
   // request. PostgREST still counts exactly below its max-rows threshold and switches to the
   // planner's estimate beyond it; the footer then says "about".
-  let query = supabase.from("audit_log").select(COLUMNS, { count: "estimated" }).order("ts", { ascending: false });
+  let query = supabase.from("audit_log").select(COLUMNS, count ? { count: "estimated" } : undefined).order("ts", { ascending: false });
 
   if (isSuperAdmin(viewer)) {
     if (filters.actorId) query = query.eq("actor_id", filters.actorId);
@@ -97,6 +95,10 @@ export async function fetchAuditLogPage(
   } else {
     query = query.eq("actor_id", viewer.id);
   }
+
+  // A lens is a fixed list of known actions (lib/audit/lenses.ts): Money, Staff & access, Catalog.
+  const lens = auditLensActions(filters.lens, AUDIT_ACTIONS);
+  if (lens) query = query.in("action", lens.length > 0 ? lens : ["__none__"]);
 
   if (filters.action) query = query.eq("action", filters.action);
   // Exact match, not a pattern: a target_id is an opaque identifier copied from a detail page.
@@ -117,13 +119,25 @@ export async function fetchAuditLogPage(
       query = query.eq("target_id", filters.q);
     }
   }
+  return query;
+}
 
+function staffFor(viewer: AuditViewer, staff: StaffMember[] | null): Promise<StaffMember[]> {
+  // A super admin may see any staff member (a small table, usually passed in by the page); anyone else only ever
+  // sees their own rows.
+  return isSuperAdmin(viewer) ? (staff ? Promise.resolve(staff) : listStaff(viewer)) : selfOnly(viewer);
+}
+
+export async function fetchAuditLogPage(
+  viewer: AuditViewer,
+  filters: AuditLogFilters,
+  staff: StaffMember[] | null = null,
+): Promise<AuditLogPage> {
   const from = (filters.page - 1) * AUDIT_LOG_PAGE_SIZE;
-  // The actor lookup does not wait for the rows: a super admin may see any staff member (a small
-  // table, usually passed in by the page); anyone else only ever sees their own rows.
+  // The actor lookup does not wait for the rows.
   const [{ data, count, error }, staffList] = await Promise.all([
-    query.range(from, from + AUDIT_LOG_PAGE_SIZE - 1),
-    isSuperAdmin(viewer) ? (staff ? Promise.resolve(staff) : listStaff(viewer)) : selfOnly(viewer),
+    filteredQuery(viewer, filters, true).range(from, from + AUDIT_LOG_PAGE_SIZE - 1),
+    staffFor(viewer, staff),
   ]);
 
   // The audit log is the evidence of record. "No recorded actions" and "we could not read the
@@ -133,6 +147,44 @@ export async function fetchAuditLogPage(
   const entries = await describe((data ?? []) as unknown as RawRow[], staffList);
   const total = count ?? 0;
   return { entries, total, approximate: isApproximateCount(total), readAt: Date.now() };
+}
+
+/** The most rows one export carries: the newest that match, read in pages of the API's max-rows. */
+export const AUDIT_EXPORT_LIMIT = 5000;
+const EXPORT_CHUNK = 1000;
+
+/**
+ * Every entry the filters match, newest first, up to AUDIT_EXPORT_LIMIT, for Export CSV. The same query and the
+ * same per-actor rule as the list. `truncated` says more rows matched than the file holds. Throws on a failed read.
+ */
+export async function fetchAuditLogRows(viewer: AuditViewer, filters: AuditLogFilters): Promise<{ entries: AuditLogEntry[]; truncated: boolean }> {
+  const rows: RawRow[] = [];
+  for (let from = 0; from <= AUDIT_EXPORT_LIMIT; from += EXPORT_CHUNK) {
+    const to = Math.min(from + EXPORT_CHUNK - 1, AUDIT_EXPORT_LIMIT);
+    const { data, error } = await filteredQuery(viewer, filters, false).range(from, to);
+    if (error) throw new Error(`Could not export the audit log: ${error.message}`);
+    const chunk = (data ?? []) as RawRow[];
+    rows.push(...chunk);
+    if (chunk.length < to - from + 1) break;
+  }
+  const truncated = rows.length > AUDIT_EXPORT_LIMIT;
+  if (truncated) rows.length = AUDIT_EXPORT_LIMIT;
+  return { entries: await describe(rows, await staffFor(viewer, null)), truncated };
+}
+
+/**
+ * One entry by id, for a sheet opened from a link (`?entry=`) whose row is not on the first page. The per-actor rule
+ * holds: anyone but a super admin gets null for another person's entry. Throws on a failed read.
+ */
+export async function fetchAuditEntry(viewer: AuditViewer, id: string, staff: StaffMember[] | null = null): Promise<AuditLogEntry | null> {
+  if (!isUuid(id)) return null;
+  let query = getSupabaseServiceClient().from("audit_log").select(COLUMNS).eq("id", id);
+  if (!isSuperAdmin(viewer)) query = query.eq("actor_id", viewer.id);
+  const [{ data, error }, staffList] = await Promise.all([query.maybeSingle(), staffFor(viewer, staff)]);
+  if (error) throw new Error(`Could not read the audit entry: ${error.message}`);
+  if (!data) return null;
+  const [entry] = await describe([data as unknown as RawRow], staffList);
+  return entry ?? null;
 }
 
 async function selfOnly(viewer: AuditViewer): Promise<StaffMember[]> {
@@ -168,14 +220,23 @@ type LooseClient = {
   };
 };
 
+// An export describes up to 5,000 rows at once; the ids go into the request URL, so they are sent in chunks.
+const LOOKUP_CHUNK = 150;
+
+/** Rows of `table` whose id is in `ids`, chunk by chunk. A failed chunk is skipped, not an error. */
+async function rowsById(table: string, columns: string, ids: string[]): Promise<Record<string, unknown>[]> {
+  const client = getSupabaseServiceClient() as unknown as LooseClient;
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += LOOKUP_CHUNK) chunks.push(ids.slice(i, i + LOOKUP_CHUNK));
+  const results = await Promise.all(chunks.map((chunk) => client.from(table).select(columns).in("id", chunk)));
+  return results.flatMap(({ data, error }) => (error || !Array.isArray(data) ? [] : (data as Record<string, unknown>[])));
+}
+
 /** id → label for one table. A failed lookup is not an error: the cell falls back to the raw id. */
 async function lookup(table: string, columns: string, ids: string[], label: Lookup["label"]): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   if (ids.length === 0) return out;
-  const client = getSupabaseServiceClient() as unknown as LooseClient;
-  const { data, error } = await client.from(table).select(columns).in("id", ids);
-  if (error || !Array.isArray(data)) return out;
-  for (const row of data as Record<string, unknown>[]) {
+  for (const row of await rowsById(table, columns, ids)) {
     const text = label(row);
     if (typeof row.id === "string" && text) out.set(row.id, text);
   }
@@ -235,10 +296,7 @@ async function describe(rows: RawRow[], staff: StaffMember[]): Promise<AuditLogE
 async function lookupPeople(ids: string[]): Promise<Map<string, { name: string | null; email: string }>> {
   const out = new Map<string, { name: string | null; email: string }>();
   if (ids.length === 0) return out;
-  const client = getSupabaseServiceClient() as unknown as LooseClient;
-  const { data, error } = await client.from("users").select("id, name, email").in("id", ids);
-  if (error || !Array.isArray(data)) return out;
-  for (const row of data as Record<string, unknown>[]) {
+  for (const row of await rowsById("users", "id, name, email", ids)) {
     const email = str(row.email);
     if (typeof row.id === "string" && email) out.set(row.id, { name: str(row.name), email });
   }

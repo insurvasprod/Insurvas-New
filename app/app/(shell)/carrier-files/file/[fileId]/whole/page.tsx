@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 
 import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
@@ -12,6 +11,7 @@ import { FileFrame } from "@/components/app/book/files/file-frame";
 import { EmptyState } from "@/components/ui/page-states";
 import { Pager } from "@/components/ui/pager";
 import { StatusChip } from "@/components/ui/status-chip";
+import { StreamSection } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs } from "@/components/ui/view-tabs";
 
@@ -34,16 +34,27 @@ export default async function WholeCarrierFilePage({ params, searchParams }: { p
   const { fileId } = await params;
   if (!isRecordUuid(fileId)) notFound();
   const { page, sheet: asked } = await searchParams;
-  const [file, head] = await Promise.all([loadWholeFile(guard.context.tenantId, fileId), loadFileHead(guard.context.tenantId, fileId)]);
-  if (!file || !head) notFound();
   const readOnly = guard.entitlement.access === "read_only";
-  const frame = (children: ReactNode) => <FileFrame head={head} tab="rows" tenantId={guard.context.tenantId} readOnly={readOnly}>{children}</FileFrame>;
+  // Frame first (UI-CONSISTENCY §7a): the file's frame draws at once (its name waits behind its shape); the file as
+  // sent streams in under it. The two reads are today's, started before the frame returns.
+  const head = loadFileHead(guard.context.tenantId, fileId);
+  const file = loadWholeFile(guard.context.tenantId, fileId);
+  return (
+    <FileFrame fileId={fileId} head={head} tenantId={guard.context.tenantId} readOnly={readOnly}>
+      <StreamSection shape="table"><WholeFile read={Promise.all([file, head])} page={page} asked={asked} /></StreamSection>
+    </FileFrame>
+  );
+}
+
+async function WholeFile({ read, page, asked }: { read: Promise<[Awaited<ReturnType<typeof loadWholeFile>>, Awaited<ReturnType<typeof loadFileHead>>]>; page: string | undefined; asked: string | undefined }) {
+  const [file, head] = await read;
+  if (!file || !head) notFound();
 
   if (file.problem) {
     return (
-      frame(<>
+      <>
         <TableCard><EmptyState title="The file can't be shown" hint={file.problem} /></TableCard>
-      </>)
+      </>
     );
   }
 
@@ -60,7 +71,7 @@ export default async function WholeCarrierFilePage({ params, searchParams }: { p
     }, []);
     const shown = numbered.slice((at - 1) * LINES_PER_PAGE, at * LINES_PER_PAGE);
     return (
-      frame(<>
+      <>
         <TableCard title="The PDF">
           <iframe src={`/api/app/carrier-files/${file.id}/view`} title={`${file.name}, the carrier's PDF`} className="block h-[80vh] w-full border-0" />
         </TableCard>
@@ -90,7 +101,7 @@ export default async function WholeCarrierFilePage({ params, searchParams }: { p
             </table>
           )}
         </TableCard>
-      </>)
+      </>
     );
   }
 
@@ -109,7 +120,7 @@ export default async function WholeCarrierFilePage({ params, searchParams }: { p
   const readNote = workbook ? (file.sheetRead ? `The rows were read from the sheet "${file.sheetRead}".` : "No sheet has been read yet.") : null;
 
   return (
-    frame(<>
+    <>
       {workbook && sheets.length > 0 && (
         <ViewTabs
           label="Sheets"
@@ -154,6 +165,6 @@ export default async function WholeCarrierFilePage({ params, searchParams }: { p
           </table>
         )}
       </TableCard>
-    </>)
+    </>
   );
 }

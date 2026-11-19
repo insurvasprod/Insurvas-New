@@ -19,12 +19,14 @@ const blank: Guidance = { whereInPortal: "", reportName: "", formatHint: "", not
 /**
  * LA-4.10 (Notion sprint) · staff write, in plain words, where each carrier keeps its policy file —
  * which menu, what the report is called, which format to choose. Agencies see it on the import
- * screen the moment it is saved.
+ * screen the moment it is saved. Admin round 1 (catalog.html screen 13): the same inline table and
+ * per-row Save inside the Catalog frame; `single` draws one carrier's row on its record, without the
+ * search and filter row. "Only missing" starts on from the page's `?missing=1`.
  */
-export function CarrierGuidanceEditor({ rows }: { rows: Row[] }) {
+export function CarrierGuidanceEditor({ rows, single = false, initialMissingOnly = false }: { rows: Row[]; single?: boolean; initialMissingOnly?: boolean }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const [missingOnly, setMissingOnly] = useState(false);
+  const [missingOnly, setMissingOnly] = useState(initialMissingOnly);
   const [drafts, setDrafts] = useState<Record<string, Guidance>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [page, setPage] = useState(1);
@@ -55,8 +57,8 @@ export function CarrierGuidanceEditor({ rows }: { rows: Row[] }) {
 
   return (
     <TableCard
-      toolbar={<DataToolbar><ToolbarSearch value={query} onChange={search} placeholder="Search carriers" /><ToolbarCheckbox checked={missingOnly} onChange={filterMissing} label="Only carriers with no guidance" /></DataToolbar>}
-      footer={visible.length > 0 ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="carriers" onPage={setPage} /> : undefined}
+      toolbar={single ? undefined : <DataToolbar><ToolbarSearch value={query} onChange={search} placeholder="Search carriers" /><ToolbarCheckbox checked={missingOnly} onChange={filterMissing} label="Only carriers with no guidance" /></DataToolbar>}
+      footer={visible.length > 0 && !single ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="carriers" onPage={setPage} /> : undefined}
     >
       {visible.length === 0 ? <NoMatches noun="carriers" onClear={() => { setQuery(""); setMissingOnly(false); setPage(1); }} /> : (
         <table className="portal-lead-table w-full min-w-[1100px] text-left text-sm">

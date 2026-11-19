@@ -45,8 +45,10 @@ const persistKey = (key: string) => `${PERSIST_PREFIX}${scope}:${key}`;
 const PERSIST_MAX_AGE = 30 * 60_000;
 
 /** The request that reads a resource. Swappable in tests. */
-let fetcher = async (url: string): Promise<unknown> => {
-  const response = await fetch(url, { cache: "no-store" });
+let fetcher = async (url: string, warm = false): Promise<unknown> => {
+  // A warm-up says so (`x-insurvas-warm`), so server logs and the page timer (scripts/perf/all-pages.mjs) can tell
+  // reads made ahead of a click from the reads a page waits on.
+  const response = await fetch(url, warm ? { cache: "no-store", headers: { "x-insurvas-warm": "1" } } : { cache: "no-store" });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     const message = body && typeof body === "object" && "error" in body && typeof (body as { error: unknown }).error === "string" ? (body as { error: string }).error : `Request failed (${response.status})`;
@@ -112,11 +114,11 @@ export function peek<T>(key: string, persist = false): Entry<T> | undefined {
  * Ask for `key` (its URL unless `url` is given). Joins a request already in flight; otherwise starts one. Resolves
  * with the data; the entry and every subscriber are updated either way.
  */
-export function load<T>(key: string, opts: { url?: string; persist?: boolean; read?: (url: string) => Promise<T> } = {}): Promise<T> {
+export function load<T>(key: string, opts: { url?: string; persist?: boolean; read?: (url: string) => Promise<T>; warm?: boolean } = {}): Promise<T> {
   const current = peek<T>(key, opts.persist) ?? { at: 0, seq: 0 };
   if (current.pending) return current.pending;
   const seq = current.seq + 1;
-  const read = opts.read ?? (fetcher as (url: string) => Promise<T>);
+  const read = opts.read ?? ((url: string) => fetcher(url, opts.warm === true) as Promise<T>);
   const pending = read(opts.url ?? key).then(
     (data) => {
       const now = entries.get(key) as Entry<T> | undefined;
@@ -160,7 +162,7 @@ export function prefetch(key: string, opts: { url?: string; persist?: boolean; f
   const current = peek(key, opts.persist);
   if (current?.pending) return;
   if (current?.data !== undefined && Date.now() - current.at < (opts.freshFor ?? 15_000)) return;
-  load(key, opts).catch(() => { /* a warm-up failing is not an error the person sees */ });
+  load(key, { ...opts, warm: true }).catch(() => { /* a warm-up failing is not an error the person sees */ });
 }
 
 /** Put data in the cache directly (an answer the page already has, an optimistic change). */

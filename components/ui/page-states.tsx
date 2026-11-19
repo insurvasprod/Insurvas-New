@@ -25,7 +25,8 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center gap-2 px-6 py-8 text-center">
+    // m-in (Wave D, plan item 18): an empty list rises in like a section, from .72 — never from blank.
+    <div className="m-in flex flex-col items-center gap-2 px-6 py-8 text-center">
       <p className="text-sm font-semibold text-foreground">{title}</p>
       <p className="max-w-[52ch] text-sm text-muted-foreground">{hint}</p>
       {action && <div className="mt-2">{action}</div>}
@@ -52,7 +53,7 @@ export function NoMatches({
   by?: "filters" | "search";
 }) {
   return (
-    <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
+    <div className="m-in flex flex-col items-center gap-2 px-6 py-12 text-center">
       <p className="text-sm font-semibold text-foreground">No {noun} match {by === "search" ? "this search" : "these filters"}</p>
       <p className="max-w-[52ch] text-sm text-muted-foreground">
         {by === "search"

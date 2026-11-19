@@ -250,6 +250,32 @@ export function monthOutcome(trials: readonly EndedTrialInput[], now: Date): Mon
   return out;
 }
 
+export type MonthConversion = { key: string; label: string; converted: number; lapsed: number };
+
+/**
+ * Conversion over the last `months` calendar months (UTC), oldest first, the current month last (billing-r2
+ * screen 3, the Trials sheet's foot): trials that converted or lapsed in each month, dated as monthOutcome dates
+ * them. A trial whose end cannot be dated is left out of every month.
+ */
+export function monthlyOutcomes(trials: readonly EndedTrialInput[], now: Date, months = 6): MonthConversion[] {
+  const out: MonthConversion[] = Array.from({ length: months }, (_, index) => {
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (months - 1 - index), 1));
+    return { key: start.toISOString().slice(0, 7), label: MONTHS[start.getUTCMonth()], converted: 0, lapsed: 0 };
+  });
+  const first = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (months - 1), 1);
+  for (const trial of trials) {
+    if (trial.status === "trialing") continue;
+    const ended = trialEndedAt(trial, now);
+    if (!ended || ended.getTime() < first || ended.getTime() > now.getTime()) continue;
+    const key = ended.toISOString().slice(0, 7);
+    const month = out.find((m) => m.key === key);
+    if (!month) continue;
+    if (trialConverted(trial)) month.converted += 1;
+    else month.lapsed += 1;
+  }
+  return out;
+}
+
 // Hand-built rather than Intl: en-GB prints "Sept" in current ICU builds and "Sep" in older ones,
 // and the board (and every other admin date) reads "Sep".
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

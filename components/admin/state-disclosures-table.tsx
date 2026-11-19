@@ -15,7 +15,8 @@ import { StateDisclosuresReviewCard } from "@/components/admin/state-disclosures
 import { Callout, st } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
-import { PageHeader } from "@/components/ui/page-header";
+import { useTitleAction } from "@/components/admin/platform/title-action";
+import { PLATFORM_ACTION } from "@/lib/adminPlatform/titleActions";
 import { TableCard } from "@/components/ui/table-card";
 import {
   DropdownMenu,
@@ -63,6 +64,7 @@ export function StateDisclosuresTable({
   currentAdminId,
   earliest,
   quarterStart,
+  initialView = null,
 }: {
   disclosures: StateDisclosure[];
   /** Active products from the platform catalog, in catalog order. */
@@ -73,16 +75,21 @@ export function StateDisclosuresTable({
   /** Tomorrow, UTC: the first date a new version may take effect. */
   earliest: string;
   quarterStart: string;
+  /** Where the Platform workspace's row lands (`?show=placeholders` / `?show=not_covered`): the table opens filtered. */
+  initialView?: "placeholders" | "not_covered" | null;
 }) {
   const router = useRouter();
   const [product, setProduct] = useState<string>("all");
   const [query, setQuery] = useState("");
-  const [coverage, setCoverage] = useState<CoverageFilter>("all");
-  const [placeholderOnly, setPlaceholderOnly] = useState(false);
+  const [coverage, setCoverage] = useState<CoverageFilter>(initialView === "placeholders" ? "in_force" : initialView === "not_covered" ? "not_covered" : "all");
+  const [placeholderOnly, setPlaceholderOnly] = useState(initialView === "placeholders");
   const [changingOnly, setChangingOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [editor, setEditor] = useState<EditorTarget | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  // "Import a pack" and "Add a disclosure" sit on the Platform frame's title line (admin round 1, 2026-11-18).
+  useTitleAction(PLATFORM_ACTION.importPack, () => setImportOpen(true));
+  useTitleAction(PLATFORM_ACTION.addDisclosure, () => setEditor({ kind: "new" }));
 
   const scope = useMemo(() => productScope(catalog, disclosures), [catalog, disclosures]);
   const allRows = useMemo(() => buildCoverageRows(disclosures, scope, proposals.pending), [disclosures, scope, proposals.pending]);
@@ -155,20 +162,6 @@ export function StateDisclosuresTable({
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <PageHeader
-        title="Disclosures"
-        actions={
-          <>
-            <Button type="button" variant="outline" onClick={() => setImportOpen(true)}>
-              Import a pack
-            </Button>
-            <Button type="button" onClick={() => setEditor({ kind: "new" })}>
-              Add a disclosure
-            </Button>
-          </>
-        }
-      />
-
       <BoardStatGrid>
         <BoardStatTile
           label="States covered"

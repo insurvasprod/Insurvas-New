@@ -1,6 +1,8 @@
 // The audit-log screen's pure pieces: filter parsing, UTC day bounds, time formatting, search and
-// the actor dropdown's value encoding. Client-safe and import-free, so the table component, the API
+// the actor dropdown's value encoding. Client-safe, with relative imports only, so the table component, the API
 // route and node:test (logView.test.mjs) all use the same code.
+
+import { isAuditLens, type AuditLens } from "./lenses.ts";
 
 export type AuditActorType = "admin" | "tenant" | "system";
 
@@ -29,6 +31,8 @@ export type AuditLogEntry = {
 };
 
 export type AuditLogFilters = {
+  /** All · Money · Staff & access · Catalog (lib/audit/lenses.ts); "all" filters nothing. */
+  lens: AuditLens;
   action: string | null;
   actorType: AuditActorType | null;
   actorId: string | null;
@@ -75,7 +79,9 @@ export function parseAuditLogFilters(
   const from = params.get("from");
   const to = params.get("to");
   const page = Math.floor(Number(params.get("page")));
+  const lens = params.get("lens");
   return {
+    lens: isAuditLens(lens) ? lens : "all",
     action: action && knownActions.includes(action) ? action : null,
     actorType: actorType && (ACTOR_TYPES as readonly string[]).includes(actorType) ? (actorType as AuditActorType) : null,
     actorId: actorId && isUuid(actorId) ? actorId : null,
@@ -85,6 +91,28 @@ export function parseAuditLogFilters(
     q: text(params.get("q")),
     page: Number.isFinite(page) && page >= 1 ? page : 1,
   };
+}
+
+/**
+ * The filters as a query string, in one fixed order: the address the page keeps, the request the table sends to
+ * GET /api/admin/audit-log and the export link all come from it, so the server's first render and the table agree
+ * on which rows are on screen. The actor filter is a super admin's only (anyone else is locked to their own rows on
+ * the server whatever is sent). `page` is left out on page 1 when `withPage` is false (the address and the export).
+ */
+export function auditQueryString(filters: AuditLogFilters, isSuperAdmin: boolean, withPage = true): string {
+  const params = new URLSearchParams();
+  if (filters.lens !== "all") params.set("lens", filters.lens);
+  if (filters.action) params.set("action", filters.action);
+  if (isSuperAdmin) {
+    if (filters.actorId) params.set("actorId", filters.actorId);
+    else if (filters.actorType) params.set("actorType", filters.actorType);
+  }
+  if (filters.from) params.set("from", filters.from);
+  if (filters.to) params.set("to", filters.to);
+  if (filters.target) params.set("target", filters.target);
+  if (filters.q) params.set("q", filters.q);
+  if (withPage) params.set("page", String(filters.page));
+  return params.toString();
 }
 
 /**

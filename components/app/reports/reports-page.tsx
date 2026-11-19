@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { ReportsRail } from "@/components/app/reports/reports-rail";
 import { ReportsHeader } from "@/components/app/reports/reports-slot";
 import { FRAME_GRID, FRAME_RAIL_CELL, FRAME_STEP, FRAME_STEP_CELL } from "@/components/app/step-frame/step-frame-layout";
-import { ViewSwitch } from "@/components/ui/view-switch";
+import { ShowSwap, ViewSwitch } from "@/components/ui/view-switch";
 import type { ShowMode } from "@/lib/reports/show";
 import { REPORTS_RAIL_COOKIE, reportsViewLabel, type ReportsView } from "@/lib/reports/views";
 
@@ -18,7 +18,8 @@ import { REPORTS_RAIL_COOKIE, reportsViewLabel, type ReportsView } from "@/lib/r
  * bookmark and guide target still lands on the right screen; the route renders its screen inside this
  * frame. The menu offers the Reports pages the sidebar offers this person.
  *
- * `title`: the record a drill or a sub-page has open (a scorecard's rows), in place of the view's name.
+ * `title`: the record a drill or a sub-page has open (a scorecard's rows), in place of the view's name. A title read from
+ * the data streams (frame first, §7a): `<Suspense fallback={<TitleShape />}>…</Suspense>`, so the frame draws first.
  * `bar`: accepted and ignored (2026-11-02): a view's tabs and actions (ReportsSlot) sit on the title's line.
  *
  * Foundation pass (2026-11-03, docs/reports/FOUNDATION-PASS.md), as Accounting: `info` is the view's (i)
@@ -28,9 +29,10 @@ import { REPORTS_RAIL_COOKIE, reportsViewLabel, type ReportsView } from "@/lib/r
  * `show` (Reports round 7, owner pick 0·A, 2026-11-11): puts the "Table · Chart" switch (ViewSwitch) on the title
  * line, before the view's buttons, defaulting to this view ("chart" on a report, "table" on a drill). The page reads
  * the same choice with `showOf(searchParams, show)` (lib/reports/show.ts); a client view with `useShow(show)`.
- * Omitted, the title line is as it was.
+ * Omitted, the title line is as it was. With it, the view crosses in when the switch flips (ShowSwap, Tier 1 motion
+ * Wave A 2026-11-17), here once for every Reports view.
  */
-export async function ReportsPage({ view, title, info, chip, facts, show, children }: { view: ReportsView; title?: string; info?: ReactNode; chip?: ReactNode; facts?: ReactNode; bar?: boolean; show?: ShowMode; children: ReactNode }) {
+export async function ReportsPage({ view, title, label, info, chip, facts, show, children }: { view: ReportsView; title?: ReactNode; /** The title as text when `title` streams (the (i)'s name). */ label?: string; info?: ReactNode; chip?: ReactNode; facts?: ReactNode; bar?: boolean; show?: ShowMode; children: ReactNode }) {
   const jar = await cookies();
   const collapsed = jar.get(REPORTS_RAIL_COOKIE)?.value === "collapsed";
 
@@ -41,6 +43,7 @@ export async function ReportsPage({ view, title, info, chip, facts, show, childr
     <div data-step-frame className={FRAME_GRID}>
       <ReportsHeader
         title={title ?? reportsViewLabel(view)}
+        label={label ?? (typeof title === "string" ? title : reportsViewLabel(view))}
         info={info}
         chip={chip}
         facts={facts}
@@ -53,7 +56,7 @@ export async function ReportsPage({ view, title, info, chip, facts, show, childr
         <div className={FRAME_STEP_CELL}>
           {/* The view arrives in the one 150ms m-content-in on every switch; rows, figures and bars bring their own motion. */}
           <div key={view} data-page-content className={FRAME_STEP}>
-            {children}
+            {show ? <ShowSwap fallback={show}>{children}</ShowSwap> : children}
           </div>
         </div>
       </ReportsHeader>

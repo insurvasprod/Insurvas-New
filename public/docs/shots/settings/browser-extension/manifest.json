@@ -1,0 +1,74 @@
+[
+  {
+    "src": "/docs/shots/settings/browser-extension/1.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Install for Chrome",
+    "focus": {
+      "x": 720,
+      "y": 141,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/browser-extension/2.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Check again after you install",
+    "focus": {
+      "x": 720,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/browser-extension/3.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check the carrier sites it fills",
+    "focus": {
+      "x": 290,
+      "y": 47,
+      "w": 822,
+      "h": 514
+    }
+  },
+  {
+    "src": "/docs/shots/settings/browser-extension/4.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check who can use it",
+    "focus": {
+      "x": 239,
+      "y": 308,
+      "w": 924,
+      "h": 577
+    }
+  },
+  {
+    "src": "/docs/shots/settings/browser-extension/5.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Revoke to take someone's access away",
+    "focus": {
+      "x": 720,
+      "y": 373,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/browser-extension/6.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open Recent fills",
+    "focus": {
+      "x": 556,
+      "y": 223,
+      "w": 720,
+      "h": 450
+    }
+  }
+]

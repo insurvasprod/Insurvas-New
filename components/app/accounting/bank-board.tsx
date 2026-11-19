@@ -22,7 +22,15 @@ import { MATCH_STATUS_LABELS, type MatchStatus } from "@/lib/accounting/bankLabe
 import { DEPOSIT_FILTERS, depositFilterOf, depositNextStep, readableDay, shortDay, type BankTab, type DepositFilter } from "@/lib/accounting/bankResultsCore";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 
+import { CheckBox } from "@/components/ui/check-box";
+import { DoneStamp } from "@/components/ui/done-stamp";
+import { UploadProgress } from "@/components/ui/upload-progress";
+import { sendWithProgress } from "@/components/ui/upload-request";
+import { afterStamp, useDoneStamps } from "@/components/ui/use-done-stamps";
+import { useDepartures } from "@/components/ui/use-row-exit";
+import { titleCaseNode } from "@/components/ui/title-case";
 /**
  * LA-7.6 · what actually landed in the bank, matched to what the carriers say they paid. The system suggests; a
  * person confirms every match — a wrong automatic match would make a P&L look reconciled when it is not.
@@ -60,6 +68,8 @@ export function BankImportForm({ accounts, initialFile = null, onClose, onDone }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ rows: number; added: number; duplicates: number; skipped: { line: number; reason: string }[]; suggested: number } | null>(null);
+  // How far the file has gone up (Tier 2 motion, 2026-11-18): a real bar while it uploads; the import ends on its check.
+  const [progress, setProgress] = useState<number | null>(null);
   const send = async (previewOnly: boolean) => {
     if (!file) return;
     const form = new FormData();
@@ -70,12 +80,19 @@ export function BankImportForm({ accounts, initialFile = null, onClose, onDone }
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/app/accounting/bank/import", { method: "POST", body: form });
+      const res = await sendWithProgress("/api/app/accounting/bank/import", form, setProgress);
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error ?? "The file could not be read");
-      if (previewOnly) { setPreview(json); setMap(json.map ?? { date: "", description: "", amount: "" }); setMode(json.map?.credit && json.map?.debit ? "split" : "single"); }
-      else { setResult(json); notify.done(`Imported ${json.added} new line${json.added === 1 ? "" : "s"}`); onDone(); }
+      if (previewOnly) { setProgress(null); setPreview(json); setMap(json.map ?? { date: "", description: "", amount: "" }); setMode(json.map?.credit && json.map?.debit ? "split" : "single"); }
+      else {
+        // The bar fills and its check draws, then the result shows.
+        setProgress(1);
+        await new Promise<void>((done) => afterStamp(done));
+        setProgress(null);
+        setResult(json); notify.done(`Imported ${json.added} new line${json.added === 1 ? "" : "s"}`); onDone();
+      }
     } catch (err) {
+      setProgress(null);
       setError(err instanceof Error ? err.message : "The file could not be read");
     } finally {
       setBusy(false);
@@ -116,7 +133,7 @@ export function BankImportForm({ accounts, initialFile = null, onClose, onDone }
           </Field>
           {mode === "single" ? col("amount", "Amount") : <>{col("credit", "Money in")}{col("debit", "Money out")}</>}
           {col("reference", "Reference", true)}
-          <label className="flex items-center gap-2 self-end text-sm"><input type="checkbox" checked={!!map?.invert} onChange={(e) => setMap((m) => (m ? { ...m, invert: e.target.checked } : m))} />Deposits show as negative in this export</label>
+          <label className="flex items-center gap-2 self-end text-sm"><CheckBox checked={!!map?.invert} onChange={(e) => setMap((m) => (m ? { ...m, invert: e.target.checked } : m))} />Deposits show as negative in this export</label>
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -124,6 +141,7 @@ export function BankImportForm({ accounts, initialFile = null, onClose, onDone }
           <Field label="File" htmlFor="bank-import-file" hint={file ? file.name : undefined}><input id="bank-import-file" type="file" accept=".csv,text/csv" className="mt-1.5 block text-sm" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setPreview(null); }} /></Field>
         </div>
       )}
+      {file && progress !== null ? <UploadProgress name={file.name} value={progress} /> : null}
       {error ? <p className="m-0 text-sm text-[var(--error-ink)]">{error}</p> : null}
       <DialogFooter className="sm:justify-between">
         {preview ? <Button type="button" variant="ghost" onClick={() => setPreview(null)}>‹ Back</Button> : <span />}
@@ -243,7 +261,11 @@ export function DepositsBoard({ data, readOnly, show, account: accountParam, ope
   const shown = inAccount
     .filter((t) => filter === "all" || depositFilterOf(t.status) === filter)
     .filter((t) => !needle || has(t.descriptionRaw, needle) || has(t.reference, needle) || t.matches.some((m) => has(m.carrierName, needle)) || money(t.amountCents).includes(needle));
-  const paged = paginate(shown, page, pageSize);
+  // A line matched or set aside stamps "Matched" in its row, then (once the refresh lands) plays out of the tab it
+  // left (Tier 2 motion, 2026-11-18). A search, an account or a tab change is a different list, so nothing plays.
+  const stamps = useDoneStamps(data.txns);
+  const left = useDepartures(shown, (t) => t.id, `${filter}|${account}|${needle}`);
+  const paged = paginate(left.rows, page, pageSize);
   const pick = (f: DepositFilter) => { setFilter(f); setPage(1); setParamsInPlace({ show: f === "to_match" ? null : f }); };
   const current = open ? byId.get(open.ids[open.at]) : undefined;
 
@@ -272,8 +294,8 @@ export function DepositsBoard({ data, readOnly, show, account: accountParam, ope
         footer={shown.length > pageSize ? <Pager page={paged.current} total={shown.length} noun="deposits" pageSize={pageSize} onPage={setPage} /> : shown.length ? <span className="text-sm text-muted-foreground">{shown.length} deposit{shown.length === 1 ? "" : "s"} · newest first</span> : undefined}
       >
         {data.accounts.length === 0 ? <NoAccount readOnly={readOnly} />
-          : shown.length === 0 && (needle || filter !== "to_match") ? <NoMatches noun="deposits" onClear={() => { setQ(""); pick("to_match"); }} />
-          : shown.length === 0 ? <EmptyState title="Nothing to match" hint="Every deposit is matched to a carrier statement, or set aside with a reason. Import the latest bank export to bring in new deposits." />
+          : left.rows.length === 0 && (needle || filter !== "to_match") ? <NoMatches noun="deposits" onClear={() => { setQ(""); pick("to_match"); }} />
+          : left.rows.length === 0 ? <EmptyState title="Nothing to match" hint="Every deposit is matched to a carrier statement, or set aside with a reason. Import the latest bank export to bring in new deposits." />
           : (
             <table className="portal-lead-table w-full min-w-[960px] text-left text-sm">
               <thead><tr><th>On the bank statement</th><th>Date</th><th className="text-right">Amount</th><th>What explains it</th><th>Status</th><th>Next step</th></tr></thead>
@@ -282,14 +304,15 @@ export function DepositsBoard({ data, readOnly, show, account: accountParam, ope
                   const why = explains(t);
                   const pending = t.matches.filter((m) => !m.confirmed).length;
                   const next = depositNextStep({ status: t.status, pending });
+                  const stamped = stamps.labelOf(t.id);
                   // One line per row (owner 2026-11-11): the account and bank reference are the description's tooltip.
                   return (
-                    <tr key={t.id} className="cursor-pointer" onClick={() => setOpen({ ids: [t.id], at: 0, stepping: false })}>
+                    <tr key={t.id} className="cursor-pointer" onClick={() => setOpen({ ids: [t.id], at: 0, stepping: false })} {...left.rowProps(t.id)}>
                       <td className="whitespace-nowrap font-medium text-foreground" title={[accountLabel(accountOf(t.accountId)), t.reference ? `ref ${t.reference}` : null].filter(Boolean).join(" · ")}>{t.descriptionRaw}</td>
                       <td className="whitespace-nowrap tabular-nums text-muted-foreground">{readableDay(t.postedOn)}</td>
                       <td className="whitespace-nowrap text-right tabular-nums"><button type="button" className="hover:underline" onClick={(e) => { e.stopPropagation(); setOpen({ ids: [t.id], at: 0, stepping: false }); }}>{money(t.amountCents)}</button></td>
                       <td className="whitespace-nowrap" title={why.sub}>{why.text}</td>
-                      <td><StatusChip tone={TONE[t.status]}>{STATUS_WORDS[t.status]}</StatusChip></td>
+                      <td>{stamped && depositFilterOf(t.status) === "to_match" ? <DoneStamp label={stamped} /> : <StatusChip tone={TONE[t.status]}>{STATUS_WORDS[t.status]}</StatusChip>}</td>
                       <td className="whitespace-nowrap" title={next ?? undefined}>{depositStep(t.status, pending)} ›</td>
                     </tr>
                   );
@@ -308,6 +331,7 @@ export function DepositsBoard({ data, readOnly, show, account: accountParam, ope
           step={open.stepping ? { at: open.at, total: open.ids.length } : null}
           onClose={close}
           onChanged={refresh}
+          onDone={(label) => void stamps.stamp(current.id, label, refresh)}
           onNext={open.stepping && open.at < open.ids.length - 1 ? () => setOpen({ ...open, at: open.at + 1 }) : undefined}
         />
       ) : null}
@@ -407,7 +431,7 @@ function AccountDialog({ a, facts, readOnly, onClose, onSaved }: { a: Account; f
           ) : <p className="m-0 text-sm text-muted-foreground">The columns are read on the first import.</p>}
           <p className="m-0 text-xs text-muted-foreground">The mapping is set on import; change it on the next import&apos;s columns step.</p>
           <DialogFooter className="sm:justify-between">
-            <Link className="self-center text-sm font-medium text-[var(--accent-ink)] hover:underline" href={depositsHref} onClick={onClose}>Its {facts?.deposits ?? 0} deposits ›</Link>
+            <Link className={cn(buttonVariants({ variant: "outline", size: "sm" }), "no-underline self-center")} href={depositsHref} onClick={onClose}>{titleCaseNode(<>Its {facts?.deposits ?? 0} deposits</>)}</Link>
             <span className="flex gap-2">
               <Button type="button" variant="outline" onClick={onClose}>{readOnly ? "Close" : "Cancel"}</Button>
               {readOnly ? null : <Button type="submit" disabled={busy || !name.trim() || name.trim() === a.nickname}>{busy ? "Saving…" : "Save"}</Button>}

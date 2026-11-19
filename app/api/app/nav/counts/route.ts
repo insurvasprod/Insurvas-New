@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { requireTenant, contextRoles } from "@/lib/tenantAuth/requireTenant";
-import { getEntitlement } from "@/lib/entitlements/get";
-import { effectiveFeatures } from "@/lib/features/killSwitch";
+import { contextRoles } from "@/lib/tenantAuth/requireTenant";
+import { requireTenantAhead } from "@/lib/tenantAuth/requireTenantAhead";
 import { scopeFor } from "@/lib/agency/visibility";
 import { readNavCounts, readOwnPresence } from "@/lib/menu/navCounts";
 
@@ -12,15 +11,18 @@ import { readNavCounts, readOwnPresence } from "@/lib/menu/navCounts";
  * hid for this member is dropped too. Any failure answers an empty map: the menu simply shows no number.
  */
 export async function GET() {
-  const auth = await requireTenant();
-  if (auth instanceof NextResponse) return auth;
   const headers = { "Cache-Control": "no-store" };
+  // The plan, kill switches and scope ride with the membership read: one trip before the counts (was three).
+  let auth: Awaited<ReturnType<typeof requireTenantAhead>>;
   try {
-    const entitlement = await getEntitlement(auth.context.tenantId);
-    const [available, scope] = await Promise.all([
-      effectiveFeatures(entitlement.features, auth.context.tenantId),
-      scopeFor(auth.context),
-    ]);
+    auth = await requireTenantAhead({ scope: true });
+  } catch {
+    return NextResponse.json({ counts: {}, presence: null }, { headers });
+  }
+  if (auth instanceof NextResponse) return auth;
+  try {
+    const available = auth.available;
+    const scope = await scopeFor(auth.context);
     const who = { tenantId: auth.context.tenantId, userId: auth.context.userId, roles: contextRoles(auth.context), available };
     const [counts, presence] = await Promise.all([
       readNavCounts({ ...who, scope }),

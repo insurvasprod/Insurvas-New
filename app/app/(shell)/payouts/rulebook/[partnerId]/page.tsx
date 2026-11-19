@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
@@ -10,6 +11,8 @@ import { RulebookForm } from "@/components/app/accounting/partner-ledger-board";
 import { RULEBOOK_SLOT } from "@/components/app/commissions/splits/slots";
 import { NeighbourNav } from "@/components/app/commissions/team-payouts/shared";
 import { EmptyState } from "@/components/ui/page-states";
+import { StreamSection, TitleShape } from "@/components/ui/stream-section";
+import { Part, startParts } from "@/components/app/commissions/frame-parts";
 import { TableCard } from "@/components/ui/table-card";
 
 /**
@@ -28,26 +31,34 @@ export default async function PartnerRulebookPage({ params }: { params: Promise<
   const { partnerId } = await params;
   if (!UUID.test(partnerId)) notFound();
   const tenantId = guard.context.tenantId;
-  let rulebook: Awaited<ReturnType<typeof getRulebook>> | null = null;
-  let list: Awaited<ReturnType<typeof listRulebooks>> = [];
-  try {
-    [rulebook, list] = await Promise.all([getRulebook(tenantId, partnerId), listRulebooks(tenantId).catch(() => [])]);
-  } catch (error) {
-    if (!(error instanceof PayoutError)) throw error;
-    if (error.status === 404) notFound();
-  }
-  const at = list.findIndex((r) => r.partnerId === partnerId);
-  const link = (r: (typeof list)[number] | undefined) => (r ? { href: `/app/payouts/rulebook/${r.partnerId}`, label: r.partnerName } : null);
-  const name = rulebook?.partnerName ?? "Payout rulebook";
+  // Frame first (§7a): the trail and the (i) draw at once; the partner's name, the ‹ › and the rulebook's form (one
+  // block, as a form fills in) stream in.
+  const read = startParts((async () => {
+    let rulebook: Awaited<ReturnType<typeof getRulebook>> | null = null;
+    let list: Awaited<ReturnType<typeof listRulebooks>> = [];
+    try {
+      [rulebook, list] = await Promise.all([getRulebook(tenantId, partnerId), listRulebooks(tenantId).catch(() => [])]);
+    } catch (error) {
+      if (!(error instanceof PayoutError)) throw error;
+      if (error.status === 404) notFound();
+    }
+    const at = list.findIndex((r) => r.partnerId === partnerId);
+    const link = (r: (typeof list)[number] | undefined) => (r ? { href: `/app/payouts/rulebook/${r.partnerId}`, label: r.partnerName } : null);
+    return {
+      title: rulebook ? `${rulebook.partnerName} · payout rulebook` : "Payout rulebook",
+      actions: rulebook ? <span className="inline-flex flex-wrap items-center gap-2"><NeighbourNav previous={at > 0 ? link(list[at - 1]) : null} next={at >= 0 ? link(list[at + 1]) : null} noun="partner" /><StepSlotTarget id={RULEBOOK_SLOT} /></span> : null,
+      body: rulebook ? <RulebookForm rulebook={rulebook} readOnly={guard.entitlement.access === "read_only"} /> : <TableCard><EmptyState title="Partner payouts aren't switched on for this agency yet." hint="Rulebooks appear here once they are." /></TableCard>,
+    };
+  })());
   return (
     <CommissionsPage
       step="partnerPayouts"
-      title={rulebook ? `${rulebook.partnerName} · payout rulebook` : "Payout rulebook"}
+      title={<Suspense fallback={<TitleShape />}><Part read={read} part="title" /></Suspense>}
       info="How this partner is paid. A new price starts on the day you choose; everything earned before it keeps the old price. The pay schedule decides when Run payouts makes this partner's next invoice."
-      breadcrumbs={[{ label: "Commissions" }, { label: "Partner payouts", href: "/app/payouts" }, { label: "Rulebooks", href: "/app/payouts?view=rulebooks" }, { label: name }]}
-      actions={rulebook ? <span className="inline-flex flex-wrap items-center gap-2"><NeighbourNav previous={at > 0 ? link(list[at - 1]) : null} next={at >= 0 ? link(list[at + 1]) : null} noun="partner" /><StepSlotTarget id={RULEBOOK_SLOT} /></span> : undefined}
+      breadcrumbs={[{ label: "Commissions" }, { label: "Partner payouts", href: "/app/payouts" }, { label: "Rulebooks", href: "/app/payouts?view=rulebooks" }, { label: "Rulebook" }]}
+      actions={<Suspense fallback={null}><Part read={read} part="actions" /></Suspense>}
     >
-      {rulebook ? <RulebookForm rulebook={rulebook} readOnly={guard.entitlement.access === "read_only"} /> : <TableCard><EmptyState title="Partner payouts aren't switched on for this agency yet." hint="Rulebooks appear here once they are." /></TableCard>}
+      <StreamSection shape="form"><Part read={read} part="body" /></StreamSection>
     </CommissionsPage>
   );
 }

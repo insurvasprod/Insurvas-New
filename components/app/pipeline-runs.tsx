@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { ClickRow } from "@/components/app/book/policy/click-row";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -17,6 +17,7 @@ import { FILE_STAGES, STAGE_LABELS } from "@/lib/ingestion/dailyRun";
 import type { FindingRow, RunRow, StageRow } from "@/lib/ingestion/dailyRunStore";
 import { findingHref } from "@/lib/ingestion/trace";
 import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 
 /**
  * LA-4.19 (Notion sprint) · Carrier files › Runs and › Agent findings. A run lists each file with
@@ -169,7 +170,7 @@ export function AgentFindings({ findings, accuracy, available, canReview }: { fi
                     {/* Round 5 (walk 2026-11-03): the question is on the problem's own page; the list only links to it. */}
                     <td className="whitespace-nowrap">
                       {f.status === "open" && canReview
-                        ? <Link href={findingHref(f.id)} className="hover:underline">Review ›</Link>
+                        ? <Link href={findingHref(f.id)} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Review</Link>
                         : <>{STATUS_WORD[f.status] ?? f.status}</>}
                     </td>
                   </ClickRow>

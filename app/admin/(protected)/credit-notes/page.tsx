@@ -3,25 +3,37 @@ import { redirect } from "next/navigation";
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
 import { canViewInvoices } from "@/lib/invoices/permissions";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { Callout } from "@/components/app/settings/primitives";
-import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
-import { BillingTabs } from "@/components/admin/billing-tabs";
+import { BillingPage } from "@/components/admin/billing/billing-page";
+import { CreditNoteSheet } from "@/components/admin/billing/refund-note-sheet";
 import { CreditNotesTable, type CreditNoteRow } from "@/components/admin/credit-notes-table";
-import { RaiseCreditNotePicker } from "@/components/admin/raise-credit-note-picker";
+import { RaiseCreditNotePicker, type PaidInvoice } from "@/components/admin/raise-credit-note-picker";
 import { formatCentsAsCurrency } from "@/lib/money";
+import { fetchCreditNoteRecord } from "@/lib/invoices/creditNoteTrail";
 import { refundApprovalThresholdCents } from "@/lib/settings/queries";
 
-export default async function CreditNotesPage() {
+/**
+ * Admin › Billing › Refunds & credits (billing-r2 screen 6). Kept: the approval threshold in words, the four
+ * figures, the pending / failed / awaiting-reconciliation warnings (now the status line), the columns, Approve
+ * (never for the raiser) and Retry reconciliation, refresh and the pager. New: lenses and search in the address,
+ * the Reason column, raising a credit note in place, and a credit note's sheet with its approval trail.
+ *
+ * Address parameters: lens=approval|failed|reconciliation (also pending, provider_pending), q=<text>,
+ * note=<credit note id> opens its sheet, raise=<paid invoice id> opens the raise sheet on that invoice.
+ */
+export default async function CreditNotesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const admin = await getCurrentAdmin();
   if (!admin) redirect("/admin/login");
   if (!canViewInvoices(admin.role)) redirect("/admin");
 
+  const query = await searchParams;
+  const noteId = typeof query.note === "string" ? query.note : null;
   const supabase = getSupabaseServiceClient();
-  const [thresholdCents, notesResult, paidResult] = await Promise.all([
+  const [thresholdCents, notesResult, paidResult, record] = await Promise.all([
     refundApprovalThresholdCents(),
     supabase.from("credit_notes").select("*, tenants(name), invoice:platform_invoices(id, number)").order("created_at", { ascending: false }),
-    supabase.from("platform_invoices").select("id, number, total_cents, tenants(name)").eq("status", "paid").order("number", { ascending: false }).limit(500),
+    supabase.from("platform_invoices").select("id, number, tenant_id, total_cents, provider_payment_id, paid_at, tenants(name)").eq("status", "paid").order("number", { ascending: false }).limit(500),
+    noteId ? fetchCreditNoteRecord(noteId) : Promise.resolve(null),
   ]);
 
   // This screen holds the pending-approval queue. A failed query renders it empty, which reads as
@@ -34,43 +46,27 @@ export default async function CreditNotesPage() {
   const ownPending = pending.filter((n) => n.requested_by === admin.id);
   const failed = notes.filter((n) => n.status === "failed");
   const providerPending = notes.filter((n) => n.reconciliation_state === "provider_pending");
-  const paid = ((paidResult.data ?? []) as unknown as Array<{ id: string; number: string; total_cents: number; tenants: { name: string } | null }>).map((row) => ({ id: row.id, number: row.number, total_cents: row.total_cents, tenant_name: row.tenants?.name ?? "—" }));
-  const names = (rows: CreditNoteRow[]) => rows.slice(0, 3).map((n) => n.number).join(", ") + (rows.length > 3 ? ` and ${rows.length - 3} more` : "");
+  const totalCents = notes.reduce((sum, n) => sum + n.amount_cents, 0);
+  const paid: PaidInvoice[] = ((paidResult.data ?? []) as unknown as Array<Omit<PaidInvoice, "tenant_name"> & { tenants: { name: string } | null }>)
+    .map(({ tenants, ...row }) => ({ ...row, tenant_name: tenants?.name ?? "—" }));
 
   return (
-    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <PageHeader
-        tabs={<BillingTabs />}
-        title="Refunds & credits"
-        description={`Refunds above ${formatCentsAsCurrency(thresholdCents)} need a second admin.`}
-        actions={<RaiseCreditNotePicker invoices={paid} />}
-      />
+    <BillingPage
+      step="refunds"
+      info={`Refunds above ${formatCentsAsCurrency(thresholdCents)} need a second admin.`}
+      actions={<RaiseCreditNotePicker invoices={paid} approvalThresholdCents={thresholdCents} />}
+    >
+      <div className="flex min-w-0 flex-col gap-4">
+        <StatStrip label="Credit note totals">
+          <StatTile label="Credit notes" value={notes.length.toLocaleString("en-US")} footnote={`all time · ${formatCentsAsCurrency(totalCents)}`} />
+          <StatTile label="Pending approval" value={pending.length.toLocaleString("en-US")} footnote={ownPending.length > 0 ? `${ownPending.length.toLocaleString("en-US")} raised by you` : pending.length > 0 ? "needs a second admin" : "none waiting"} href={pending.length > 0 ? "/admin/credit-notes?lens=approval" : undefined} />
+          <StatTile label="Failed" value={failed.length.toLocaleString("en-US")} footnote={failed.length > 0 ? "at the provider" : "none failed"} href={failed.length > 0 ? "/admin/credit-notes?lens=failed" : undefined} />
+          <StatTile label="Awaiting reconciliation" value={providerPending.length.toLocaleString("en-US")} footnote={providerPending.length > 0 ? "provider not confirmed" : "all reconciled"} href={providerPending.length > 0 ? "/admin/credit-notes?lens=reconciliation" : undefined} />
+        </StatStrip>
 
-      <StatStrip label="Credit note totals">
-        <StatTile label="Credit notes" value={notes.length.toLocaleString("en-US")} footnote="all time" />
-        <StatTile label="Pending approval" value={pending.length.toLocaleString("en-US")} valueTone={pending.length > 0 ? "warning" : undefined} footnote={ownPending.length > 0 ? `${ownPending.length.toLocaleString("en-US")} raised by you` : pending.length > 0 ? "needs a second admin" : "none waiting"} />
-        <StatTile label="Failed" value={failed.length.toLocaleString("en-US")} valueTone={failed.length > 0 ? "danger" : undefined} footnote={failed.length > 0 ? "at the provider" : "none failed"} />
-        <StatTile label="Awaiting reconciliation" value={providerPending.length.toLocaleString("en-US")} valueTone={providerPending.length > 0 ? "warning" : undefined} footnote={providerPending.length > 0 ? "provider not confirmed" : "all reconciled"} />
-      </StatStrip>
-
-      {(pending.length > 0 || failed.length > 0 || providerPending.length > 0) && (
-        <div className="flex flex-col gap-2">
-          {pending.length > 0 && (
-            <Callout
-              tone="warning"
-              title={`${pending.length} pending approval — no money moves until a second admin approves${ownPending.length > 0 ? `; ${names(ownPending)} ${ownPending.length === 1 ? "is" : "are"} yours, so another admin must approve` : ""}.`}
-            />
-          )}
-          {failed.length > 0 && (
-            <Callout tone="error" title={`${failed.length} failed at the provider (${names(failed)}) — investigate before retrying; the money may or may not have moved.`} />
-          )}
-          {providerPending.length > 0 && (
-            <Callout tone="warning" title={`${providerPending.length} awaiting reconciliation — use Retry reconciliation; do not raise a second credit note.`} />
-          )}
-        </div>
-      )}
-
-      <CreditNotesTable notes={notes} currentAdminId={admin.id} />
-    </div>
+        <CreditNotesTable notes={notes} currentAdminId={admin.id} />
+      </div>
+      {record && <CreditNoteSheet note={record} currentAdminId={admin.id} />}
+    </BillingPage>
   );
 }

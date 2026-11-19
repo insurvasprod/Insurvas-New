@@ -6,8 +6,12 @@ import { useRef, useState, type DragEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DoneStamp } from "@/components/ui/done-stamp";
 import { Field, control } from "@/components/ui/field";
 import { TableCard } from "@/components/ui/table-card";
+import { UploadProgress } from "@/components/ui/upload-progress";
+import { sendWithProgress } from "@/components/ui/upload-request";
+import { afterStamp } from "@/components/ui/use-done-stamps";
 import { EXPENSE_BUCKET_COPY, bucketOf, monthName, shiftMonth, type ExpenseCategory } from "@/lib/accounting/expensesCore";
 import { PAID_METHOD_LABELS, PAID_METHODS } from "@/lib/accounting/invoicesCore";
 import { formatCentsAsCurrency } from "@/lib/money";
@@ -45,6 +49,9 @@ export function OkDialog({ queue, open, onOpenChange }: { queue: OkItem[]; open:
   const [busy, setBusy] = useState(false);
   const [skipping, setSkipping] = useState(false);
   const [okd, setOkd] = useState(0);
+  // The bill just OK'd: "Paid" stamps in for the OK button, and the dialog steps on (or closes) once the check has
+  // drawn (Tier 2 motion, 2026-11-18).
+  const [stamped, setStamped] = useState<string | null>(null);
   const item = queue[at];
   if (!item) return null;
   const last = at >= queue.length - 1;
@@ -65,7 +72,8 @@ export function OkDialog({ queue, open, onOpenChange }: { queue: OkItem[]; open:
     try {
       await sendExpense(`/api/app/accounting/expenses/${item.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "ok", paid_on: paidOn, method, reference: reference.trim() || null }) });
       setOkd(okd + 1);
-      advance(okd + 1);
+      setStamped(item.id);
+      afterStamp(() => advance(okd + 1));
     } catch (err) {
       notify.fail(err instanceof Error ? err.message : "That didn't save");
     } finally {
@@ -113,8 +121,10 @@ export function OkDialog({ queue, open, onOpenChange }: { queue: OkItem[]; open:
           <DialogFooter className="sm:justify-between">
             <Button type="button" variant="ghost" disabled={busy} onClick={() => setSkipping(true)}>Skip this month</Button>
             <div className="flex flex-col-reverse gap-2 sm:flex-row">
-              <Button type="button" variant="outline" disabled={busy} onClick={() => close(false)}>Keep it</Button>
-              <Button type="button" disabled={busy || !paidOn} onClick={() => void ok()}>{last ? "OK it" : "OK and next ›"}</Button>
+              <Button type="button" variant="outline" disabled={busy || stamped === item.id} onClick={() => close(false)}>Keep it</Button>
+              {stamped === item.id
+                ? <DoneStamp label="Paid" className="self-center" />
+                : <Button type="button" disabled={busy || !paidOn} onClick={() => void ok()}>{last ? "OK it" : "OK and next ›"}</Button>}
             </div>
           </DialogFooter>
         </DialogContent>
@@ -179,15 +189,24 @@ export function ExpenseReceipt({ id, documentName, hasReceipt, canAttach, reason
   const picker = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [over, setOver] = useState(false);
+  // The receipt going up (Tier 2 motion, 2026-11-18): a real bar while it uploads, then its check.
+  const [sending, setSending] = useState<{ name: string; value: number } | null>(null);
   const upload = async (file: File) => {
     const form = new FormData();
     form.set("file", file);
     setBusy(true);
     try {
-      await sendExpense(`/api/app/accounting/expenses/${id}`, { method: "PATCH", body: form });
+      // sendExpense's handling, on a request that reports its progress.
+      const res = await sendWithProgress(`/api/app/accounting/expenses/${id}`, form, (value) => setSending({ name: file.name, value }), "PATCH");
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? "That didn't save");
       notify.done("Receipt attached");
+      setSending({ name: file.name, value: 1 });
+      await new Promise<void>((done) => afterStamp(done));
+      setSending(null);
       router.refresh();
     } catch (err) {
+      setSending(null);
       notify.fail(err instanceof Error ? err.message : "The file didn't upload");
     } finally {
       setBusy(false);
@@ -218,7 +237,8 @@ export function ExpenseReceipt({ id, documentName, hasReceipt, canAttach, reason
         </table>
       ) : (
         <div
-          className={`m-4 flex flex-col items-center gap-2 rounded-lg border border-dashed px-6 py-10 text-center ${over ? "border-[var(--primary)]" : "border-[var(--border-strong)]"}`}
+          data-drag-over={over ? "" : undefined}
+          className={`m-dropzone m-4 flex flex-col items-center gap-2 rounded-lg border border-dashed px-6 py-10 text-center ${over ? "border-[var(--primary)]" : "border-[var(--border-strong)]"}`}
           onDragOver={(e) => { e.preventDefault(); if (canAttach) setOver(true); }}
           onDragLeave={() => setOver(false)}
           onDrop={drop}
@@ -228,6 +248,7 @@ export function ExpenseReceipt({ id, documentName, hasReceipt, canAttach, reason
           <div className="mt-2">{choose}</div>
         </div>
       )}
+      {sending ? <UploadProgress name={sending.name} value={sending.value} className="mx-4 mb-4" /> : null}
       <input ref={picker} type="file" className="sr-only" tabIndex={-1} aria-hidden="true" accept=".pdf,.png,.jpg,.jpeg" onChange={(ev) => { const file = ev.target.files?.[0]; if (file) void upload(file); ev.target.value = ""; }} />
     </TableCard>
   );

@@ -22,6 +22,7 @@ import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { clockWords, CodeCard, inWords, InlineLink, send, SheetSection, ShownOnce, TechnicalDetails, TickCard, whenWords } from "./shared";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * Settings › Integrations, round 8 option A · the Webhooks tab (board A9), a webhook's sheet with
  * Setup and Deliveries (A10, A12), the add-a-webhook sheet (A11) and the signing secret, shown once.
@@ -577,7 +578,7 @@ export function AddWebhookSheet({ onClose, onAdded, onDocs }: { onClose: () => v
       </SheetSection>
       <SheetSection title="After saving" help={<>We show its signing secret once and offer a test delivery. <InlineLink onClick={onDocs}>How to check our signature ›</InlineLink></>}>
         <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--body)]">
-          <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={testAfter} onChange={(event) => setTestAfter(event.target.checked)} />
+          <CheckBox checked={testAfter} onChange={(event) => setTestAfter(event.target.checked)} />
           Send a test delivery right away
         </label>
       </SheetSection>

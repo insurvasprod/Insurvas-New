@@ -1,0 +1,134 @@
+[
+  {
+    "src": "/docs/shots/settings/calendar-availability/1.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Pick whose calendar to set",
+    "focus": {
+      "x": 242,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/calendar-availability/2.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set your timezone",
+    "focus": {
+      "x": 157,
+      "y": 58,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/calendar-availability/3.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Pick a Quick start for your week",
+    "focus": {
+      "x": 385,
+      "y": 58,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/calendar-availability/4.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Appointments tab",
+    "focus": {
+      "x": 268,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/calendar-availability/5.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set the Length and Gap after each",
+    "focus": {
+      "x": 262,
+      "y": 0,
+      "w": 1178,
+      "h": 736
+    }
+  },
+  {
+    "src": "/docs/shots/settings/calendar-availability/6.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Time off & breaks tab",
+    "focus": {
+      "x": 384,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/calendar-availability/7.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Block some time",
+    "focus": {
+      "x": 720,
+      "y": 50,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/calendar-availability/8.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Booking rules tab",
+    "focus": {
+      "x": 549,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/calendar-availability/9.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Choose whether same-day booking is allowed",
+    "focus": {
+      "x": 720,
+      "y": 100,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/calendar-availability/10.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Whole agency tab",
+    "focus": {
+      "x": 666,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/calendar-availability/11.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set Most appointments a day",
+    "focus": {
+      "x": 409,
+      "y": 134,
+      "w": 720,
+      "h": 450
+    }
+  }
+]

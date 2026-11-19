@@ -1154,6 +1154,7 @@ export async function commitImport(input: {
       rejections,
       // Before 703100 the ledger refuses a repeat; everything else is still recorded.
       rejectionsWithoutRepeats: rejections.filter((rejection) => rejection.outcome !== "duplicate_in_file"),
+      fields: template.template.fields,
     });
   } catch (error) {
     if (error instanceof ImportCommitRefusal) {

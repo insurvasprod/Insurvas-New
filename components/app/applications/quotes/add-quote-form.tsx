@@ -22,6 +22,7 @@ import { Field, control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ToggleChip } from "@/components/ui/toggle-chip";
+import { useDenyShake } from "@/components/ui/use-deny-shake";
 import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
 import { bandFallback, checkQuote, premiumPer1000, ratingAge, type QuoteWarning } from "@/lib/quotes/math";
 import { TIER_LABEL } from "@/lib/applications/constants";
@@ -102,6 +103,7 @@ export function AddQuoteForm({ catalogue, template, onTemplate, onExtra, prefill
   const [termChoice, setTermChoice] = useState<number | null>(null);
   const [classChoice, setClassChoice] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
+  const refusal = useDenyShake();
   const [busy, setBusy] = useState(false);
   const [editClient, setEditClient] = useState(false);
   const [justAdded, setJustAdded] = useState<string | null>(null);
@@ -180,7 +182,8 @@ export function AddQuoteForm({ catalogue, template, onTemplate, onExtra, prefill
 
   async function save() {
     setTried(true);
-    if (!product || requiredError || faceFormat || premiumFormat || annualFormat || annualMissing || check.error || faceCents === null || premiumCents === null) return;
+    // Refused for what is missing or wrong: Add quote shakes once (Wave B, 2026-11-18).
+    if (!product || requiredError || faceFormat || premiumFormat || annualFormat || annualMissing || check.error || faceCents === null || premiumCents === null) { refusal.deny(); return; }
     setBusy(true);
     try {
       const ok = await onAdd({
@@ -344,7 +347,7 @@ export function AddQuoteForm({ catalogue, template, onTemplate, onExtra, prefill
           {tried && requiredError && <p role="alert" className="text-sm font-semibold text-[var(--error-ink)]">{requiredError}</p>}
           {showError && blocking && <p role="alert" className="text-sm font-semibold text-[var(--error-ink)]">{showError}</p>}
           {(bandWarning || otherWarnings.length > 0) && (
-            <div className="rounded-[12px] border border-[var(--border)] border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3.5">
+            <div role="note" className="flex flex-col gap-2">
               {bandWarning && per !== null && (
                 <>
                   <p className="text-sm font-semibold text-[var(--warning-ink)]">
@@ -364,7 +367,7 @@ export function AddQuoteForm({ catalogue, template, onTemplate, onExtra, prefill
               <span className="text-sm text-[var(--body)]" aria-live="polite">
                 {justAdded ? <span className="font-semibold text-[var(--accent-ink)]">{justAdded} added. Pick the next carrier to compare.</span> : notYet ?? `Ready: ${product.carrierName} · ${product.productLabel}${faceCents ? ` · $${(faceCents / 100).toLocaleString("en-US")}` : ""}.`}
               </span>
-              <Button type="submit" disabled={busy} title={busy ? "Saving the quote" : notYet ?? undefined}><Plus aria-hidden="true" />{busy ? "Adding…" : "Add quote"}</Button>
+              <Button type="submit" disabled={busy} className={refusal.className} title={busy ? "Saving the quote" : notYet ?? undefined}><Plus aria-hidden="true" />{busy ? "Adding…" : "Add quote"}</Button>
             </div>
           )}
         </Part>

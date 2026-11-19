@@ -1,4 +1,5 @@
 import "server-only";
+import { precounted } from "@/lib/supabase/precount";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
@@ -51,8 +52,9 @@ export async function getVendorCards(tenantId: string, trueCpa: boolean): Promis
   const trueCpaReads = trueCpa
     ? Promise.all([
       getVendorCostPerPolicy(tenantId, { from: ALL_TIME_FROM, to: today }).then((result) => ({ result, error: null as string | null }), (cause: unknown) => ({ result: null, error: cause instanceof Error ? cause.message : "Could not load the scorecard" })),
-      db.rpc("vendor_returns_candidates_summary", { p_tenant_id: tenantId }),
-      db.rpc("vendor_undialable_rates", { p_tenant_id: tenantId }),
+      // Both scan every import: read from their pre-counted copies (20261118100000), live until that is applied.
+      precounted(tenantId, "vendor_returns_summary", {}, () => db.rpc("vendor_returns_candidates_summary", { p_tenant_id: tenantId })),
+      precounted(tenantId, "vendor_undialable_rates", {}, () => db.rpc("vendor_undialable_rates", { p_tenant_id: tenantId })),
     ])
     : null;
   // Awaited below; this only keeps a throw above from leaving it unobserved.

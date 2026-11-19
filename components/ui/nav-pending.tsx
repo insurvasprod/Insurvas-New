@@ -56,7 +56,11 @@ export function setParamsInPlace(patch: Record<string, string | null>) {
     if (value === null || value === "") url.searchParams.delete(key);
     else url.searchParams.set(key, value);
   }
-  window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  // `null`, never `window.history.state`: Next's patched replaceState skips any state carrying its own `__NA` marker
+  // (treating it as an internal call), so passing the current state back changed the address while `useSearchParams`
+  // never saw it — a sheet would not close (admin round 1, 2026-11-17). With `null`, Next copies its internal state
+  // across itself and syncs the router.
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
 /** How long a pointer rests on a link before its whole route is fetched: passing over a row of tabs fetches nothing. */
@@ -64,7 +68,8 @@ const INTENT_MS = 80;
 
 /**
  * Which way a navigation moves, for the page that arrives (§ Motion, components/portal/portal-page-transition.tsx):
- * `transitionTypes={["nav-forward"]}` → `html[data-nav="forward"]`, `["nav-back"]` → `back`, none → `area`. A
+ * `transitionTypes={["nav-forward"]}` → `html[data-nav="forward"]`, `["nav-back"]` → `back`, none (or `["nav-area"]`, the
+ * rails) → `area`. A
  * navigation that never lands (a slow page abandoned) is cleared after a while so a later page does not replay it.
  */
 let navMarkTimer: ReturnType<typeof setTimeout> | undefined;

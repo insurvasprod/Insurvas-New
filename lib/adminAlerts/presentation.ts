@@ -59,6 +59,11 @@ export type StaffAlertInput = {
    * caller that does not read usage still builds the rest of the bar.
    */
   creditUsage?: Array<{ tenantId: string; tenantName: string; meterLabel: string; used: number; limit: number }> | null;
+  /**
+   * Security review 2026-11, H-2: what is wrong with the production settings that keep the staff console
+   * off the customer hosts, as sentences (lib/adminAuth/adminHost.ts adminHostSetupGaps). Empty or absent: no alert.
+   */
+  adminHostGaps?: readonly string[] | null;
 };
 
 /** More than this many tenant meters past a threshold becomes one summary alert per threshold. */
@@ -77,6 +82,19 @@ export function buildStaffAlerts(input: StaffAlertInput): StaffAlert[] {
   const { role, now } = input;
   const can = (roles: readonly StaffRole[]) => roles.includes(role);
   const alerts: StaffAlert[] = [];
+
+  // First: while it holds, the staff console and its session cookie share the customer app's origin.
+  const hostGaps = input.adminHostGaps ?? [];
+  if (can(PLATFORM_ROLES) && hostGaps.length > 0) {
+    alerts.push({
+      id: "admin-host",
+      title: "Staff console on the customer host",
+      body: `The staff console is not kept to its own host. ${hostGaps.join(" ")} Change it on the production deployment and redeploy.`,
+      link: "/admin/system",
+      actionLabel: "Open system",
+      severity: "critical",
+    });
+  }
 
   const webhooks = input.stuckWebhooks;
   if (can(PAYMENTS_ROLES) && webhooks && webhooks.count > 0 && webhooks.oldestReceivedAt && minutesSince(webhooks.oldestReceivedAt, now) >= WEBHOOK_STUCK_MINUTES) {

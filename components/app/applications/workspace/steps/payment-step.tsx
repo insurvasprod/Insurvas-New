@@ -36,7 +36,8 @@ import { ordinal } from "@/components/app/applications/parts";
 import { SharedWithPrimary } from "@/components/app/applications/household/shared-detail";
 import { useReveal } from "@/components/app/applications/workspace/use-reveal";
 import { AcceptedCards, CARD_BRAND_LABEL as BRAND_LABEL, CardBrandMark } from "@/components/app/applications/workspace/card-brand-mark";
-
+
+import { CheckBox } from "@/components/ui/check-box";
 const METHOD_SHORT: Record<PaymentMethod, string> = { ach: "ACH", direct_express: "Direct Express", debit_card: "Debit card", credit_card: "Credit card", direct_bill: "Direct bill" };
 
 /** A card number as it is read out: groups of four (American Express 4-6-5), spaces or not as typed, capped at the brand's length. */
@@ -549,7 +550,7 @@ function PaymentStepFor() {
                 </select>
               </Field>
               <label htmlFor="pay.billing_same" className="flex min-h-9 items-center gap-2 self-end text-sm text-[var(--body)]">
-                <input id="pay.billing_same" type="checkbox" className="size-4 accent-[var(--primary)]" checked={form.billingSame} disabled={readOnly} onChange={(e) => set({ billingSame: e.target.checked })} />
+                <CheckBox id="pay.billing_same" checked={form.billingSame} disabled={readOnly} onChange={(e) => set({ billingSame: e.target.checked })} />
                 Bill the insured&apos;s address
               </label>
               {!form.billingSame && <p className="text-xs text-[var(--muted)] sm:col-span-2">Enter the billing address on the carrier&apos;s form — it is not stored here.</p>}

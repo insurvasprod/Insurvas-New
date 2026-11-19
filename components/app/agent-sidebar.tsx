@@ -317,9 +317,10 @@ function CollapsedFlyout({ label, icon: GroupIcon, items, children }: { label: s
         onCloseAutoFocus={(event) => event.preventDefault()}
         onPointerEnter={show}
         onPointerLeave={hide}
-        // A short slide out of the rail (m-flyout-in/out in globals.css): 160ms in, 110ms out; still for reduced motion.
+        // A short slide out of the rail (m-flyout-in/out in globals.css): --t-float-in in, --t-float-out out, like every
+        // overlay (Wave D: on the tokens); still for reduced motion.
         // Drawn in the rail's own colours (owner 2026-10-30, "a nicer design"), so it reads as the sidebar opening.
-        className="relative w-64 origin-left overflow-visible rounded-xl border-[var(--nav-line)] bg-[var(--nav-bg)] p-2 text-[var(--nav-ink)] shadow-[0_18px_40px_-12px_rgba(0,0,0,.55),0_0_0_1px_color-mix(in_srgb,var(--nav-success)_10%,transparent)] motion-safe:data-[state=open]:animate-[m-flyout-in_.16s_cubic-bezier(.2,.8,.2,1)_both] motion-safe:data-[state=closed]:animate-[m-flyout-out_.11s_ease-in_both]"
+        className="relative w-64 origin-left overflow-visible rounded-xl border-[var(--nav-line)] bg-[var(--nav-bg)] p-2 text-[var(--nav-ink)] shadow-[0_18px_40px_-12px_rgba(0,0,0,.55),0_0_0_1px_color-mix(in_srgb,var(--nav-success)_10%,transparent)] motion-safe:data-[state=open]:animate-[m-flyout-in_var(--t-float-in)_var(--e-out)_both] motion-safe:data-[state=closed]:animate-[m-flyout-out_var(--t-float-out)_var(--e)_both]"
       >
         {/* The pointer back at the hovered icon. Radix keeps it on the icon's centre even when the panel slides up to
             stay on screen (a group low in the rail, like Reports), so it never points at the icon above. */}

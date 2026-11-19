@@ -1,0 +1,218 @@
+[
+  {
+    "src": "/docs/shots/settings/accounting/1.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Books tab",
+    "focus": {
+      "x": 215,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/accounting/2.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set Your financial year starts",
+    "focus": {
+      "x": 264,
+      "y": 0,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/accounting/3.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Count money when",
+    "focus": {
+      "x": 264,
+      "y": 0,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/accounting/4.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Pick a basis in the sheet",
+    "focus": {
+      "x": 720,
+      "y": 17,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/accounting/5.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Bank tab",
+    "focus": {
+      "x": 280,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/accounting/6.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set Look for the deposit up to",
+    "focus": {
+      "x": 264,
+      "y": 0,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/accounting/7.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Add your Bank accounts",
+    "focus": {
+      "x": 264,
+      "y": 0,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/accounting/8.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Bills & expenses tab",
+    "focus": {
+      "x": 337,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/accounting/9.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set Flag a bill that differs by more than",
+    "focus": {
+      "x": 239,
+      "y": 0,
+      "w": 1201,
+      "h": 750
+    }
+  },
+  {
+    "src": "/docs/shots/settings/accounting/10.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check Expense groups on the P&L",
+    "focus": {
+      "x": 239,
+      "y": 0,
+      "w": 1201,
+      "h": 750
+    }
+  },
+  {
+    "src": "/docs/shots/settings/accounting/11.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Partner payouts tab",
+    "focus": {
+      "x": 467,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/accounting/12.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set When a payout run is ready",
+    "focus": {
+      "x": 264,
+      "y": 0,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/accounting/13.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set Pay partners",
+    "focus": {
+      "x": 264,
+      "y": 0,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/accounting/14.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Producer pay tab",
+    "focus": {
+      "x": 596,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/accounting/15.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set When someone's balance goes below zero",
+    "focus": {
+      "x": 264,
+      "y": 0,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/accounting/16.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set Default split for a new producer",
+    "focus": {
+      "x": 264,
+      "y": 0,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/accounting/17.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Tax tab",
+    "focus": {
+      "x": 708,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/accounting/18.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check the 1099 threshold",
+    "focus": {
+      "x": 264,
+      "y": 0,
+      "w": 1176,
+      "h": 735
+    }
+  }
+]

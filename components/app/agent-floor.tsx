@@ -15,6 +15,7 @@ import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
+import { useArrivals } from "@/components/ui/use-arrivals";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Callout, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { ActionButton, CardActions, CardList, cardItem, COMPACT_TOOLBAR, useMediaQuery, WIDE_QUERY, type RowAction } from "@/components/app/responsive-list";
@@ -167,8 +168,8 @@ function doingLabel(member: Member, state: RosterState, now: number) {
 function PendingHandoffs({ items, readOnly, saving, now, compact, onAccept }: { items: Handoff[]; readOnly: boolean; saving: string | null; now: number; compact: boolean; onAccept: (id: string, workItemId: string) => void }) {
   if (!items.length) return null;
   return (
-    <section aria-labelledby="handoffs-heading" className="rounded-[12px] border border-[var(--border)] border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3">
-      <h2 id="handoffs-heading" className="m-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--info-ink)]">
+    <section aria-labelledby="handoffs-heading" className="m-glass rounded-lg border border-border px-4 py-3">
+      <h2 id="handoffs-heading" className="m-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">
         {items.length === 1 ? "A call was passed to you" : `${items.length} calls were passed to you`}
       </h2>
       <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0">
@@ -477,7 +478,7 @@ function Fact({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function TransferQueue({ items, totalWaiting, now, thresholds, expandedId, readOnly, saving, members, toolbar, liveStatus, compact, page, onPage, onClearSearch, onToggle, onClaim, onNudge, onClose }: { items: Lead[]; totalWaiting: number; now: number; thresholds: FloorData["waitThresholds"]; expandedId: string | null; readOnly: boolean; saving: string | null; members: Member[]; toolbar: React.ReactNode; liveStatus: React.ReactNode; compact: boolean; page: number; onPage: (page: number) => void; onClearSearch: () => void; onToggle: (id: string) => void; onClaim: (id: string) => void; onNudge: (id: string) => void; onClose: () => void }) {
+function TransferQueue({ items, isNew, totalWaiting, now, thresholds, expandedId, readOnly, saving, members, toolbar, liveStatus, compact, page, onPage, onClearSearch, onToggle, onClaim, onNudge, onClose }: { items: Lead[]; isNew: (id: string) => boolean; totalWaiting: number; now: number; thresholds: FloorData["waitThresholds"]; expandedId: string | null; readOnly: boolean; saving: string | null; members: Member[]; toolbar: React.ReactNode; liveStatus: React.ReactNode; compact: boolean; page: number; onPage: (page: number) => void; onClearSearch: () => void; onToggle: (id: string) => void; onClaim: (id: string) => void; onNudge: (id: string) => void; onClose: () => void }) {
   // Who could take a non-English lead right now: free (available) members whose recorded languages include it.
   const freeSpeakers = (language: string) => members.filter((member) => rosterState(member, now) === "available" && (member.languages ?? []).some((spoken) => languageKey(spoken) === languageKey(language)));
   const { current, rows } = paginate(items, page, FLOOR_PAGE);
@@ -508,7 +509,7 @@ function TransferQueue({ items, totalWaiting, now, thresholds, expandedId, readO
             const priority = PRIORITY[priorityFor(item, now, thresholds)];
             const meta = [productLineLabel(item.productLine), item.language ? languageName(item.language) : null, item.partnerName].filter((part) => part && part !== "—").join(" · ");
             return (
-              <li key={item.id} className={cn("border-t border-[var(--border)] first:border-t-0", expanded && "bg-[var(--canvas)]")}>
+              <li key={item.id} data-row-new={isNew(item.id) ? "" : undefined} className={cn("border-t border-[var(--border)] first:border-t-0", expanded && "bg-[var(--canvas)]")}>
                 <div className="flex items-center gap-3 px-4 py-3">
                   <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-[var(--surface-alt)] text-xs leading-[1.5] font-semibold tracking-[-0.01em]">{index + 1}</span>
                   <button type="button" aria-expanded={expanded} aria-controls={`transfer-${item.id}`} onClick={() => onToggle(item.id)} className="min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-left">
@@ -678,6 +679,9 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
   const members = useMemo(() => (floor?.members ?? []).filter((member) => [member.name, member.call?.customer, member.call?.partnerName].some(matches) && (!rosterFilter || rosterState(member, now) === rosterFilter)), [floor?.members, matches, rosterFilter, now]);
   const queueNeedle = queueSearch.trim().toLowerCase();
   const waiting = useMemo(() => (floor?.waiting ?? []).filter((item) => !queueNeedle || [item.customer, item.productLine, productLineLabel(item.productLine), item.state, item.partnerName, item.ownerName, item.language].some((value) => String(value ?? "").toLowerCase().includes(queueNeedle))), [floor?.waiting, queueNeedle]);
+  // Tier 1 motion (2026-11-17): a caller who joined the line since the last update arrives tinted. The first read is
+  // the floor opening, so it lights nothing.
+  const isNewInLine = useArrivals((floor?.waiting ?? []).map((item) => item.id), !floor);
   const callbacks = useMemo(() => (floor?.callbacks ?? []).filter((item) => [item.customerName, item.customerTime, item.customerTimezone, item.note, item.productName, item.assigneeName].some(matches) && (!ownerFilter || item.assigneeName === ownerFilter)), [floor?.callbacks, matches, ownerFilter]);
   const onCalls = useMemo(() => (floor?.onCalls ?? []).filter((call) => [call.agentName, call.customer, call.partnerName, call.buffer?.name, productLineLabel(call.productLine)].some(matches) && (!agentFilter || call.agentName === agentFilter)), [floor?.onCalls, matches, agentFilter]);
   const callAgents = useMemo(() => [...new Set((floor?.onCalls ?? []).map((call) => call.agentName))].sort(), [floor?.onCalls]);
@@ -738,7 +742,15 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
   const header = headerFor(settingsButton);
 
   if (!floor) {
-    if (!(error && !loading)) return <PageLoading />;
+    // Frame first (UI-CONSISTENCY §7a): the title, the views and the settings button draw at once; the lists load under them.
+    if (!(error && !loading)) {
+      return (
+        <div className="m-stagger flex w-full min-w-0 flex-col gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-56px)]">
+          {headerFor(<><Button type="button" variant="outline" disabled><Inbox className="text-[var(--accent-ink)]" aria-hidden="true" />In line</Button>{settingsButton}</>)}
+          <PageLoading header={false} />
+        </div>
+      );
+    }
     return (
       <div className="flex w-full min-w-0 flex-col gap-6">
         {header}
@@ -864,6 +876,7 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
       {queueOpen && (
         <TransferQueue
           items={waiting}
+          isNew={isNewInLine}
           totalWaiting={waitingCount}
           now={now}
           thresholds={thresholds}

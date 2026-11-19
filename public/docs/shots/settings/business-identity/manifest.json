@@ -1,0 +1,122 @@
+[
+  {
+    "src": "/docs/shots/settings/business-identity/1.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Enter your Trading name",
+    "focus": {
+      "x": 418,
+      "y": 142,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/business-identity/2.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Enter your Legal name",
+    "focus": {
+      "x": 720,
+      "y": 142,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/business-identity/3.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Add the agency's NPN",
+    "focus": {
+      "x": 720,
+      "y": 244,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/business-identity/4.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Add your Tax ID",
+    "focus": {
+      "x": 418,
+      "y": 386,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/business-identity/5.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set the Business time zone",
+    "focus": {
+      "x": 720,
+      "y": 346,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/business-identity/6.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Fill in the business address",
+    "focus": {
+      "x": 504,
+      "y": 315,
+      "w": 936,
+      "h": 585
+    }
+  },
+  {
+    "src": "/docs/shots/settings/business-identity/7.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Add the Business phone",
+    "focus": {
+      "x": 418,
+      "y": 325,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/business-identity/8.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Upload your logo",
+    "focus": {
+      "x": 504,
+      "y": 315,
+      "w": 936,
+      "h": 585
+    }
+  },
+  {
+    "src": "/docs/shots/settings/business-identity/9.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Add the partner support contact",
+    "focus": {
+      "x": 504,
+      "y": 306,
+      "w": 936,
+      "h": 585
+    }
+  },
+  {
+    "src": "/docs/shots/settings/business-identity/10.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Preview a letter",
+    "focus": {
+      "x": 720,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  }
+]

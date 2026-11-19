@@ -8,32 +8,10 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { Callout, KeyValues, st } from "@/components/app/settings/primitives";
-import { LEGAL_DOC_LABELS, LEGAL_DOC_TYPES, type LegalDocType } from "@/lib/legal/constants";
+import { LEGAL_DOC_LABELS, type LegalDocType } from "@/lib/legal/constants";
 import { parseLegalMarkdown } from "@/lib/legal/markdown";
 import { legalDateTime, legalDay, type AdminLegalVersion } from "@/lib/legal/adminTypes";
-import { SWITCH_LABEL, type Stat } from "./model";
-
-export function DocSwitch({ value, onChange }: { value: LegalDocType; onChange: (next: LegalDocType) => void }) {
-  return (
-    <div role="group" aria-label="Document" className="inline-flex h-9 items-center gap-0.5 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] p-[3px]">
-      {LEGAL_DOC_TYPES.map((type) => (
-        <button
-          key={type}
-          type="button"
-          onClick={() => onChange(type)}
-          aria-pressed={value === type}
-          title={LEGAL_DOC_LABELS[type]}
-          className={cn(
-            "h-full rounded-[6px] px-3.5 text-sm leading-[1.43] font-semibold tracking-[-0.01em] whitespace-nowrap",
-            value === type ? "bg-[var(--brand-50)] text-[var(--accent-ink)]" : "text-[var(--body)] hover:bg-[var(--surface-alt)]",
-          )}
-        >
-          {SWITCH_LABEL[type]}
-        </button>
-      ))}
-    </div>
-  );
-}
+import type { Stat } from "./model";
 
 /* ── version row ───────────────────────────────────────────────────────────────────────────── */
 

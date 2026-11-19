@@ -4,6 +4,7 @@ import type { TemplateField, TemplateFormField } from "@/lib/templates/constants
 import { getPartnerTemplateForProductProfileRevision, getTenantTemplateForProductVersion, validateSingleTemplateValue } from "@/lib/agentTemplates/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { getClientIp } from "@/lib/request/clientInfo";
+import { openLeadValues, sealLeadValue, sealedFieldKeys, shouldSealKey } from "@/lib/leadValues/seal";
 import { fieldVisible, formFieldEntries, requiredVisibleKeys, verificationProgress, visibleKeys, type VerificationState } from "./progress";
 
 type Session = { id: string; tenant_id: string; work_item_id: string; lead_id: string; user_id: string; agent_role: string; status: string; started_at: string; completed_at: string | null; progress_percentage: number; last_actor_id: string | null };
@@ -52,7 +53,7 @@ async function loadContext(tenantId: string, userId: string, workItemId: string)
     leadData.product_line,
     leadData.definition_version,
   );
-  return { supabase, queue: queue.data, session: session.data, lead: { ...leadData, values: jsonRecord(leadData.values) }, template: verificationTemplate.template, profile: { id: resolved.partner_submission_profile_id ?? null, revision: resolved.profile_revision ?? null } };
+  return { supabase, queue: queue.data, session: session.data, lead: { ...leadData, values: openLeadValues(tenantId, jsonRecord(leadData.values)) }, template: verificationTemplate.template, profile: { id: resolved.partner_submission_profile_id ?? null, revision: resolved.profile_revision ?? null } };
 }
 
 export async function getVerificationPanel(tenantId: string, userId: string, workItemId: string) {
@@ -136,7 +137,9 @@ export async function updateVerificationField(params: { tenantId: string; userId
     p_user_id: params.userId,
     p_field_key: params.fieldKey,
     p_state: params.state,
-    p_new_value: newValue as never,
+    // The function writes this onto the lead and into the correction history: an SSN or bank value goes in
+    // sealed (lib/leadValues/seal.ts), so neither holds the number in plain text.
+    p_new_value: (shouldSealKey(params.fieldKey, sealedFieldKeys(current.template.fields)) ? sealLeadValue(params.tenantId, params.fieldKey, newValue) : newValue) as never,
     p_required_keys: requiredKeys,
     p_visible_keys: visibleFieldKeys,
     p_ip: getClientIp(params.request),

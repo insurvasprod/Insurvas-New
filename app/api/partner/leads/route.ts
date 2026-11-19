@@ -14,7 +14,7 @@ import {
   PartnerDuplicateError,
   validateValues,
 } from "@/lib/agentTemplates/service";
-import { requirePartner } from "@/lib/partnerAuth/requirePartner";
+import { partnerMayOpen, partnerPageRefused, requirePartner } from "@/lib/partnerAuth/requirePartner";
 import { assertPartnerProductApproved } from "@/lib/partnerProducts/service";
 import { evaluateTransfer, linkVerdictToLead, TransferGateUnrecorded } from "@/lib/compliance/transferGate";
 import { partnerRejectsThisMonth } from "@/lib/compliance/partnerCompliance";
@@ -31,6 +31,8 @@ import { isPhoneTemplateField } from "@/lib/templates/constants";
 export async function POST(request: NextRequest) {
   const auth = await requirePartner();
   if (auth instanceof NextResponse) return auth;
+  // Partner type (lib/partnerAuth/portalAccess.ts): refused on the server, not only hidden from the menu.
+  if (!(await partnerMayOpen(auth.context, "submit"))) return partnerPageRefused();
   if (auth.context.partnerStatus !== "active")
     return NextResponse.json(
       { error: "This partner is paused and cannot submit new leads" },

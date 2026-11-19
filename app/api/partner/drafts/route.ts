@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { listPartnerFormDrafts, loadPartnerFormDraftById, summarizePartnerDraft } from "@/lib/agentTemplates/service";
-import { requirePartner } from "@/lib/partnerAuth/requirePartner";
+import { partnerMayOpen, partnerPageRefused, requirePartner } from "@/lib/partnerAuth/requirePartner";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -9,6 +9,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 export async function GET(request: Request) {
   const auth = await requirePartner();
   if (auth instanceof NextResponse) return auth;
+  // Partner type (lib/partnerAuth/portalAccess.ts): refused on the server, not only hidden from the menu.
+  if (!(await partnerMayOpen(auth.context, "submit"))) return partnerPageRefused();
   try {
     const search = new URL(request.url).searchParams;
     const draftId = search.get("draft_id");

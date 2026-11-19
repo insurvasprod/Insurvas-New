@@ -1,9 +1,12 @@
+import { Suspense, type ReactNode } from "react";
+
 import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { RuleForm, RuleFormActions } from "@/components/app/book/setup/rule-form";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { actAsPage, actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { EmptyState } from "@/components/ui/page-states";
+import { StreamSection } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
 import { EVENT_LABELS, PIPELINE_RULES_PENDING_MESSAGE } from "@/lib/pipelineRules/rules";
 import { loadBoard, loadCarrierChoices, loadRulesList } from "@/lib/pipelineRules/store";
@@ -21,27 +24,42 @@ export default async function NewPipelineRulePage() {
   // Owner and bookkeeper, like every Setup tab and its API.
   if (!actAsPagePermission(guard, "statements.view") || !actAsPage(guard, ["owner", "bookkeeper"])) return <RoleGateNotice featureLabel="Card moves" detail="Setup is for the account owner and bookkeepers." />;
   const tenantId = guard.context.tenantId;
-  const [view, board, carriers] = await Promise.all([loadRulesList(tenantId), loadBoard(tenantId), loadCarrierChoices(tenantId)]);
   const readOnly = guard.entitlement.access === "read_only";
+  // Frame first (UI-CONSISTENCY §7a): the title line and its buttons draw at once (disabled until the form is there);
+  // the form fills in as one block.
+  const reads = Promise.all([loadRulesList(tenantId), loadBoard(tenantId), loadCarrierChoices(tenantId)]);
+  const actions = <RuleFormActions readOnly={readOnly} reason={READ_ONLY} />;
 
   return (
     <DataInPage
       step="pipeline-rules"
       title="New rule"
       breadcrumbs={[{ label: "Carrier sync", href: "/app/needs-you" }, { label: "Card moves", href: "/app/book-setup/pipeline-rules" }, { label: "New rule" }]}
-      actions={view.available ? <RuleFormActions readOnly={readOnly} reason={READ_ONLY} /> : undefined}
+      actions={<Suspense fallback={actions}><Actions read={reads}>{actions}</Actions></Suspense>}
     >
-      {!view.available ? (
-        <TableCard><EmptyState title="Card moves are not ready yet" hint={PIPELINE_RULES_PENDING_MESSAGE} /></TableCard>
-      ) : (
-        <RuleForm
-          ruleId={null}
-          readOnly={readOnly}
-          board={board}
-          carriers={carriers}
-          initial={{ name: EVENT_LABELS.first_payment_missed.label, event: "first_payment_missed", carrierIds: [], fromStageIds: [], targetPipelineId: "", targetStageId: "", noteOn: true, noteTemplate: "First draft missed. Paid to {paid_to_date}, {days_past_due} days late. Carrier closes it in {days_left} days." }}
-        />
-      )}
+      <StreamSection shape="form" rows={6}><NewRule read={reads} readOnly={readOnly} /></StreamSection>
     </DataInPage>
+  );
+}
+
+type Reads = Promise<[Awaited<ReturnType<typeof loadRulesList>>, Awaited<ReturnType<typeof loadBoard>>, Awaited<ReturnType<typeof loadCarrierChoices>>]>;
+
+/** Save and Preview, once the rules are known to be there. */
+async function Actions({ read, children }: { read: Reads; children: ReactNode }) {
+  const [view] = await read;
+  return view.available ? children : null;
+}
+
+async function NewRule({ read, readOnly }: { read: Reads; readOnly: boolean }) {
+  const [view, board, carriers] = await read;
+  if (!view.available) return <TableCard><EmptyState title="Card moves are not ready yet" hint={PIPELINE_RULES_PENDING_MESSAGE} /></TableCard>;
+  return (
+    <RuleForm
+      ruleId={null}
+      readOnly={readOnly}
+      board={board}
+      carriers={carriers}
+      initial={{ name: EVENT_LABELS.first_payment_missed.label, event: "first_payment_missed", carrierIds: [], fromStageIds: [], targetPipelineId: "", targetStageId: "", noteOn: true, noteTemplate: "First draft missed. Paid to {paid_to_date}, {days_past_due} days late. Carrier closes it in {days_left} days." }}
+    />
   );
 }

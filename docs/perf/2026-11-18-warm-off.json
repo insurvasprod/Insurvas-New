@@ -1,0 +1,618 @@
+{
+  "base": "http://localhost:3100",
+  "at": "2026-11-18T09:42:22.622Z",
+  "budget": 1000,
+  "results": [
+    {
+      "plane": "app",
+      "pattern": "/app/activity",
+      "url": "/app/activity",
+      "open": 1755.4781000000003,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/activity",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/app/activity",
+          "q": "?series=weeks&from=2026-10-19T09%3A39%3A13.005Z&to=2026-11-18T09%3A39%3A13.005Z",
+          "at": 398,
+          "ms": 1316
+        },
+        {
+          "url": "/api/app/activity",
+          "q": "?from=2026-09-19T09%3A39%3A13.005Z&to=2026-10-19T09%3A39%3A13.005Z&page=1&page_s",
+          "at": 394,
+          "ms": 1244
+        },
+        {
+          "url": "/api/app/activity",
+          "q": "?from=2026-10-19T09%3A39%3A13.005Z&to=2026-11-18T09%3A39%3A13.005Z&page=1&page_s",
+          "at": 394,
+          "ms": 1011
+        },
+        {
+          "url": "/api/app/activity",
+          "q": "?from=2026-10-19T09%3A39%3A13.005Z&to=2026-11-18T09%3A39%3A13.005Z&page=1&page_s",
+          "at": 397,
+          "ms": 1007
+        },
+        {
+          "url": "/api/app/appointments/close-out",
+          "q": "",
+          "at": 393,
+          "ms": 481
+        },
+        {
+          "url": "/api/app/appointments/close-out",
+          "q": "",
+          "at": 393,
+          "ms": 434
+        }
+      ]
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/activity/agent/[agentId]",
+      "url": "/app/activity/agent/1a01e923-c071-422d-96dd-08ff23e23075?from=2026-10-20&to=2026-11-18",
+      "open": 3103.750799999998,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/activity/agent/1a01e923-c071-422d-96dd-08ff23e23075",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/app/scorecard",
+          "q": "?days=30",
+          "at": 358,
+          "ms": 2715
+        },
+        {
+          "url": "/api/app/activity",
+          "q": "?series=weeks&agent_id=1a01e923-c071-422d-96dd-08ff23e23075&from=2026-10-19T22%3",
+          "at": 357,
+          "ms": 739
+        },
+        {
+          "url": "/api/app/activity",
+          "q": "?from=2026-10-19T22%3A00%3A00.000Z&to=2026-11-18T23%3A00%3A00.000Z&page=1&page_s",
+          "at": 357,
+          "ms": 649
+        },
+        {
+          "url": "/api/app/appointments/close-out",
+          "q": "",
+          "at": 36,
+          "ms": 625
+        },
+        {
+          "url": "/api/app/activity",
+          "q": "?agent_id=1a01e923-c071-422d-96dd-08ff23e23075&from=2026-10-19T22%3A00%3A00.000Z",
+          "at": 390,
+          "ms": 616
+        },
+        {
+          "url": "/api/app/activity",
+          "q": "?agent_id=1a01e923-c071-422d-96dd-08ff23e23075&from=2026-10-19T22%3A00%3A00.000Z",
+          "at": 355,
+          "ms": 560
+        },
+        {
+          "url": "/api/app/activity",
+          "q": "?agent_id=1a01e923-c071-422d-96dd-08ff23e23075&from=2026-10-19T22%3A00%3A00.000Z",
+          "at": 988,
+          "ms": 398
+        }
+      ]
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/assignments",
+      "url": "/app/assignments",
+      "open": 2553.6368,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/assignments",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/app/agency/pool",
+          "q": "",
+          "at": 1504,
+          "ms": 1018
+        },
+        {
+          "url": "/api/app/assignments",
+          "q": "?view=preview",
+          "at": 671,
+          "ms": 884
+        },
+        {
+          "url": "/api/app/lead-sources/steps",
+          "q": "",
+          "at": 668,
+          "ms": 859
+        },
+        {
+          "url": "/api/app/assignments",
+          "q": "",
+          "at": 671,
+          "ms": 797
+        },
+        {
+          "url": "/api/app/assignments",
+          "q": "?view=stats",
+          "at": 672,
+          "ms": 415
+        }
+      ]
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/attribution",
+      "url": "/app/attribution",
+      "open": 1083.7452000000012,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/attribution",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/app/commissions/steps",
+          "q": "",
+          "at": 356,
+          "ms": 703
+        }
+      ]
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/attribution/[id]",
+      "url": "/app/attribution/04295b54-898d-4a47-ae4b-2f5b62075a50",
+      "open": 1512.8932999999997,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/attribution/04295b54-898d-4a47-ae4b-2f5b62075a50",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/campaigns",
+      "url": "/app/campaigns",
+      "open": 6246.221900000004,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/campaigns",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/app/vendors/cards",
+          "q": "",
+          "at": 702,
+          "ms": 4341
+        },
+        {
+          "url": "/api/app/campaigns",
+          "q": "",
+          "at": 702,
+          "ms": 4181
+        },
+        {
+          "url": "/api/app/vendors",
+          "q": "",
+          "at": 703,
+          "ms": 2123
+        },
+        {
+          "url": "/api/app/vendors/cards",
+          "q": "",
+          "at": 4903,
+          "ms": 1329
+        },
+        {
+          "url": "/api/app/products/sold",
+          "q": "",
+          "at": 701,
+          "ms": 1126
+        }
+      ]
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/campaigns/[campaignId]",
+      "url": "/app/campaigns/vendors",
+      "open": 4096.6061000000045,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/campaigns/vendors",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/app/campaigns",
+          "q": "",
+          "at": 651,
+          "ms": 2030
+        },
+        {
+          "url": "/api/app/vendors/cards",
+          "q": "",
+          "at": 649,
+          "ms": 1877
+        },
+        {
+          "url": "/api/app/vendors/cards",
+          "q": "",
+          "at": 2687,
+          "ms": 1393
+        },
+        {
+          "url": "/api/app/vendors",
+          "q": "",
+          "at": 651,
+          "ms": 1266
+        },
+        {
+          "url": "/api/app/lead-sources/steps",
+          "q": "",
+          "at": 42,
+          "ms": 987
+        }
+      ]
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/campaigns/[campaignId]/lists/[listId]",
+      "url": null,
+      "open": null,
+      "cold": null,
+      "status": null,
+      "finalPath": null,
+      "note": "no sample"
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/campaigns/vendors",
+      "url": "/app/campaigns/vendors",
+      "open": 6.017400000011548,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/campaigns/vendors",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/campaigns/vendors/[vendorId]",
+      "url": "/app/campaigns/vendors/cfbfe5b6-c727-49c7-b726-0e3db5dd1fc2",
+      "open": 5618.435900000011,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/campaigns/vendors/cfbfe5b6-c727-49c7-b726-0e3db5dd1fc2",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/app/campaigns",
+          "q": "",
+          "at": 1020,
+          "ms": 3138
+        },
+        {
+          "url": "/api/app/vendors",
+          "q": "",
+          "at": 1020,
+          "ms": 2307
+        },
+        {
+          "url": "/api/app/vendors/cards",
+          "q": "",
+          "at": 1019,
+          "ms": 1975
+        },
+        {
+          "url": "/api/app/setup",
+          "q": "",
+          "at": 1016,
+          "ms": 1734
+        },
+        {
+          "url": "/api/app/products/sold",
+          "q": "",
+          "at": 1018,
+          "ms": 1721
+        },
+        {
+          "url": "/api/app/lead-sources/steps",
+          "q": "",
+          "at": 586,
+          "ms": 1610
+        },
+        {
+          "url": "/api/app/vendors/cards",
+          "q": "",
+          "at": 4162,
+          "ms": 1429
+        }
+      ]
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/dashboard",
+      "url": "/app/dashboard",
+      "open": 5326.3649000000005,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/dashboard",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/app/pending/summary",
+          "q": "",
+          "at": 4495,
+          "ms": 806
+        },
+        {
+          "url": "/api/app/appointments/close-out",
+          "q": "",
+          "at": 4493,
+          "ms": 417
+        }
+      ]
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/discrepancies",
+      "url": "/app/discrepancies",
+      "open": 2348.7167000000045,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/discrepancies",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/app/commissions/steps",
+          "q": "",
+          "at": 80,
+          "ms": 529
+        }
+      ]
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/discrepancies/[id]",
+      "url": "/app/discrepancies/7c1df647-7bfd-40e1-befe-0b951d11f800",
+      "open": 2274.8244000000122,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/discrepancies/7c1df647-7bfd-40e1-befe-0b951d11f800",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/discrepancies/group",
+      "url": "/app/discrepancies/group",
+      "open": 346.0506999999925,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/discrepancies/group",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/discrepancies/letter",
+      "url": "/app/discrepancies/letter",
+      "open": 244.1814000000013,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/discrepancies/letter",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/discrepancies/letters/[id]",
+      "url": null,
+      "open": null,
+      "cold": null,
+      "status": null,
+      "finalPath": null,
+      "note": "no sample"
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/lead-routing",
+      "url": "/app/lead-routing",
+      "open": 1391.7376999999979,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/lead-routing",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/app/agency/pool",
+          "q": "",
+          "at": 397,
+          "ms": 961
+        },
+        {
+          "url": "/api/app/assignments",
+          "q": "?view=preview",
+          "at": 399,
+          "ms": 947
+        },
+        {
+          "url": "/api/app/assignments",
+          "q": "",
+          "at": 398,
+          "ms": 892
+        },
+        {
+          "url": "/api/app/lead-sources/steps",
+          "q": "",
+          "at": 395,
+          "ms": 847
+        },
+        {
+          "url": "/api/app/assignments",
+          "q": "?view=stats",
+          "at": 400,
+          "ms": 478
+        }
+      ]
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/leads",
+      "url": "/app/leads",
+      "open": 2839.7056000000157,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/leads",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/app/leads/pipeline-context",
+          "q": "",
+          "at": 398,
+          "ms": 2200
+        },
+        {
+          "url": "/api/app/leads",
+          "q": "",
+          "at": 398,
+          "ms": 2194
+        }
+      ]
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/leads/[id]",
+      "url": "/app/leads/3afad3ae-2c84-4bde-a6b5-1dabd5d4bc2d",
+      "open": 2557.511599999998,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/leads/3afad3ae-2c84-4bde-a6b5-1dabd5d4bc2d",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/app/leads/3afad3ae-2c84-4bde-a6b5-1dabd5d4bc2d",
+          "q": "",
+          "at": 366,
+          "ms": 1336
+        },
+        {
+          "url": "/api/app/leads/3afad3ae-2c84-4bde-a6b5-1dabd5d4bc2d/signature-readiness",
+          "q": "",
+          "at": 1724,
+          "ms": 805
+        },
+        {
+          "url": "/api/app/applications/for-lead/3afad3ae-2c84-4bde-a6b5-1dabd5d4bc2d",
+          "q": "",
+          "at": 1724,
+          "ms": 456
+        }
+      ]
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/needs-you",
+      "url": "/app/needs-you",
+      "open": 5297.485400000005,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/needs-you",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/app/data-in/steps",
+          "q": "",
+          "at": 447,
+          "ms": 575
+        }
+      ]
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/needs-you/[kind]/[id]",
+      "url": null,
+      "open": null,
+      "cold": null,
+      "status": null,
+      "finalPath": null,
+      "note": "no sample"
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/needs-you/review",
+      "url": "/app/needs-you/review",
+      "open": 5817.55780000001,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/needs-you/review",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/app/needs-you/item",
+          "q": "?kind=no-carrier&id=e15fe6ad-2dff-4581-a3b3-1cc3a322e915",
+          "at": 4780,
+          "ms": 1000
+        },
+        {
+          "url": "/api/app/setup",
+          "q": "",
+          "at": 471,
+          "ms": 680
+        },
+        {
+          "url": "/api/app/data-in/steps",
+          "q": "",
+          "at": 33,
+          "ms": 579
+        }
+      ]
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/save-queue",
+      "url": "/app/save-queue",
+      "open": 3438.0001000000047,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/save-queue",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/app/retention/steps",
+          "q": "",
+          "at": 369,
+          "ms": 605
+        }
+      ]
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/save-queue/[carrierId]/[policyNumber]",
+      "url": "/app/save-queue/5bd2ff41-fd83-485e-9373-9ada7a0aa3c7/0119990313",
+      "open": 1411.398599999986,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/save-queue/5bd2ff41-fd83-485e-9373-9ada7a0aa3c7/0119990313",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "app",
+      "pattern": "/app/setters",
+      "url": "/app/setters",
+      "open": 2297.7733999999764,
+      "cold": null,
+      "status": null,
+      "finalPath": "/app/setters",
+      "note": "",
+      "apis": []
+    }
+  ]
+}

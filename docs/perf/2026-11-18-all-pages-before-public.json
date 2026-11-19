@@ -1,0 +1,236 @@
+{
+  "base": "http://localhost:3100",
+  "at": "2026-11-18T15:22:45.405Z",
+  "budget": 1000,
+  "results": [
+    {
+      "plane": "public",
+      "pattern": "/",
+      "url": "/",
+      "open": 4.355399999999463,
+      "cold": 423.9952999999996,
+      "status": 200,
+      "finalPath": "/",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "public",
+      "pattern": "/affiliate/[slug]",
+      "url": null,
+      "open": null,
+      "cold": null,
+      "status": null,
+      "finalPath": null,
+      "note": "no sample"
+    },
+    {
+      "plane": "public",
+      "pattern": "/design",
+      "url": "/design",
+      "open": 233.21509999999944,
+      "cold": 237.7023999999983,
+      "status": 404,
+      "finalPath": "/design",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "public",
+      "pattern": "/design/agency",
+      "url": "/design/agency",
+      "open": 200.59439999999995,
+      "cold": 240.1852999999992,
+      "status": 404,
+      "finalPath": "/design/agency",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "public",
+      "pattern": "/design/auth",
+      "url": "/design/auth",
+      "open": 189.6777000000002,
+      "cold": 250.7471999999998,
+      "status": 404,
+      "finalPath": "/design/auth",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "public",
+      "pattern": "/design/deal-flow",
+      "url": "/design/deal-flow",
+      "open": 176.20620000000054,
+      "cold": 258.08020000000033,
+      "status": 404,
+      "finalPath": "/design/deal-flow",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "public",
+      "pattern": "/design/home",
+      "url": "/design/home",
+      "open": 194.45720000000074,
+      "cold": 255.91860000000088,
+      "status": 404,
+      "finalPath": "/design/home",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "public",
+      "pattern": "/design/messages",
+      "url": "/design/messages",
+      "open": 183.2437000000009,
+      "cold": 268.08619999999974,
+      "status": 404,
+      "finalPath": "/design/messages",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "public",
+      "pattern": "/design/organization",
+      "url": "/design/organization",
+      "open": 187.3614000000016,
+      "cold": 235.6749000000018,
+      "status": 404,
+      "finalPath": "/design/organization",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "public",
+      "pattern": "/design/overview",
+      "url": "/design/overview",
+      "open": 184.84040000000095,
+      "cold": 278.8022000000019,
+      "status": 404,
+      "finalPath": "/design/overview",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "public",
+      "pattern": "/design/partners",
+      "url": "/design/partners",
+      "open": 193.49359999999797,
+      "cold": 260.59579999999914,
+      "status": 404,
+      "finalPath": "/design/partners",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "public",
+      "pattern": "/design/pipeline",
+      "url": "/design/pipeline",
+      "open": 194.39849999999933,
+      "cold": 240.82890000000043,
+      "status": 404,
+      "finalPath": "/design/pipeline",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "public",
+      "pattern": "/design/settings",
+      "url": "/design/settings",
+      "open": 341.6716000000015,
+      "cold": 297.53859999999986,
+      "status": 404,
+      "finalPath": "/design/settings",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "public",
+      "pattern": "/design/settings/patterns",
+      "url": "/design/settings/patterns",
+      "open": 191.06559999999808,
+      "cold": 269.03529999999955,
+      "status": 404,
+      "finalPath": "/design/settings/patterns",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "public",
+      "pattern": "/design/shell",
+      "url": "/design/shell",
+      "open": 178.94540000000052,
+      "cold": 251.30029999999897,
+      "status": 404,
+      "finalPath": "/design/shell",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "public",
+      "pattern": "/legal/[type]",
+      "url": null,
+      "open": null,
+      "cold": null,
+      "status": null,
+      "finalPath": null,
+      "note": "no sample"
+    },
+    {
+      "plane": "public",
+      "pattern": "/maintenance",
+      "url": "/maintenance",
+      "open": 53.28719999999885,
+      "cold": 92.86479999999938,
+      "status": 200,
+      "finalPath": "/maintenance",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "public",
+      "pattern": "/pricing",
+      "url": "/pricing",
+      "open": 1400.3881000000001,
+      "cold": 1095.2533000000003,
+      "status": 200,
+      "finalPath": "/pricing",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "public",
+      "pattern": "/roadmap",
+      "url": "/roadmap",
+      "open": 158.08859999999913,
+      "cold": 121.90450000000055,
+      "status": 200,
+      "finalPath": "/roadmap",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "public",
+      "pattern": "/signup",
+      "url": "/signup",
+      "open": 111.90409999999974,
+      "cold": 528.7597999999998,
+      "status": 200,
+      "finalPath": "/signup",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "public",
+      "pattern": "/verification-failed",
+      "url": "/verification-failed",
+      "open": 102.01260000000184,
+      "cold": 87.76009999999951,
+      "status": 200,
+      "finalPath": "/verification-failed",
+      "note": "",
+      "apis": []
+    }
+  ]
+}

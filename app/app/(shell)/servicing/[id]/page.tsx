@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
@@ -11,7 +11,7 @@ import { CARRIER_METHOD_LABELS, FIELD_LABELS, REQUEST_LABELS, describeChange, ty
 import { loadRequest, loadServicing, type ServicingRequest } from "@/lib/retention/servicingStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { RetentionPage, retentionTrail } from "@/components/app/retention/retention-page";
+import { Await, RecordTitle, RetentionPage, retentionTrail } from "@/components/app/retention/retention-page";
 import { ServicingRequestActions, ServicingRequestShell, StepButton } from "@/components/app/retention/servicing-request-view";
 import { NoteBox } from "@/components/app/retention/note-box";
 import {
@@ -23,7 +23,9 @@ import { cardSurface } from "@/components/ui/card";
 import { FactTable } from "@/components/ui/fact-table";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
+import { StreamSection } from "@/components/ui/stream-section";
 import { ViewTabs } from "@/components/ui/view-tabs";
+import { IntentLink } from "@/components/ui/nav-pending";
 
 /**
  * Retention › Waiting on the carrier › a request (LA-5.4; round 7, owner pick 2·1, 2026-11-10). The title is the
@@ -49,73 +51,102 @@ export default async function ServicingRequestPage({ params, searchParams }: { p
   const { id } = await params;
   if (!isRecordUuid(id)) notFound();
   const { tab: askedTab, step: askedStep, from: askedFrom } = await searchParams;
-  const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope: await scopeFor(guard.context) };
   const readOnly = guard.entitlement.access === "read_only";
-  // The list only for ‹ ›: loadRequest checks this request's files itself.
-  const [r, list] = await Promise.all([loadRequest(viewer, id), loadServicing(viewer, { verify: false })]);
-  if (!r) notFound();
-
   const tab: Tab = askedTab === "policy" || askedTab === "history" ? askedTab : "request";
-  const name = r.clientName ? personName(r.clientName) : "No client linked";
-  const today = localDay();
-  const bucket = bucketOf(r, today);
   const from = asServicingView(askedFrom);
-
-  // ‹ › walk the tab it was opened from, in the list's order; a request a step has moved out of it walks its own tab.
-  const rows = list.available ? list.rows : [];
-  const walk = rowsInView(rows, from, today).some((row) => row.id === r.id) ? from : bucket;
-  const order = rowsInView(rows, walk, today);
-  const at = order.findIndex((row) => row.id === r.id);
-  const previous = at > 0 ? order[at - 1] : null;
-  const next = at >= 0 && at < order.length - 1 ? order[at + 1] : null;
+  // Frame first (UI-CONSISTENCY §7a): the trail, the tabs and the step draw at once and the name waits in a
+  // title-shaped placeholder. The reads start here, together as before (the list only for ‹ ›: loadRequest checks
+  // this request's files itself); the name, the History count, the buttons, the dialogs and the tab wait on them.
+  const read = scopeFor(guard.context).then(async (scope) => {
+    const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope };
+    const [r, list] = await Promise.all([loadRequest(viewer, id), loadServicing(viewer, { verify: false })]);
+    if (!r) return null;
+    const today = localDay();
+    const bucket = bucketOf(r, today);
+    // ‹ › walk the tab it was opened from, in the list's order; a request a step has moved out of it walks its own tab.
+    const rows = list.available ? list.rows : [];
+    const walk = rowsInView(rows, from, today).some((row) => row.id === r.id) ? from : bucket;
+    const order = rowsInView(rows, walk, today);
+    const at = order.findIndex((row) => row.id === r.id);
+    return {
+      r, bucket, walk,
+      name: r.clientName ? personName(r.clientName) : "No client linked",
+      previous: at > 0 ? order[at - 1] : null,
+      next: at >= 0 && at < order.length - 1 ? order[at + 1] : null,
+      events: historyOf(r),
+    };
+  });
   const neighbour = (row: { clientName: string | null }) => (row.clientName ? personName(row.clientName) : "No client linked");
+  /** The request, or the 404 once the read says it is not this person's (or not there). */
+  const found = (value: Awaited<typeof read>) => {
+    if (!value) notFound();
+    return value;
+  };
 
   // `?step=` (the old links) opens its dialog on arrival, only when the request can take it now and never read-only.
-  const initial = readOnly ? null
-    : (askedStep === "submitted" || askedStep === "send") && bucket === "send" ? "send" as const
-      : (askedStep === "check" || askedStep === "awaiting_carrier" || askedStep === "confirmed_by_carrier") && (bucket === "check" || bucket === "waiting") ? "check" as const
-        : askedStep === "cancel" && canCancel(r.status) ? "cancel" as const
-          : null;
-  const primary = bucket === "send" ? "send" as const : bucket === "check" ? "check" as const : bucket === "failed" ? "failed" as const : null;
-
-  const events = historyOf(r);
-  const tabs = (
-    <ViewTabs label={name} value={tab} tabs={[
-      { key: "request" as const, label: "Request", href: requestHref(r.id, from) },
-      { key: "policy" as const, label: "Policy", href: requestHref(r.id, from, "policy") },
-      { key: "history" as const, label: "History", count: events.length, href: requestHref(r.id, from, "history") },
-    ]} />
-  );
-  const actions = (
-    <span className="inline-flex flex-wrap items-center gap-2">
-      {previous && <Link href={requestHref(previous.id, walk, tab)} className={buttonVariants({ variant: "outline" })} title={`Previous request: ${neighbour(previous)}`}><ChevronLeft aria-hidden="true" />{neighbour(previous)}</Link>}
-      {next && <Link href={requestHref(next.id, walk, tab)} className={buttonVariants({ variant: "outline" })} title={`Next request: ${neighbour(next)}`}>{neighbour(next)}<ChevronRight aria-hidden="true" /></Link>}
-      <ServicingRequestActions
-        primary={primary}
-        tryAgainHref={tryAgainHref(r)}
-        policyHref={policyHref(r)}
-        caseHref={r.caseId ? `/app/retention/${r.caseId}` : null}
-        cancellable={canCancel(r.status)}
-        readOnly={readOnly}
-      />
-    </span>
-  );
-  const change = r.changes.map((c) => describeChange(c)).join(" · ");
-
-  return (
-    <ServicingRequestShell
-      request={{
+  const dialogs = read.then((value) => {
+    if (!value) return null;
+    const { r, bucket, name } = value;
+    const initial = readOnly ? null
+      : (askedStep === "submitted" || askedStep === "send") && bucket === "send" ? "send" as const
+        : (askedStep === "check" || askedStep === "awaiting_carrier" || askedStep === "confirmed_by_carrier") && (bucket === "check" || bucket === "waiting") ? "check" as const
+          : askedStep === "cancel" && canCancel(r.status) ? "cancel" as const
+            : null;
+    const change = r.changes.map((c) => describeChange(c)).join(" · ");
+    return {
+      facts: {
         id: r.id, name, status: r.status, carrierName: r.carrierName, change: change ? `${REQUEST_LABELS[r.type]} → ${change}` : REQUEST_LABELS[r.type],
         kind: `${REQUEST_LABELS[r.type].toLowerCase()} change`,
         carrierMethod: r.carrierMethod, carrierReference: r.carrierReference, formRef: r.formRef, expectedEffectiveDate: r.expectedEffectiveDate,
-      }}
-      back={requestHref(r.id, from, tab)}
-      initial={initial}
-    >
-      <RetentionPage step="servicing" title={name} breadcrumbs={retentionTrail("servicing", name)} tabs={tabs} actions={actions}>
-        {tab === "policy" ? <PolicyTab r={r} />
-          : tab === "history" ? <HistoryTab r={r} events={events} readOnly={readOnly} />
-            : <RequestTab r={r} bucket={bucket} readOnly={readOnly} />}
+      },
+      initial,
+    };
+  });
+
+  const tabsOf = (value: Awaited<typeof read>) => (
+    <ViewTabs label={value?.name ?? "Request"} value={tab} tabs={[
+      { key: "request" as const, label: "Request", href: requestHref(id, from) },
+      { key: "policy" as const, label: "Policy", href: requestHref(id, from, "policy") },
+      { key: "history" as const, label: "History", ...(value ? { count: value.events.length } : {}), href: requestHref(id, from, "history") },
+    ]} />
+  );
+  const actionsOf = ({ r, bucket, walk, previous, next }: NonNullable<Awaited<typeof read>>) => {
+    const primary = bucket === "send" ? "send" as const : bucket === "check" ? "check" as const : bucket === "failed" ? "failed" as const : null;
+    return (
+      <span className="inline-flex flex-wrap items-center gap-2">
+        {previous && <IntentLink transitionTypes={["nav-back"]} href={requestHref(previous.id, walk, tab)} className={buttonVariants({ variant: "outline" })} title={`Previous request: ${neighbour(previous)}`}><ChevronLeft aria-hidden="true" />{neighbour(previous)}</IntentLink>}
+        {next && <IntentLink transitionTypes={["nav-forward"]} href={requestHref(next.id, walk, tab)} className={buttonVariants({ variant: "outline" })} title={`Next request: ${neighbour(next)}`}>{neighbour(next)}<ChevronRight aria-hidden="true" /></IntentLink>}
+        <ServicingRequestActions
+          primary={primary}
+          tryAgainHref={tryAgainHref(r)}
+          policyHref={policyHref(r)}
+          caseHref={r.caseId ? `/app/retention/${r.caseId}` : null}
+          cancellable={canCancel(r.status)}
+          readOnly={readOnly}
+        />
+      </span>
+    );
+  };
+
+  return (
+    <ServicingRequestShell read={dialogs} back={requestHref(id, from, tab)}>
+      <RetentionPage
+        step="servicing"
+        title={<RecordTitle read={read} name={(value) => value?.name ?? null} />}
+        breadcrumbs={retentionTrail("servicing", "Request")}
+        tabs={<Suspense fallback={tabsOf(null)}><Await read={read}>{tabsOf}</Await></Suspense>}
+        actions={<Suspense fallback={null}><Await read={read}>{(value) => (value ? actionsOf(value) : null)}</Await></Suspense>}
+      >
+        <StreamSection shape={tab === "request" ? "strip" : tab === "policy" ? "form" : "table"}>
+          <Await read={read}>
+            {(value) => {
+              const { r, bucket, events } = found(value);
+              return tab === "policy" ? <PolicyTab r={r} />
+                : tab === "history" ? <HistoryTab r={r} events={events} readOnly={readOnly} />
+                  : <RequestTab r={r} bucket={bucket} readOnly={readOnly} />;
+            }}
+          </Await>
+        </StreamSection>
       </RetentionPage>
     </ServicingRequestShell>
   );
@@ -166,7 +197,7 @@ function WhereItStands({ r, bucket, readOnly }: { r: ServicingRequest; bucket: B
   ];
   const third = `The next file shows ${CHANGE_NOUN[r.type]}`;
   if (r.status === "verified_in_file") rungs.push({ label: third, state: "done", when: dayText(r.verifiedAt), line: check ? { text: check.text } : undefined });
-  else if (r.status === "failed") rungs.push({ label: third, state: "failed", when: dayText(r.failedAt), line: check ? { text: check.text } : undefined, action: readOnly ? null : <Link href={tryAgainHref(r)} className={buttonVariants({ size: "sm" })}>Try again</Link> });
+  else if (r.status === "failed") rungs.push({ label: third, state: "failed", when: dayText(r.failedAt), line: check ? { text: check.text } : undefined, action: readOnly ? null : <Link href={tryAgainHref(r)} className={buttonVariants({ size: "sm" })}>Try Again</Link> });
   else if (cancelled) rungs.push({ label: third, state: "skipped", when: dayText(r.cancelledAt), line: { text: "Cancelled: nothing more is asked of the carrier." } });
   else if (bucket === "check") rungs.push({ label: third, state: "now", line: { text: `${check?.text ?? "The file doesn't show it"}: check it with the carrier and record what they said.` }, action: readOnly ? null : <StepButton step="check" label="Check it" size="sm" /> });
   else if (bucket === "waiting") rungs.push({ label: third, state: "now", line: check ? { text: check.text } : undefined, action: readOnly ? null : <StepButton step="check" label="Check it" size="sm" variant="outline" /> });

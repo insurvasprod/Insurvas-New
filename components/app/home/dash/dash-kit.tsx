@@ -2,10 +2,12 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { HomePanel } from "@/components/app/home/home-panel";
+import { buttonVariants } from "@/components/ui/button";
 import { CountUp } from "@/components/ui/count-up";
 import { GaugeRing, Ring } from "@/components/ui/ring";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
+import type { RowExitProps } from "@/components/ui/use-row-exit";
 import { cn } from "@/lib/utils";
 
 /**
@@ -75,7 +77,11 @@ export function DashLayout({ needs, big, side, left, right, hero, list }: {
 
 /* ── Needs you ──────────────────────────────────────────────────────────────────────────────── */
 
-export type DashNeed = { key: string; count: number; label: string; detail?: string; tone: DashTone; href: string };
+export type DashNeed = {
+  key: string; count: number; label: string; detail?: string; tone: DashTone; href: string;
+  /** Tier 1 motion (2026-11-17): a tile handled since the last read plays out (useDepartures); a new one arrives tinted. */
+  motion?: RowExitProps & { "data-row-new"?: "" };
+};
 
 /**
  * Needs you: the standard figure strip every other page uses (StatStrip, owner 2026-11-06: "like any other
@@ -97,18 +103,57 @@ export function DashNeeds({ items, max = 6 }: { items: readonly DashNeed[]; note
     <StatStrip label="Needs you">
       {shown.map((item) => (
         // Light theme v1 (owner 2026-11-12, one-colour rule): the figure is ink; the tone is one dot on its line.
-        <StatTile key={item.key} label={item.label} value={item.count.toLocaleString("en-US")} href={item.href} footnote={item.detail && (
-          <span className="flex min-w-0 items-center gap-1.5">
-            {FLAGGED.has(item.tone) && <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", DOT[item.tone])} />}
-            <span className="truncate">{item.detail}</span>
-          </span>
-        )} reserveFootnote />
+        // The cell (a grid, so the tile fills it) carries the tile's leaving or arriving motion.
+        <div key={item.key} className="grid" {...item.motion}>
+          <StatTile label={item.label} value={item.count.toLocaleString("en-US")} href={item.href} footnote={item.detail && (
+            <span className="flex min-w-0 items-center gap-1.5">
+              {FLAGGED.has(item.tone) && <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", DOT[item.tone])} />}
+              <span className="truncate">{item.detail}</span>
+            </span>
+          )} reserveFootnote />
+        </div>
       ))}
     </StatStrip>
   );
 }
 const FLAGGED = new Set<DashTone>(["danger", "warning"]);
 const DOT: Partial<Record<DashTone, string>> = { danger: "bg-[var(--error)]", warning: "bg-[var(--warning)]" };
+
+/**
+ * Needs you, compact (roles r1, the compact Home): one short tile per thing waiting — the count, then what it is —
+ * in a single row, most urgent first, each opening its list. The Home has two strips above its cards and no page
+ * scroll, so this is the strip's low form; the module views keep `DashNeeds`.
+ */
+export function DashNeedsBar({ items, max = 6 }: { items: readonly DashNeed[]; max?: number }) {
+  const rank: Record<DashTone, number> = { danger: 0, warning: 1, info: 2, good: 3, neutral: 4 };
+  const shown = items.filter((item) => item.count > 0).sort((a, b) => rank[a.tone] - rank[b.tone]).slice(0, max);
+  if (!shown.length) {
+    return (
+      <section aria-label="Needs you" className="m-glass flex h-12 shrink-0 items-center gap-3 rounded-lg border border-border px-4">
+        <span className="grid size-6 place-items-center rounded-full bg-[var(--success-surface)] text-xs text-[var(--success-ink)]" aria-hidden="true">✓</span>
+        <span className="text-sm font-semibold text-foreground">Nothing is waiting on you.</span>
+      </section>
+    );
+  }
+  return (
+    <section aria-label="Needs you" className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-flow-col lg:auto-cols-fr lg:grid-cols-none">
+      {shown.map((item) => (
+        <div key={item.key} className="grid min-w-0" {...item.motion}>
+          <Link href={item.href} title={item.detail ? `${item.label} · ${item.detail}` : item.label} className="m-glass flex h-12 min-w-0 items-center gap-2.5 rounded-lg border border-border px-3 text-foreground no-underline transition-colors hover:bg-[var(--hover-wash)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">
+            <span className="font-[family-name:var(--font-display)] text-xl font-semibold tabular-nums">{item.count.toLocaleString("en-US")}</span>
+            <span className="flex min-w-0 flex-col leading-tight">
+              <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                {FLAGGED.has(item.tone) && <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", DOT[item.tone])} />}
+                <span className="truncate">{item.label}</span>
+              </span>
+              {item.detail && <span className="truncate text-xs text-muted-foreground opacity-80">{item.detail}</span>}
+            </span>
+          </Link>
+        </div>
+      ))}
+    </section>
+  );
+}
 
 /* ── Cards ──────────────────────────────────────────────────────────────────────────────────── */
 
@@ -150,9 +195,13 @@ export function DashChart({ title, link, total, totalLine, change, legend, legen
 export type DashLine = { label: string; value: string; href?: string };
 
 /** One figure as a ring, with its few supporting lines under it, each a link. */
-export function DashRing({ title, link, value, max = 100, center, label, lines, tone = "primary", size = 104 }: {
+export function DashRing({ title, link, action, sub, value, max = 100, center, label, lines, tone = "primary", size = 104 }: {
   title: string;
   link?: { label: string; href: string };
+  /** A control in the header beside the link (the Home's "Set goal"). */
+  action?: ReactNode;
+  /** A muted line under the title ("Set by you", "Last month's issued"). */
+  sub?: string;
   value: number;
   max?: number;
   center: string;
@@ -163,7 +212,7 @@ export function DashRing({ title, link, value, max = 100, center, label, lines, 
   size?: number;
 }) {
   return (
-    <HomePanel title={title} link={link} bodyClassName="items-center gap-2.5">
+    <HomePanel title={title} sub={sub} link={link} badge={action} bodyClassName="items-center gap-2.5">
       <Ring value={value} max={max} size={size} tone={tone} label={label}>
         <RingCenter text={center} size={size} />
       </Ring>
@@ -348,7 +397,7 @@ export function DashReceived({ title, received, expected, pct, short, href }: { 
         <span className="ml-auto font-semibold tabular-nums text-foreground">{pct}%</span>
       </span>
       {short && (short.href
-        ? <Link href={short.href} className="text-xs font-semibold text-[var(--warning-ink)] no-underline hover:underline">{short.text} ›</Link>
+        ? <span className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-[var(--warning-ink)]">{short.text}</span><Link href={short.href} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "ml-auto no-underline")}>See Why</Link></span>
         : <span className="text-xs font-semibold text-[var(--warning-ink)]">{short.text}</span>)}
     </section>
   );
@@ -487,6 +536,11 @@ export function DashTable({ title, period, link, heads, rows, empty = "Nothing h
 }
 
 /** The brand card at the top of the right column: one money or state figure, two facts under it. */
+/** Sentence case for a label typed in capitals ("READY TO DIAL" → "Ready to dial"): no uppercase eyebrows (UI-CONSISTENCY §17). */
+function sentenceCase(text: string) {
+  return /[a-z]/.test(text) ? text : text.charAt(0) + text.slice(1).toLowerCase();
+}
+
 export function DashHero({ kicker, value, line, facts, href }: { kicker: string; value: string; line?: string; facts?: ReadonlyArray<{ label: string; value: string }>; href: string }) {
   return (
     <Link
@@ -494,7 +548,7 @@ export function DashHero({ kicker, value, line, facts, href }: { kicker: string;
       className="relative flex min-h-40 flex-col gap-1.5 overflow-hidden rounded-[18px] bg-[var(--brand-700)] p-[18px] text-[var(--on-dark)] no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
     >
       <svg aria-hidden="true" viewBox="0 0 260 140" className="m-reveal-x pointer-events-none absolute -bottom-6 -right-8 h-[130px] w-[240px] opacity-70" fill="none" stroke="var(--highlight)" strokeWidth="10" strokeLinecap="round"><path d="M10 110 C 60 20, 90 140, 140 60 S 220 40, 250 90" /></svg>
-      <span className="text-xs font-semibold tracking-[0.04em] opacity-80">{kicker}</span>
+      <span className="text-xs font-semibold opacity-80">{sentenceCase(kicker)}</span>
       <span className="font-[family-name:var(--font-display)] text-[1.75rem] font-semibold leading-tight tabular-nums"><CountUp text={value} fromZero /></span>
       {line && <span className="text-xs opacity-85">{line}</span>}
       {facts && facts.length > 0 && (

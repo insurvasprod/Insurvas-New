@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlignLeft, ChevronsLeft, ChevronsRight, Download, GitBranch, RotateCw, SquareCheck, Trash, type LucideIcon } from "lucide-react";
 
 import { RAIL_COOKIE, leadsInStepStatus, type LeadsInStep } from "@/lib/leadSources/steps";
 import { IMPORT_CSV_KEY } from "@/lib/agentTemplates/importReviewModel";
 import { cn } from "@/lib/utils";
+import { CountBadge } from "@/components/ui/count-badge";
 import { IntentLink } from "@/components/ui/nav-pending";
 import { rememberLeadsIn } from "@/components/app/step-frame/frame-memory";
+import { RailCornerDot, RailHighlight, useRailGlide } from "@/components/app/step-frame/rail-glide";
 import { readResource } from "@/lib/client/resource-cache";
 
 type RailStep = { key: LeadsInStep; label: string; sub: string; href: string };
@@ -60,10 +62,11 @@ async function stillStaged(ids: string[], signal: AbortSignal): Promise<string[]
   return kept.filter((id): id is string => id !== null);
 }
 
-/** A badge's figure: 12,805 reads 12.8k so the badge stays one short pill. */
-function badgeFigure(n: number) {
-  return n >= 10_000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k` : n.toLocaleString("en-US");
-}
+/**
+ * The last counts this tab saw: a client move draws the next step's menu with them, so its badges are there at once
+ * and roll, rather than popping in on every step. Empty while a fresh document hydrates, as the server's HTML is.
+ */
+let lastCounts: Partial<Record<LeadsInStep, number>> = {};
 
 export function LeadsInRail({ steps, step, initialCollapsed = false }: { steps: RailStep[]; step: LeadsInStep; initialCollapsed?: boolean }) {
   const [collapsed, setCollapsed] = useState(initialCollapsed);
@@ -74,7 +77,10 @@ export function LeadsInRail({ steps, step, initialCollapsed = false }: { steps: 
   };
   // Remembered for the shell's loading state, which redraws this title and menu while the next step loads (frame-memory.ts).
   useEffect(() => { rememberLeadsIn({ steps, collapsed }); }, [steps, collapsed]);
-  const [counts, setCounts] = useState<Partial<Record<LeadsInStep, number>>>({});
+  const [counts, setCounts] = useState<Partial<Record<LeadsInStep, number>>>(() => (typeof window === "undefined" ? {} : lastCounts));
+  // The open step's highlight glides from step to step (rail-glide.tsx).
+  const list = useRef<HTMLUListElement | null>(null);
+  const pill = useRailGlide(list, "Lead flow");
   const [reviewHref, setReviewHref] = useState<string | null>(null);
   useEffect(() => {
     const controller = new AbortController();
@@ -85,7 +91,7 @@ export function LeadsInRail({ steps, step, initialCollapsed = false }: { steps: 
         const here = await stillStaged(stagedHere(), controller.signal);
         const newest = body?.reviewHref?.split("/").pop() ?? null;
         const open = newest && here.includes(newest) ? newest : here[here.length - 1] ?? null;
-        if (body?.counts) setCounts({ ...body.counts, review: here.length });
+        if (body?.counts) { lastCounts = { ...body.counts, review: here.length }; setCounts(lastCounts); }
         setReviewHref(open ? `/app/import/review/${open}` : null);
       })
       .catch(() => {});
@@ -94,10 +100,11 @@ export function LeadsInRail({ steps, step, initialCollapsed = false }: { steps: 
 
   return (
     <nav aria-label="Lead flow" data-collapsed={collapsed ? "" : undefined} className={cn(
-      "m-glass rounded-xl border border-[var(--border)] p-3 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:transition-[width] lg:duration-300 lg:ease-[cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-none",
+      "m-glass rounded-xl border border-[var(--border)] p-3 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:transition-[width] lg:duration-[var(--t-panel)] lg:ease-[var(--e-out)]",
       collapsed ? "lg:w-[72px] lg:px-2" : "lg:w-[248px]",
     )}>
-      <ul className="m-0 flex list-none gap-1 overflow-x-auto p-0 lg:flex-col lg:overflow-visible">
+      <ul ref={list} data-rail-track="" className="relative isolate m-0 flex list-none gap-1 overflow-x-auto p-0 [scrollbar-width:none]! lg:flex-col lg:overflow-visible [&::-webkit-scrollbar]:hidden">
+        <RailHighlight pill={pill} />
         {steps.map((item, index) => {
           const on = item.key === step;
           // Down the menu slides forward, up it slides back (§ Motion).
@@ -116,22 +123,24 @@ export function LeadsInRail({ steps, step, initialCollapsed = false }: { steps: 
                 className={cn(
                   "group relative flex items-center gap-3 rounded-xl outline-none",
                   collapsed ? "justify-center px-1 py-2" : "px-3 py-2.5",
-                  " transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-[var(--primary)]",
-                  on ? "bg-[var(--primary-soft)] ring-1 ring-inset ring-[color-mix(in_srgb,var(--primary)_50%,transparent)]" : "hover:bg-[color-mix(in_srgb,var(--ink)_5%,transparent)]",
+                  " transition-colors duration-[var(--t-panel)] ease-[var(--e)] focus-visible:ring-2 focus-visible:ring-[var(--primary)]",
+                  // The open step's ground is the gliding pill once it is measured; until then (the first paint) its own.
+                  on ? !pill && "bg-[var(--primary-soft)] ring-1 ring-inset ring-[color-mix(in_srgb,var(--primary)_50%,transparent)]" : "hover:bg-[color-mix(in_srgb,var(--ink)_5%,transparent)]",
                 )}
               >
                 <span aria-hidden="true" className={cn(
-                  "inline-grid size-[34px] shrink-0 place-items-center rounded-[10px] transition-colors duration-200",
+                  "inline-grid size-[34px] shrink-0 place-items-center rounded-[10px] transition-colors duration-[var(--t-panel)] ease-[var(--e)]",
                   on ? "bg-[var(--primary)] text-[var(--on-primary)]" : "bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] text-[var(--ink)]",
                 )}><Icon className="size-[18px]" strokeWidth={1.8} /></span>
                 <span className={cn("min-w-0 flex-1", collapsed && "lg:sr-only")}>
                   <span className="block text-sm font-semibold text-[var(--ink)]">{item.label}</span>
                 </span>
-                {status?.needsYou && n ? (collapsed
+                {collapsed
                   // Collapsed, the count rides on the icon's corner as a dot with its number in the tooltip.
-                  ? <span aria-hidden="true" className="absolute top-1.5 right-2 hidden size-2.5 rounded-full bg-[var(--warning)] ring-2 ring-[var(--canvas)] lg:block" />
-                  : <span className="inline-grid h-5 min-w-[22px] shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--warning)_18%,transparent)] px-[7px] text-xs font-bold text-[var(--warning-ink)] tabular-nums">{badgeFigure(n)}</span>
-                ) : null}
+                  ? <RailCornerDot on={Boolean(status?.needsYou && n)} />
+                  // The count rolls when it changes, pops in when it appears and shrinks away at 0 (CountBadge); 12,805
+                  // reads 12.8k so the badge stays one short pill.
+                  : <CountBadge value={status?.needsYou && n ? n : 0} tone="warning" compact className="shrink-0" />}
               </IntentLink>
             </li>
           );
@@ -150,7 +159,7 @@ export function LeadsInRail({ steps, step, initialCollapsed = false }: { steps: 
         aria-expanded={!collapsed}
         aria-label={collapsed ? "Show the Lead flow menu" : "Collapse the Lead flow menu"}
         title={collapsed ? "Show labels" : "Collapse"}
-        className={cn("mt-2 hidden size-8 shrink-0 place-items-center rounded-lg text-[var(--ink)] outline-none transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] focus-visible:ring-2 focus-visible:ring-[var(--primary)] lg:grid", collapsed ? "mx-auto" : "ml-auto")}
+        className={cn("mt-2 hidden size-8 shrink-0 place-items-center rounded-lg text-[var(--ink)] outline-none transition-colors duration-[var(--t-micro)] ease-[var(--e)] hover:bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] focus-visible:ring-2 focus-visible:ring-[var(--primary)] lg:grid", collapsed ? "mx-auto" : "ml-auto")}
       >
         {collapsed ? <ChevronsRight className="size-4" aria-hidden="true" /> : <ChevronsLeft className="size-4" aria-hidden="true" />}
       </button>

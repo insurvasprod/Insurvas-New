@@ -26,6 +26,7 @@ export function CustomInvoiceDialog({
   triggerLabel = "Custom invoice",
   triggerClassName,
   triggerSize = "sm",
+  triggerVariant = "default",
 }: {
   tenants: { id: string; name: string }[];
   /** Raise the invoice for this tenant only — the picker becomes a read-only line. */
@@ -35,6 +36,8 @@ export function CustomInvoiceDialog({
   triggerClassName?: string;
   /** The Button's size when no class is given: "default" (36px) for a page-header action, "sm" inside a card. */
   triggerSize?: "default" | "sm";
+  /** "highlight": the gold feature button, at most one a page (Admin › Billing › Invoices, billing-r2). */
+  triggerVariant?: "default" | "highlight" | "outline";
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -92,7 +95,7 @@ export function CustomInvoiceDialog({
           {triggerLabel}
         </button>
       ) : (
-        <Button size={triggerSize} onClick={() => setOpen(true)}>
+        <Button size={triggerSize} variant={triggerVariant} onClick={() => setOpen(true)}>
           {triggerLabel}
         </Button>
       )}

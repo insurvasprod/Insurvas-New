@@ -336,7 +336,9 @@ export function menuRoleAdmits(required: readonly MemberRole[] | undefined, role
  * them. A solo agent and the all-seeing roles keep every item.
  */
 export const AGENCY_OWNER_ONLY_KEYS: ReadonlySet<string> = new Set([
-  "leads.import", "leads.lists", "leads.nurture", "leads.duplicates", "leads.campaigns",
+  // leads.assignments (QA pass 2026-11): /app/assignments tells every non-owner in an agency "the owner or an
+  // admin routes leads", so a producer, setter or assistant clicking Lead routing hit a dead end.
+  "leads.import", "leads.lists", "leads.nurture", "leads.duplicates", "leads.campaigns", "leads.assignments",
   "book.needs_you", "insight.vendor-returns", "insight.scoring", "insight.true-cpa", "partners.review",
   "compliance.dashboard", "compliance.tcpa", "compliance.consent", "compliance.complaints", "compliance.deletions", "compliance.litigation",
 ]);

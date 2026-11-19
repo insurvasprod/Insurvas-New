@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
@@ -10,6 +11,8 @@ import { CREDIT_HREF, itemHref, type CreditView } from "@/components/app/commiss
 import { Button } from "@/components/ui/button";
 import { EmptyState, ErrorState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
+import { StreamSection } from "@/components/ui/stream-section";
+import { Part, startParts } from "@/components/app/commissions/frame-parts";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { readCreditQueue } from "@/lib/agency/moneyStores";
 import { loadMatching, MATCHING_PENDING_MESSAGE } from "@/lib/ingestion/policyMatchingStore";
@@ -34,40 +37,54 @@ export default async function AttributionPage({ searchParams }: { searchParams: 
   const tenantId = guard.context.tenantId;
   const readOnly = guard.entitlement.access === "read_only";
 
-  const [queue, codes, matching, today] = await Promise.all([
-    readCreditQueue(tenantId).catch((error: unknown) => { console.error("[who gets the credit]", error); return null; }),
-    view === "codes" ? Promise.resolve(null) : unmappedAgentCodes(tenantId).catch(() => null),
-    view === "codes" ? loadMatching(tenantId).catch(() => null) : Promise.resolve(null),
-    agencyToday(tenantId).catch(() => new Date().toISOString().slice(0, 10)),
-  ]);
-  const codeCount = view === "codes" ? (matching?.available ? matching.unmapped.length : null) : codes?.length ?? null;
-  const oldest = queue?.open[0] ?? null;
   const here = (next: CreditView) => (next === "decide" ? CREDIT_HREF : `${CREDIT_HREF}?view=${next}`);
+  const tabsOf = (counts: { decide: number | null; codes: number | null; decided: number | null } | null) => (
+    <ViewTabs<CreditView> label="Who gets the credit" value={view} tabs={[
+      { key: "decide", label: "To decide", count: counts?.decide ?? null, tone: "danger", href: here("decide") },
+      { key: "codes", label: "Agent codes", count: counts?.codes ?? null, tone: "danger", href: here("codes") },
+      { key: "decided", label: "Decided", count: counts?.decided ?? null, href: here("decided") },
+    ]} />
+  );
+  const decideOldest = (href: string | null) => (href && !readOnly
+    ? <Button asChild><Link href={href}>Decide the oldest</Link></Button>
+    : <Button type="button" disabled title={readOnly ? "Paused while the account is read-only." : href === null ? "Nothing to decide." : undefined}>Decide the oldest</Button>);
 
-  let body;
-  if (view === "codes") {
-    body = !matching ? <TableCard><ErrorState detail="The agent codes could not be read. Refresh to try again." /></TableCard>
-      : !matching.available ? <TableCard><EmptyState title={MATCHING_PENDING_MESSAGE} hint="Agent codes open here once it is applied." /></TableCard>
-        : <CreditAgentCodes unmapped={matching.unmapped} members={matching.members} readOnly={readOnly} />;
-  } else {
-    body = !queue ? <TableCard><ErrorState detail={`${ATTRIBUTION_PENDING_MESSAGE} If it is applied, refresh to try again.`} /></TableCard>
-      : <CreditQueue rows={view === "decided" ? queue.decided : queue.open} decided={view === "decided"} today={today} />;
-  }
+  // Frame first (§7a): the title, the tabs and Decide the oldest (disabled until the queue is read) draw at once;
+  // the counts and the list stream in.
+  const read = startParts((async () => {
+    const [queue, codes, matching, today] = await Promise.all([
+      readCreditQueue(tenantId).catch((error: unknown) => { console.error("[who gets the credit]", error); return null; }),
+      view === "codes" ? Promise.resolve(null) : unmappedAgentCodes(tenantId).catch(() => null),
+      view === "codes" ? loadMatching(tenantId).catch(() => null) : Promise.resolve(null),
+      agencyToday(tenantId).catch(() => new Date().toISOString().slice(0, 10)),
+    ]);
+    const codeCount = view === "codes" ? (matching?.available ? matching.unmapped.length : null) : codes?.length ?? null;
+    const oldest = queue?.open[0] ?? null;
+
+    let body;
+    if (view === "codes") {
+      body = !matching ? <TableCard><ErrorState detail="The agent codes could not be read. Refresh to try again." /></TableCard>
+        : !matching.available ? <TableCard><EmptyState title={MATCHING_PENDING_MESSAGE} hint="Agent codes open here once it is applied." /></TableCard>
+          : <CreditAgentCodes unmapped={matching.unmapped} members={matching.members} readOnly={readOnly} />;
+    } else {
+      body = !queue ? <TableCard><ErrorState detail={`${ATTRIBUTION_PENDING_MESSAGE} If it is applied, refresh to try again.`} /></TableCard>
+        : <CreditQueue rows={view === "decided" ? queue.decided : queue.open} decided={view === "decided"} today={today} />;
+    }
+    return {
+      tabs: tabsOf({ decide: queue?.open.length ?? null, codes: codeCount, decided: queue?.decided.length ?? null }),
+      actions: decideOldest(oldest ? itemHref(oldest.id) : null),
+      body,
+    };
+  })());
 
   return (
     <CommissionsPage
       step="attribution"
       info="A carrier statement line Insurvas could not safely give to one producer: the writing number and the application name different people, or the line names nobody yet. Decide who it counts for, with a reason."
-      tabs={<ViewTabs<CreditView> label="Who gets the credit" value={view} tabs={[
-        { key: "decide", label: "To decide", count: queue?.open.length ?? null, tone: "danger", href: here("decide") },
-        { key: "codes", label: "Agent codes", count: codeCount, tone: "danger", href: here("codes") },
-        { key: "decided", label: "Decided", count: queue?.decided.length ?? null, href: here("decided") },
-      ]} />}
-      actions={oldest && !readOnly
-        ? <Button asChild><Link href={itemHref(oldest.id)}>Decide the oldest</Link></Button>
-        : <Button type="button" disabled title={readOnly ? "Paused while the account is read-only." : "Nothing to decide."}>Decide the oldest</Button>}
+      tabs={<Suspense fallback={tabsOf(null)}><Part read={read} part="tabs" /></Suspense>}
+      actions={<Suspense fallback={decideOldest("")}><Part read={read} part="actions" /></Suspense>}
     >
-      {body}
+      <StreamSection shape="table"><Part read={read} part="body" /></StreamSection>
     </CommissionsPage>
   );
 }

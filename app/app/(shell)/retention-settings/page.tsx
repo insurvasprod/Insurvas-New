@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { OPEN_STATUSES, REASONS, type Reason } from "@/lib/retention/cases/ladder";
 import { loadFlaggedWords, loadLadderRules } from "@/lib/retention/cases/rulesStore";
@@ -7,6 +9,7 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { RetentionSettingsBoard, type Tab } from "@/components/app/retention/retention-settings-board";
 import { SettingsRouteFrame } from "@/components/app/settings/settings-route-frame";
+import { PageLoading } from "@/components/ui/page-loading";
 
 /** The tabs in the address (kept here: a client module's functions cannot run on the server). */
 const TABS: readonly Tab[] = ["ladder", "who", "requests", "winback", "radar"];
@@ -25,7 +28,17 @@ export default async function RetentionSettingsPage({ searchParams }: { searchPa
   if (guard.role !== "owner") {
     return <RoleGateNotice featureLabel="Retention settings" detail="Only the owner changes what puts a policy on the ladder and who works retention." />;
   }
-  const tenantId = guard.context.tenantId;
+  // Speed pass 2026-11-12: the Settings frame draws at once; the board streams in under it.
+  return (
+    <SettingsRouteFrame sectionId="retention">
+      <Suspense fallback={<PageLoading header={false} strip={false} />}>
+        <RetentionBoard tenantId={guard.context.tenantId} canEdit={guard.entitlement.access !== "read_only"} initialTab={isTab(query.tab) ? query.tab : "ladder"} />
+      </Suspense>
+    </SettingsRouteFrame>
+  );
+}
+
+async function RetentionBoard({ tenantId, canEdit, initialTab }: { tenantId: string; canEdit: boolean; initialTab: Tab }) {
   const hubRead = loadHub(tenantId).then(
     (hub) => ({ hub, problem: null as string | null }),
     (error: unknown) => {
@@ -34,11 +47,7 @@ export default async function RetentionSettingsPage({ searchParams }: { searchPa
     },
   );
   const [{ hub, problem }, ladder, words, openByReason] = await Promise.all([hubRead, loadLadderRules(tenantId), loadFlaggedWords(tenantId), openCasesByReason(tenantId)]);
-  return (
-    <SettingsRouteFrame sectionId="retention">
-      <RetentionSettingsBoard hub={hub} hubProblem={problem} ladder={ladder} words={words} openByReason={openByReason} canEdit={guard.entitlement.access !== "read_only"} initialTab={isTab(query.tab) ? query.tab : "ladder"} />
-    </SettingsRouteFrame>
-  );
+  return <RetentionSettingsBoard hub={hub} hubProblem={problem} ladder={ladder} words={words} openByReason={openByReason} canEdit={canEdit} initialTab={initialTab} />;
 }
 
 /**

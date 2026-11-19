@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
@@ -11,6 +12,7 @@ import { OutcomeFilter } from "@/components/app/book/files/outcome-filter";
 import { StageLegend } from "@/components/app/book/files/stage-strip";
 import { Callout } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
+import { StreamSection } from "@/components/ui/stream-section";
 import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -75,14 +77,51 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
   const filter: FileFilter = FILE_FILTERS.find((f) => f.key === (asked === "missing" ? "missing" : shown))?.key ?? "all";
   // Perf pass 2026-11-09: the missing files and the agents' findings need nothing of the list, so they are read
   // beside it; they are used (and a failure raised) only when the list is available, as before.
-  const settle = <T,>(promise: Promise<T>) => promise.then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error }));
-  const used = <T,>(read: { ok: true; value: T } | { ok: false; error: unknown }): T => {
-    if (!read.ok) throw read.error;
-    return read.value;
-  };
+  // Frame first (UI-CONSISTENCY §7a): the title line, Statements and Upload draw at once; the problems line, the strip
+  // and the list stream in. The reads are today's, in today's order, only started before the frame returns.
   const missingRead = settle(loadMissingFiles(tenantId));
   const findingsRead = settle(listFindings(tenantId));
-  const [list, carriers, unmapped] = await Promise.all([listCarrierFiles(tenantId), fileCarrierChoices(tenantId), listOpenUnmappedStatuses(tenantId)]);
+  const first: First = Promise.all([listCarrierFiles(tenantId), fileCarrierChoices(tenantId), listOpenUnmappedStatuses(tenantId)]);
+
+  return (
+    <DataInPage
+      step="files"
+      actions={<>
+        {/* Carrier statements have their own import and review (owner 2026-11-02: moved here from Commissions). */}
+        <Button asChild variant="outline"><Link href="/app/statements">Statements</Link></Button>
+        <Suspense fallback={<Button type="button" disabled>Upload a file</Button>}><Upload read={first} readOnly={readOnly} autoOpen={upload === "1"} /></Suspense>
+      </>}
+    >
+      <StreamSection shape="strip+table"><Files first={first} missingRead={missingRead} findingsRead={findingsRead} tenantId={tenantId} readOnly={readOnly} filter={filter} /></StreamSection>
+    </DataInPage>
+  );
+}
+
+const settle = <T,>(promise: Promise<T>): Promise<Settled<T>> => promise.then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error }));
+const used = <T,>(read: Settled<T>): T => {
+  if (!read.ok) throw read.error;
+  return read.value;
+};
+type Settled<T> = { ok: true; value: T } | { ok: false; error: unknown };
+type First = Promise<[Awaited<ReturnType<typeof listCarrierFiles>>, Awaited<ReturnType<typeof fileCarrierChoices>>, Awaited<ReturnType<typeof listOpenUnmappedStatuses>>]>;
+
+const pausedWhy = (available: boolean, readOnly: boolean) => (!available ? CARRIER_FILES_PENDING_MESSAGE : readOnly ? "Receiving files is paused while the account is read-only." : null);
+
+async function Upload({ read, readOnly, autoOpen }: { read: First; readOnly: boolean; autoOpen: boolean }) {
+  const [list, carriers] = await read;
+  const blocked = pausedWhy(list.available, readOnly);
+  return blocked ? <Button type="button" disabled title={blocked}>Upload a file</Button> : <CarrierFileUploadButton carriers={carriers} autoOpen={autoOpen} openWhenDone />;
+}
+
+async function Files({ first, missingRead, findingsRead, tenantId, readOnly, filter }: {
+  first: First;
+  missingRead: Promise<Settled<Awaited<ReturnType<typeof loadMissingFiles>>>>;
+  findingsRead: Promise<Settled<Awaited<ReturnType<typeof listFindings>>>>;
+  tenantId: string;
+  readOnly: boolean;
+  filter: FileFilter;
+}) {
+  const [list, carriers, unmapped] = await first;
   const [stages, missing] = list.available
     ? await Promise.all([listFileStages(tenantId, list.files), missingRead.then(used)])
     : [null, { available: false, missing: [] }];
@@ -90,7 +129,7 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
   const findings = list.available ? used(await findingsRead) : null;
   const openFindings = findings?.findings.filter((f) => f.status === "open").length ?? 0;
 
-  const blocked = !list.available ? CARRIER_FILES_PENDING_MESSAGE : readOnly ? "Receiving files is paused while the account is read-only." : null;
+  const blocked = pausedWhy(list.available, readOnly);
   const current = list.files.filter((file) => file.status !== "superseded");
   const where = (file: (typeof list.files)[number]) => fileWhere(file, stages?.[file.id]);
   const waiting = current.filter((file) => file.waitingForLayout).length;
@@ -158,59 +197,52 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
   );
 
   return (
-    <DataInPage
-      step="files"
-      actions={<>
-        {/* Carrier statements have their own import and review (owner 2026-11-02: moved here from Commissions). */}
-        <Button asChild variant="outline"><Link href="/app/statements">Statements</Link></Button>
-        {blocked ? <Button type="button" disabled title={blocked}>Upload a file</Button> : <CarrierFileUploadButton carriers={carriers} autoOpen={upload === "1"} openWhenDone />}
-      </>}
-    >
-      {problems.length > 0 && (
-        <Callout
-          tone={failedFiles.length ? "error" : "warning"}
-          title={
-            <>
-              {problems.map((p, index) => <span key={index} title={p.title}>{index > 0 ? " · " : ""}{p.text}</span>)}.
-              {action && <> <Link href={action.href} className={link}>{action.label}</Link></>}
-            </>
-          }
-        />
-      )}
+    <>
+    {problems.length > 0 && (
+      <Callout
+        tone={failedFiles.length ? "error" : "warning"}
+        title={
+          <>
+            {problems.map((p, index) => <span key={index} title={p.title}>{index > 0 ? " · " : ""}{p.text}</span>)}.
+            {action && <> <Link href={action.href} className={link}>{action.label}</Link></>}
+          </>
+        }
+      />
+    )}
 
-      <>
-          {list.files.length > 0 && filter !== "missing" && (
-            <StatStrip label="Carrier file totals">
-              <StatTile label="Files in use" value={n(current.length)} footnote={replaced ? `${n(replaced)} more replaced by a corrected file` : [["policies", "policy"], ["commissions", "commission"], ["new_business", "new business"]].map(([type, word]) => [current.filter((file) => file.fileType === type).length, word] as const).filter(([count], index) => index < 2 || count > 0).map(([count, word]) => `${n(count)} ${word}`).join(" · ")} />
-              {/* Files, as the chip counts them; the rows they hold are the footnote (walk 2026-11-02: 861 beside 10 read as a disagreement). */}
-              {/* Owner 2026-11-11: plain figures; a tile that is a problem says so in one chip in its footnote. */}
-              <StatTile label="Need you" value={n(counts.needs)} footnote={counts.needs ? <StatusChip tone="warning" title={openFindings ? `${n(openFindings)} ${openFindings === 1 ? "problem" : "problems"} found` : undefined}>{n(needsYou)} {needsYou === 1 ? "row" : "rows"} waiting</StatusChip> : "nothing waiting on a person"} href={chipHref("needs")} />
-              <StatTile label="Waiting for a layout" value={n(waiting)} footnote="read once Insurvas sets up the layout" />
-              <StatTile label="Failed" value={n(counts.failed)} footnote={counts.failed ? <StatusChip tone="warning" title="Cannot be read, see the reason">Cannot be read</StatusChip> : "cannot be read, see the reason"} href={chipHref("failed")} />
-              <StatTile label="Duplicates skipped" value={n(list.skips.length)} footnote="already received" />
-            </StatStrip>
-          )}
+    <>
+        {list.files.length > 0 && filter !== "missing" && (
+          <StatStrip label="Carrier file totals">
+            <StatTile label="Files in use" value={n(current.length)} footnote={replaced ? `${n(replaced)} more replaced by a corrected file` : [["policies", "policy"], ["commissions", "commission"], ["new_business", "new business"]].map(([type, word]) => [current.filter((file) => file.fileType === type).length, word] as const).filter(([count], index) => index < 2 || count > 0).map(([count, word]) => `${n(count)} ${word}`).join(" · ")} />
+            {/* Files, as the chip counts them; the rows they hold are the footnote (walk 2026-11-02: 861 beside 10 read as a disagreement). */}
+            {/* Owner 2026-11-11: plain figures; a tile that is a problem says so in one chip in its footnote. */}
+            <StatTile label="Need you" value={n(counts.needs)} footnote={counts.needs ? <StatusChip tone="warning" title={openFindings ? `${n(openFindings)} ${openFindings === 1 ? "problem" : "problems"} found` : undefined}>{n(needsYou)} {needsYou === 1 ? "row" : "rows"} waiting</StatusChip> : "nothing waiting on a person"} href={chipHref("needs")} />
+            <StatTile label="Waiting for a layout" value={n(waiting)} footnote="read once Insurvas sets up the layout" />
+            <StatTile label="Failed" value={n(counts.failed)} footnote={counts.failed ? <StatusChip tone="warning" title="Cannot be read, see the reason">Cannot be read</StatusChip> : "cannot be read, see the reason"} href={chipHref("failed")} />
+            <StatTile label="Duplicates skipped" value={n(list.skips.length)} footnote="already received" />
+          </StatStrip>
+        )}
 
-          {filter === "missing" ? missingTable : (
-            <>
-              <CarrierFilesTable
-                key={filter}
-                files={list.files}
-                stages={stages ?? undefined}
-                show={filter === "needs" || filter === "failed" ? filter : undefined}
-                chips={chips}
-                also={filter === "needs" && openFindings ? `and ${n(openFindings)} ${openFindings === 1 ? "problem" : "problems"} found, below` : undefined}
-                emptyTitle={list.available ? "No carrier file received yet" : "Carrier files are not available yet"}
-                emptyHint={list.available ? "Upload a policy or commission file, email one to the agency's address, or have a script drop it into the bucket." : "Files appear here once the update is applied."}
-              />
-              {/* Problems found (was Checks): what the agents raised, open ones first, where Needs you already looks. */}
-              {filter === "needs" && findings && (findings.findings.length > 0 || !findings.available) && (
-                <AgentFindings findings={findings.findings} accuracy={findings.accuracy} available={findings.available} canReview={!readOnly} />
-              )}
-              {list.files.length > 0 && <StageLegend />}
-            </>
-          )}
-        </>
-    </DataInPage>
+        {filter === "missing" ? missingTable : (
+          <>
+            <CarrierFilesTable
+              key={filter}
+              files={list.files}
+              stages={stages ?? undefined}
+              show={filter === "needs" || filter === "failed" ? filter : undefined}
+              chips={chips}
+              also={filter === "needs" && openFindings ? `and ${n(openFindings)} ${openFindings === 1 ? "problem" : "problems"} found, below` : undefined}
+              emptyTitle={list.available ? "No carrier file received yet" : "Carrier files are not available yet"}
+              emptyHint={list.available ? "Upload a policy or commission file, email one to the agency's address, or have a script drop it into the bucket." : "Files appear here once the update is applied."}
+            />
+            {/* Problems found (was Checks): what the agents raised, open ones first, where Needs you already looks. */}
+            {filter === "needs" && findings && (findings.findings.length > 0 || !findings.available) && (
+              <AgentFindings findings={findings.findings} accuracy={findings.accuracy} available={findings.available} canReview={!readOnly} />
+            )}
+            {list.files.length > 0 && <StageLegend />}
+          </>
+        )}
+      </>
+    </>
   );
 }

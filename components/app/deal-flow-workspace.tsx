@@ -26,19 +26,19 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import Link from "next/link";
 import { BadgeCheck, Copy, Download, Handshake, Hourglass, Plus, XCircle } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { ActiveFilters, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
-import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs } from "@/components/app/book-of-business-views";
 import { DealFlowFunnel } from "@/components/app/deal-flow-funnel";
 import { IssuedPolicyPanel } from "@/components/app/issued-policy-panel";
-import { Field, KeyValues, control, st } from "@/components/app/settings/primitives";
+import { Callout, Field, KeyValues, control, st } from "@/components/app/settings/primitives";
 import { intakeLocalDate } from "@/lib/dealFlow/localDate";
 import {
   DEAL_FLOW_PAGE_SIZE,
@@ -186,14 +186,9 @@ function Timeline({ items }: { items: TimelineItem[] }) {
   );
 }
 
-/** A message the reader must act on now: one line, the shared alert look. */
+/** A message the reader must act on now. It goes to the bell (UI-CONSISTENCY §3), never onto the page. */
 function Alert({ tone, children }: { tone: "info" | "warning" | "error"; children: ReactNode }) {
-  const look = tone === "error"
-    ? "border-l-[var(--error)] bg-[var(--error-surface)] text-[var(--error-ink)]"
-    : tone === "warning"
-      ? "border-l-[var(--warning)] bg-[var(--warning-surface)] text-[var(--warning-ink)]"
-      : "border-l-[var(--info)] bg-[var(--info-surface)] text-[var(--info-ink)]";
-  return <div role={tone === "error" ? "alert" : "status"} className={cn("rounded-lg border border-border border-l-[3px] px-4 py-3 text-sm", look)}>{children}</div>;
+  return <Callout tone={tone} title={children} />;
 }
 
 /** The deal's money at a glance at the top of its panel: annualised, monthly and face, tabular. */
@@ -411,14 +406,26 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
   );
 
   if (!data) {
-    if (!error) return <PageLoading />;
+    // Frame first (UI-CONSISTENCY §7a): the title, the views (no counts yet) and the buttons draw at once.
+    if (!error) {
+      return (
+        <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+          <PageHeader
+            title="Daily deal flow"
+            description="Every deal worked today, with what it is worth."
+            tabs={<ViewTabs label="Deal flow views" active={tab} onChange={setTab} controls="deal-flow-panel" tabs={[{ key: "deals", label: "Deals" }, { key: "funnel", label: "Dial funnel" }, { key: "partners", label: "By partner" }]} />}
+            actions={pageActions}
+          />
+          <PageLoading header={false} />
+        </div>
+      );
+    }
     return (
       <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
         {header}
-        <Alert tone="error">
-          Daily deal flow did not load: {error}{" "}
-          <button type="button" className="font-semibold underline underline-offset-2" onClick={() => void load(query, true)}>Try again</button>
-        </Alert>
+        <section role="alert" className="m-glass overflow-hidden rounded-lg border border-border">
+          <ErrorState title="Daily deal flow did not load" detail={error} action={<Button type="button" variant="outline" size="sm" onClick={() => void load(query, true)}>Try again</Button>} />
+        </section>
       </div>
     );
   }
@@ -592,7 +599,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
                           <StagePill row={row} />
                         </td>
                         <td className={cn(st.td, "whitespace-nowrap")}>
-                          <Link href={`/app/leads/${row.lead_id}`} onClick={(event) => event.stopPropagation()} className="hover:underline" title={`Open ${customerName(row)}'s lead`}>Open ›</Link>
+                          <Link href={`/app/leads/${row.lead_id}`} onClick={(event) => event.stopPropagation()} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")} title={`Open ${customerName(row)}'s lead`}>Open</Link>
                         </td>
                       </tr>
                     );

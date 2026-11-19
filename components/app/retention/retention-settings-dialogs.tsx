@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { NumberField, postSettings, SettingDialog, useDialogSave } from "@/components/app/retention/retention-settings-rows";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { checkboxControl, control, Field, inputControl, Switch, textareaControl } from "@/components/ui/field";
+import { control, Field, inputControl, Switch, textareaControl } from "@/components/ui/field";
 import { Segmented } from "@/components/ui/view-tabs";
 import { DEFAULT_OWNER_ROLE, LA5_OWNER_ROLE_LABELS, LA5_OWNER_ROLES, LA5_QUEUE_LABELS, type La5OwnerRole, type La5Queue } from "@/lib/retention/assignment";
 import { PLATFORM_TALK_TRACK } from "@/lib/retention/campaign";
@@ -18,6 +18,7 @@ import type { Hub } from "@/lib/retention/settingsHubStore";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * Settings › Retention, round 7 (owner pick 7·A, 2026-11-10; docs/la4/mockups-r7/retention.html 7·2) and round 8
  * (a right sheet per row, docs/design/settings-r8/money-compliance-settings.html §4): one sheet per setting row. Each sends the agency's whole settings with its one change merged in (the hub's save takes the
@@ -340,7 +341,7 @@ export function HoldoutDialog({ settings: saved, canEdit, onSaved, onClose }: { 
       </details>
       {!saved.holdoutEnabled && (
         <label className="flex items-center gap-2 text-sm text-[var(--ink)]">
-          <input type="checkbox" className={checkboxControl} checked={acknowledged} onChange={(e) => { setAcknowledged(e.target.checked); if (!e.target.checked) setDraft((cur) => ({ ...cur, holdoutEnabled: false })); }} />
+          <CheckBox checked={acknowledged} onChange={(e) => { setAcknowledged(e.target.checked); if (!e.target.checked) setDraft((cur) => ({ ...cur, holdoutEnabled: false })); }} />
           I have read what the holdout does
         </label>
       )}

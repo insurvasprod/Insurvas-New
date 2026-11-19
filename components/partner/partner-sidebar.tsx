@@ -8,31 +8,52 @@ import {
   ChevronDown,
   ClipboardList,
   Home,
+  Link2,
+  Megaphone,
   Menu,
   MessageSquare,
   Send,
   Settings,
+  UserPlus,
   Users,
   WalletCards,
   X,
 } from "lucide-react";
 
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
+import { partnerMenu, type PartnerMenuItem, type PartnerPortalPage, type PartnerPortalViewer } from "@/lib/partnerAuth/portalAccess";
+import { PARTNER_TYPE_LABELS, type PartnerType } from "@/lib/partners/constants";
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 import { NavRail, type RailNode } from "@/components/portal/nav-rail";
 
 type PartnerStatus = "draft" | "active" | "paused" | "offboarded";
 type PartnerNavItem = { label: string; path: string; icon: typeof Home };
 
-const workspaceItems: PartnerNavItem[] = [
-  { label: "Overview", path: "/partner", icon: Home },
-  { label: "Submit New Lead", path: "/partner/submit-lead", icon: Send },
-  { label: "Lead Pipeline", path: "/partner/pipeline", icon: BarChart3 },
-  // Next to Pipeline, because both answer "where are my leads?" — Pipeline over a range, Deal flow
-  // for one day. The agent menu uses the same icon for its own Daily deal flow (sell.deal-flow).
-  { label: "Daily Deal Flow", path: "/partner/deal-flow", icon: ClipboardList },
-  { label: "Messages", path: "/partner/messages", icon: MessageSquare },
-];
+/**
+ * One icon per page. Daily deal flow keeps the agent menu's icon for its own Daily deal flow
+ * (sell.deal-flow); Statements keeps the wallet.
+ */
+const PAGE_ICONS: Record<PartnerPortalPage, typeof Home> = {
+  overview: Home,
+  submit: Send,
+  refer: UserPlus,
+  pipeline: BarChart3,
+  "deal-flow": ClipboardList,
+  campaigns: Megaphone,
+  links: Link2,
+  messages: MessageSquare,
+  statements: WalletCards,
+  "team-review": BarChart3,
+  team: Users,
+  settings: Settings,
+};
+
+/** The partner's menu by type and role (lib/partnerAuth/portalAccess.ts, roles board P1–P3). */
+function menuFor(viewer: PartnerPortalViewer) {
+  const menu = partnerMenu(viewer);
+  const toItem = (entry: PartnerMenuItem): PartnerNavItem => ({ label: entry.label, path: entry.path, icon: PAGE_ICONS[entry.page] });
+  return { workspace: menu.workspace.map(toItem), organization: menu.organization.map(toItem) };
+}
 
 function isActivePath(pathname: string, path: string) {
   if (path === "/partner") return pathname === path;
@@ -59,20 +80,14 @@ function PartnerNavLink({ item, onNavigate }: { item: PartnerNavItem; onNavigate
   );
 }
 
-/** The organisation's own pages: statements, team review and team access are the partner admin's (LA-7.4). */
-function organizationItems(role: PartnerRole): PartnerNavItem[] {
-  return role === "partner_admin"
-    ? [{ label: "Commissions", path: "/partner/payouts", icon: WalletCards }, { label: "Team Performance", path: "/partner/team-review", icon: BarChart3 }, { label: "Team Access", path: "/partner/team", icon: Users }]
-    : [];
-}
-
-function PartnerNav({ role, onNavigate }: { role: PartnerRole; onNavigate?: () => void }) {
+function PartnerNav({ viewer, onNavigate }: { viewer: PartnerPortalViewer; onNavigate?: () => void }) {
   const pathname = usePathname();
+  const { workspace: workspaceItems, organization } = menuFor(viewer);
   const teamActive = isActivePath(pathname, "/partner/team");
   const settingsActive = isActivePath(pathname, "/partner/settings");
   const statusItems: PartnerNavItem[] = [
     // LA-7.4: payout statements are the organisation's, not every seat's.
-    ...organizationItems(role),
+    ...organization,
     { label: "Settings", path: "/partner/settings", icon: Settings },
   ];
   const orgActive = teamActive || settingsActive || isActivePath(pathname, "/partner/team-review") || isActivePath(pathname, "/partner/payouts");
@@ -110,21 +125,31 @@ function PartnerNav({ role, onNavigate }: { role: PartnerRole; onNavigate?: () =
  * organisation this is, and what you are in it. The board’s copy ("Growth · 12 seats · Owner") is
  * the agent’s placeholder and means nothing here.
  */
-function PartnerCard({ role, partnerStatus, partnerName }: { role: PartnerRole; partnerStatus: PartnerStatus; partnerName: string }) {
+function PartnerCard({ role, partnerStatus, partnerName, partnerType }: { role: PartnerRole; partnerStatus: PartnerStatus; partnerName: string; partnerType: PartnerType }) {
   const statusLabel = { draft: "draft", active: "active", paused: "paused", offboarded: "offboarded" }[partnerStatus];
   return (
     <section className="portal-agent-plan-card" aria-label="Partner organisation">
-      <p className="portal-agent-plan-card-label">Partner</p>
+      <p className="portal-agent-plan-card-label">{PARTNER_TYPE_LABELS[partnerType]}</p>
       <p className="portal-agent-plan-card-name truncate">{partnerName}</p>
       <p className="portal-agent-plan-card-role">{role === "partner_admin" ? "Partner admin" : "Partner user"} · {statusLabel}</p>
     </section>
   );
 }
 
-export function PartnerSidebar({ role, partnerStatus, partnerName, footer }: { role: PartnerRole; partnerStatus: PartnerStatus; partnerName: string; footer?: ReactNode }) {
+export function PartnerSidebar({ role, partnerStatus, partnerName, partnerType = "publisher", hasTeam = false, footer }: {
+  role: PartnerRole;
+  partnerStatus: PartnerStatus;
+  partnerName: string;
+  /** LA-1.1. The design previews omit it and draw the publisher's portal. */
+  partnerType?: PartnerType;
+  /** More than one person in the organisation; only the affiliate menu turns on it. */
+  hasTeam?: boolean;
+  footer?: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
-  const navigation = <PartnerNav role={role} onNavigate={() => setOpen(false)} />;
-  const organization = organizationItems(role);
+  const viewer: PartnerPortalViewer = { type: partnerType, role, hasTeam };
+  const navigation = <PartnerNav viewer={viewer} onNavigate={() => setOpen(false)} />;
+  const { workspace: workspaceItems, organization } = menuFor(viewer);
   const railItems: RailNode[] = workspaceItems.map((item) => ({ key: item.path, label: item.label, href: item.path, icon: item.icon }));
   if (organization.length) {
     railItems.push({
@@ -151,7 +176,7 @@ export function PartnerSidebar({ role, partnerStatus, partnerName, footer }: { r
             <div className="min-h-0 flex-1">
               <div className="portal-agent-sidebar-brand"><InsurvasLogo size="sidebar" tone="dark" /><button type="button" onClick={() => setOpen(false)} aria-label="Close menu" className="portal-agent-sidebar-collapse rounded-md p-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"><X className="size-5" aria-hidden="true" /></button></div>
               {navigation}
-              <PartnerCard role={role} partnerStatus={partnerStatus} partnerName={partnerName} />
+              <PartnerCard role={role} partnerStatus={partnerStatus} partnerName={partnerName} partnerType={partnerType} />
             </div>
             {footer && <div className="portal-agent-sidebar-footer">{footer}</div>}
           </div>

@@ -157,7 +157,7 @@ export function CheckoutView(props: CheckoutViewProps) {
         </AuthAlert>
       )}
       {failed && !noPayment && (
-        <AuthAlert className="mb-5" title="Your payment did not go through">
+        <AuthAlert shake={false} className="mb-5" title="Your payment did not go through">
           No money was taken. Try again below, or use another card or payment method.
         </AuthAlert>
       )}

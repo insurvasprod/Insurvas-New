@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { FIELD_MAPS, FactDialog, MONEY_FIELDS, SETTINGS_CARRIERS, layoutWords, settingText, type FactsSettings, type FilesFacts } from "./carrier-facts";
 import { WindowDialog, days, sourceWord, whose, windowLabel, type WindowItem, type WindowRow } from "./carrier-terms-window-dialog";
 
+import { titleCaseNode } from "@/components/ui/title-case";
 export type TermsTab = "windows" | "money" | "files";
 
 export type CoverageListRow = {
@@ -172,7 +173,7 @@ export function CarrierCoverageList({ rows, tab, asOf, readOnly }: { rows: Cover
                 <li key={row.carrierId} className="grid gap-2 rounded-lg border border-border bg-card p-3">
                   <div className="flex items-center justify-between gap-2">
                     <Link href={carrierHref(row.carrierId, tab)} className="font-medium text-foreground hover:underline">{row.carrierName}</Link>
-                    <Link href={policiesHref(row.carrierId)} className={cn(link, "text-sm")}>{row.inForce.toLocaleString("en-US")} in force ›</Link>
+                    <Link href={policiesHref(row.carrierId)} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>{titleCaseNode(<>{row.inForce.toLocaleString("en-US")} in force</>)}</Link>
                   </div>
                   {columns.map((column) => (
                     <div key={column.key} className="flex items-center justify-between gap-2">

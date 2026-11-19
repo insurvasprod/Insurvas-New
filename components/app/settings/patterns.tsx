@@ -22,6 +22,7 @@ import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InfoTip } from "@/components/ui/info-tip";
 import { confirmAction, type ConfirmOptions } from "@/components/ui/confirm-dialog";
+import { SaveStatus } from "@/components/ui/save-status";
 import { cn } from "@/lib/utils";
 import { titleCaseNode } from "@/components/ui/title-case";
 
@@ -205,14 +206,16 @@ export function useAutosave() {
   return { state, run, retry: state === "error" ? retry : null };
 }
 
-/** The quiet line beside an autosaving control. Announced politely; takes no space when idle. */
+/**
+ * The quiet line beside an autosaving control, on the kit's SaveStatus (Wave B, 2026-11-18): Saving…, then ✓ Saved
+ * with the tick popping, gone after 2s. An error stays, with Retry. Announced politely; takes no space when idle.
+ */
 export function AutosaveNote({ state, onRetry }: { state: AutosaveState; onRetry?: (() => void) | null }) {
   const id = useId();
+  if (state !== "error") return <SaveStatus state={state} />;
   return (
-    <span id={id} role="status" aria-live="polite" className={cn("text-xs", state === "error" ? "text-[var(--error-ink)]" : "text-[var(--muted)]")}>
-      {state === "saving" && "Saving…"}
-      {state === "saved" && "Saved"}
-      {state === "error" && (<>Couldn&rsquo;t save. {onRetry && <button type="button" onClick={onRetry} className="font-semibold underline-offset-2 hover:underline">Retry</button>}</>)}
+    <span id={id} role="status" aria-live="polite" className="text-xs text-[var(--error-ink)]">
+      Couldn&rsquo;t save. {onRetry && <button type="button" onClick={onRetry} className="font-semibold underline-offset-2 hover:underline">Retry</button>}
     </span>
   );
 }

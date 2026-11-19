@@ -117,7 +117,8 @@ export function PasteBox({ id, onFile, disabled, disabledReason = "Saving…", c
       onDragOver={(e) => { e.preventDefault(); if (!disabled) setOver(true); }}
       onDragLeave={() => setOver(false)}
       onDrop={onDrop}
-      className={cn("flex flex-col items-center gap-2 rounded-[12px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-5 text-center", over && "bg-[var(--surface-alt)]")}
+      data-drag-over={over ? "" : undefined}
+      className={cn("m-dropzone flex flex-col items-center gap-2 rounded-[12px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-5 text-center", over && "bg-[var(--surface-alt)]")}
     >
       <span className="flex size-[34px] items-center justify-center rounded-full bg-[var(--surface-alt)] text-[var(--muted)]" aria-hidden="true"><ImageIcon className="size-4" /></span>
       <div className="text-lg font-semibold text-[var(--ink)]">{title}</div>

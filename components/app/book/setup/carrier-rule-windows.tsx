@@ -3,13 +3,14 @@
 import { useState, type MouseEvent } from "react";
 import Link from "next/link";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 
 import { SourceChip, WindowDialog, days, redraftText, upcomingText, whose, windowHistoryHref, windowLabel, type WindowItem, type WindowRow } from "./carrier-terms-window-dialog";
 
 export type { WindowRow, WindowRule } from "./carrier-terms-window-dialog";
+import { cn } from "@/lib/utils";
 
 /** A row that opens its window: one click anywhere on it; its own buttons and links keep their click. */
 const opensFrom = (event: MouseEvent<HTMLElement>) => !(event.target as HTMLElement).closest("a, button, input, select, textarea, label");
@@ -28,7 +29,7 @@ export function CarrierRuleWindows({ carrierId, carrierName, asOf, readOnly, row
     <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
       <span>Past countdowns keep the rule they used.</span>
       <span className="flex-1" />
-      <Link href={windowHistoryHref(carrierId)} className="hover:underline">History of these windows ›</Link>
+      <Link href={windowHistoryHref(carrierId)} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "no-underline")}>History of These Windows</Link>
     </div>
   );
 

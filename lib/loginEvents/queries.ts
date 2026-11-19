@@ -4,7 +4,16 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { getSetting } from "@/lib/settings/queries";
 import { activeLockoutEmails, type LockoutRow } from "@/lib/adminDashboard/figures";
 import { ACTIVITY_PAGE_SIZE, type LoginEventRow } from "./constants";
-import { ilikeContains, rangeStart, type ActivityFilters } from "./present";
+import {
+  DEFAULT_ACTIVITY_FILTERS,
+  REPEATED_FAILURE_MIN,
+  ilikeContains,
+  rangeStart,
+  repeatedFailures,
+  type ActivityFilters,
+  type ActivityLens,
+} from "./present";
+import { lockoutEntry, sortLockouts, type LockoutEntry } from "./lockouts";
 
 // Re-exported for server-side callers' convenience. Client components must import these from
 // ./constants directly — importing them from here would drag `server-only` into the browser
@@ -145,36 +154,31 @@ export async function fetchLoginActivityPage(options: {
   page: number;
   filters: ActivityFilters;
   includeStaff: boolean;
+  /** "repeated" keeps only failures from an address that failed REPEATED_FAILURE_MIN times in the range. */
+  lens?: ActivityLens;
   now?: number;
 }): Promise<LoginActivityPage> {
   const supabase = getSupabaseServiceClient();
   const { filters } = options;
-  const since = rangeStart(filters.range, options.now ?? Date.now());
+  const now = options.now ?? Date.now();
+  const since = rangeStart(filters.range, now);
 
-  let request = supabase
-    .from("login_events")
-    .select(LOGIN_EVENT_COLUMNS, { count: "exact" })
-    .order("ts", { ascending: false })
-    .order("id", { ascending: false });
   let inRange = supabase.from("login_events").select("id", { count: "exact", head: true });
-
   if (!options.includeStaff) {
-    request = request.eq("actor_type", "user");
     inRange = inRange.eq("actor_type", "user");
   }
-
   if (since) {
-    request = request.gte("ts", since.toISOString());
     inRange = inRange.gte("ts", since.toISOString());
   }
-  if (filters.outcome === "success") request = request.eq("success", true);
-  if (filters.outcome === "failure") request = request.eq("success", false);
-  if (filters.actor !== "all") request = request.eq("actor_type", filters.actor);
-  if (filters.q) {
-    const pattern = ilikeContains(filters.q);
-    request = request.or(`email.ilike."${pattern}",ip.ilike."${pattern}"`);
+
+  const ips = options.lens === "repeated" ? await repeatedFailureIps(filters, options.includeStaff, now) : null;
+  if (ips && ips.length === 0) {
+    const range = await inRange;
+    if (range.error) throw new Error(`Could not count login activity: ${range.error.message}`);
+    return { events: [], total: 0, rangeTotal: range.count ?? 0 };
   }
 
+  const request = feedQuery(filters, options.includeStaff, now, ips, true);
   const from = (Math.max(1, options.page) - 1) * ACTIVITY_PAGE_SIZE;
   const [page, range] = await Promise.all([request.range(from, from + ACTIVITY_PAGE_SIZE - 1), inRange]);
   // A broken query must not render as a platform where nobody has ever logged in.
@@ -182,4 +186,188 @@ export async function fetchLoginActivityPage(options: {
   if (range.error) throw new Error(`Could not count login activity: ${range.error.message}`);
 
   return { events: (page.data ?? []) as LoginEventRow[], total: page.count ?? 0, rangeTotal: range.count ?? 0 };
+}
+
+/**
+ * The feed's filtered query, newest first. `ips` narrows it to failures from those addresses (the Repeated failures
+ * lens). The staff rule is applied here, so the page, the export and the counts all read the same rows.
+ */
+function feedQuery(filters: ActivityFilters, includeStaff: boolean, now: number, ips: string[] | null, counted: boolean) {
+  const since = rangeStart(filters.range, now);
+  let request = getSupabaseServiceClient()
+    .from("login_events")
+    .select(LOGIN_EVENT_COLUMNS, counted ? { count: "exact" } : undefined)
+    .order("ts", { ascending: false })
+    .order("id", { ascending: false });
+  if (!includeStaff) request = request.eq("actor_type", "user");
+  if (since) request = request.gte("ts", since.toISOString());
+  if (filters.outcome === "success") request = request.eq("success", true);
+  if (filters.outcome === "failure") request = request.eq("success", false);
+  if (filters.actor !== "all") request = request.eq("actor_type", filters.actor);
+  if (filters.q) {
+    const pattern = ilikeContains(filters.q);
+    request = request.or(`email.ilike."${pattern}",ip.ilike."${pattern}"`);
+  }
+  if (ips) request = request.eq("success", false).in("ip", ips);
+  return request;
+}
+
+const FAILURE_PAGE = 1000;
+const FAILURE_CAP = 10_000;
+
+export type FailedAttempt = { ip: string | null; email: string; success: boolean; ts: string };
+
+/**
+ * Every failed attempt since `sinceIso` (address, account, time), paged under PostgREST's row cap, for the
+ * Repeated failures rule. Staff failures only for a role that may see staff sign-ins.
+ */
+export async function fetchFailedAttempts(sinceIso: string | null, includeStaff: boolean, actor: ActivityFilters["actor"] = "all"): Promise<FailedAttempt[]> {
+  const out: FailedAttempt[] = [];
+  for (let from = 0; from < FAILURE_CAP; from += FAILURE_PAGE) {
+    let query = getSupabaseServiceClient().from("login_events").select("ip, email, ts").eq("success", false);
+    if (!includeStaff) query = query.eq("actor_type", "user");
+    if (actor !== "all") query = query.eq("actor_type", actor);
+    if (sinceIso) query = query.gte("ts", sinceIso);
+    const { data, error } = await query.order("ts", { ascending: false }).order("id", { ascending: false }).range(from, from + FAILURE_PAGE - 1);
+    if (error) throw new Error(`Could not load failed sign-ins: ${error.message}`);
+    const rows = (data ?? []) as { ip: string | null; email: string; ts: string }[];
+    for (const row of rows) out.push({ ip: row.ip, email: row.email, ts: row.ts, success: false });
+    if (rows.length < FAILURE_PAGE) break;
+  }
+  return out;
+}
+
+/** The addresses the Repeated failures lens keeps, for the range and actor on screen. */
+async function repeatedFailureIps(filters: ActivityFilters, includeStaff: boolean, now: number): Promise<string[]> {
+  const since = rangeStart(filters.range, now);
+  const failures = await fetchFailedAttempts(since ? since.toISOString() : null, includeStaff, filters.actor);
+  return repeatedFailures(failures, REPEATED_FAILURE_MIN).map((entry) => entry.ip);
+}
+
+/** How many addresses the Repeated failures lens holds for this range: the tab's count. */
+export async function countRepeatedFailureIps(range: ActivityFilters["range"], includeStaff: boolean, now = Date.now()): Promise<number> {
+  return (await repeatedFailureIps({ ...DEFAULT_ACTIVITY_FILTERS, range }, includeStaff, now)).length;
+}
+
+/** Failed attempts in the range (the Failed tab's count), with the staff rule applied. */
+export async function countFailedAttempts(range: ActivityFilters["range"], includeStaff: boolean, now = Date.now()): Promise<number> {
+  const { count, error } = await feedQuery({ ...DEFAULT_ACTIVITY_FILTERS, range, outcome: "failure" }, includeStaff, now, null, true).limit(1);
+  if (error) throw new Error(`Could not count failed sign-ins: ${error.message}`);
+  return count ?? 0;
+}
+
+export const EXPORT_CAP = 5000;
+
+/** The rows Export CSV writes: every filter on screen, newest first, at most EXPORT_CAP. */
+export async function fetchLoginActivityExport(options: { filters: ActivityFilters; lens: ActivityLens; includeStaff: boolean; now?: number }): Promise<{ events: LoginEventRow[]; capped: boolean }> {
+  const now = options.now ?? Date.now();
+  const ips = options.lens === "repeated" ? await repeatedFailureIps(options.filters, options.includeStaff, now) : null;
+  if (ips && ips.length === 0) return { events: [], capped: false };
+  const events: LoginEventRow[] = [];
+  for (let from = 0; from < EXPORT_CAP; from += FAILURE_PAGE) {
+    const { data, error } = await feedQuery(options.filters, options.includeStaff, now, ips, false).range(from, Math.min(from + FAILURE_PAGE, EXPORT_CAP) - 1);
+    if (error) throw new Error(`Could not export login activity: ${error.message}`);
+    const rows = (data ?? []) as LoginEventRow[];
+    events.push(...rows);
+    if (rows.length < FAILURE_PAGE) return { events, capped: false };
+  }
+  return { events, capped: true };
+}
+
+/* ── One attempt (the sheet) ─────────────────────────────────────────────── */
+
+export type AttemptDetail = {
+  event: LoginEventRow;
+  /** Attempts from the same address in the 24 hours up to this one (and after it, up to now), newest first. */
+  sameIp: LoginEventRow[];
+  /** Attempts on the same account in the same 24 hours. */
+  sameAccount: LoginEventRow[];
+  /** The customer's workspace name, for "Account". */
+  tenantName: string | null;
+};
+
+const RELATED_SHOWN = 20;
+
+/**
+ * One attempt with what else came from its address and its account in the 24 hours before it. Null when it does
+ * not exist or is a staff sign-in the role may not see — the same answer, so the route cannot confirm a staff row.
+ */
+export async function fetchAttemptDetail(id: string, includeStaff: boolean): Promise<AttemptDetail | null> {
+  const supabase = getSupabaseServiceClient();
+  let lookup = supabase.from("login_events").select(LOGIN_EVENT_COLUMNS).eq("id", id);
+  if (!includeStaff) lookup = lookup.eq("actor_type", "user");
+  const { data, error } = await lookup.maybeSingle();
+  if (error) throw new Error(`Could not load the attempt: ${error.message}`);
+  if (!data) return null;
+  const event = data as LoginEventRow;
+
+  const from = new Date(Date.parse(event.ts) - 24 * 60 * 60 * 1000).toISOString();
+  const related = (column: "ip" | "email", value: string) => {
+    let query = supabase.from("login_events").select(LOGIN_EVENT_COLUMNS).eq(column, value).gte("ts", from).neq("id", event.id);
+    if (!includeStaff) query = query.eq("actor_type", "user");
+    return query.order("ts", { ascending: false }).limit(RELATED_SHOWN);
+  };
+  const [byIp, byAccount, member] = await Promise.all([
+    event.ip ? related("ip", event.ip) : Promise.resolve({ data: [], error: null }),
+    related("email", event.email),
+    event.user_id
+      ? supabase.from("tenant_users").select("tenants(name)").eq("user_id", event.user_id).limit(1).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+  if (byIp.error) throw new Error(`Could not load attempts from the same address: ${byIp.error.message}`);
+  if (byAccount.error) throw new Error(`Could not load attempts on the same account: ${byAccount.error.message}`);
+  const tenant = (member.data as { tenants?: { name?: string } | { name?: string }[] | null } | null)?.tenants;
+  const tenantName = Array.isArray(tenant) ? tenant[0]?.name ?? null : tenant?.name ?? null;
+  return { event, sameIp: (byIp.data ?? []) as LoginEventRow[], sameAccount: (byAccount.data ?? []) as LoginEventRow[], tenantName };
+}
+
+/* ── Lockouts and staff sign-ins (super admin) ───────────────────────────── */
+
+/**
+ * Every sign-in lockout key in the rate-limit store, in words, locked first — the rows the Lockouts page lists and
+ * GET /api/admin/security/rate-limits returns. Security state: callers are super admin only.
+ */
+export async function fetchLockouts(now = Date.now()): Promise<LockoutEntry[]> {
+  const [threshold, minutes] = await Promise.all([
+    getSetting<number>("security.lockout_threshold"),
+    getSetting<number>("security.lockout_minutes"),
+  ]);
+  const { data, error } = await getSupabaseServiceClient()
+    .from("rate_limits")
+    .select("bucket_key, hits, window_start")
+    .like("bucket_key", "login_lockout:%")
+    .order("window_start", { ascending: false })
+    .limit(200);
+  if (error) throw new Error(`Could not load sign-in lockouts: ${error.message}`);
+  const entries = ((data ?? []) as { bucket_key: string; hits: number; window_start: string }[])
+    .map((row) => lockoutEntry(row, { threshold, minutes, now }))
+    .filter((entry): entry is LockoutEntry => entry !== null);
+  return sortLockouts(entries);
+}
+
+export type StaffSignIn = { ts: string; ip: string | null; userAgent: string | null };
+
+/** Each staff member's last successful sign-in from the login events. Security data: super admin only. */
+export async function fetchStaffLastSignIns(adminIds: readonly string[]): Promise<Map<string, StaffSignIn>> {
+  const supabase = getSupabaseServiceClient();
+  const reads = await Promise.all(
+    adminIds.map((id) =>
+      supabase
+        .from("login_events")
+        .select("ts, ip, user_agent")
+        .eq("actor_type", "admin")
+        .eq("admin_id", id)
+        .eq("success", true)
+        .order("ts", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ),
+  );
+  const out = new Map<string, StaffSignIn>();
+  reads.forEach((read, index) => {
+    if (read.error) throw new Error(`Could not load staff sign-ins: ${read.error.message}`);
+    const row = read.data as { ts: string; ip: string | null; user_agent: string | null } | null;
+    if (row) out.set(adminIds[index], { ts: row.ts, ip: row.ip, userAgent: row.user_agent });
+  });
+  return out;
 }

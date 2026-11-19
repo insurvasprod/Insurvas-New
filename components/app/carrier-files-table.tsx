@@ -10,6 +10,7 @@ import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { useArrivals } from "@/components/ui/use-arrivals";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { StageStrip } from "@/components/app/book/files/stage-strip";
 import {
@@ -90,6 +91,9 @@ export function CarrierFilesTable({ files, stages, emptyTitle, emptyHint, show, 
   const reading = useMemo(() => files.filter((file) => whereOf(file) === "running"), // eslint-disable-next-line react-hooks/exhaustive-deps
     [files, stages]);
   const [lit, setLit] = useState<Record<string, true>>({});
+  // Tier 1 motion (2026-11-17): a file that is new since the last load (the poll above, a background refresh, an
+  // upload) arrives tinted. The list is keyed by its filter, so another filter starts a new baseline.
+  const isNew = useArrivals(files.map((file) => file.id));
   const seen = useRef<Map<string, string> | null>(null);
   const pollingSince = useRef<number | null>(null);
   useEffect(() => {
@@ -202,7 +206,7 @@ export function CarrierFilesTable({ files, stages, emptyTitle, emptyHint, show, 
               const reason = file.status === "failed" ? file.errorDetail : file.rawError;
               const rowsWord = file.rowCount !== null ? ` · ${file.rowCount.toLocaleString("en-US")} ${file.rowCount === 1 ? "row" : "rows"}` : "";
               return (
-                <tr key={file.id} className={`m-row cursor-pointer transition-colors duration-700 ${lit[file.id] ? "bg-[color-mix(in_srgb,var(--primary)_14%,transparent)]" : ""}`} onClick={() => router.push(fileHref(file.id))}>
+                <tr key={file.id} data-row-new={isNew(file.id) ? "" : undefined} className={`m-row cursor-pointer transition-colors duration-700 ${lit[file.id] ? "bg-[color-mix(in_srgb,var(--primary)_14%,transparent)]" : ""}`} onClick={() => router.push(fileHref(file.id))}>
                   <td className="whitespace-nowrap font-medium text-foreground">
                     <Link href={fileHref(file.id)} className="hover:underline" onClick={(event) => event.stopPropagation()} title={`${file.originalFilename}${rowsWord} · ${fileSize(file.fileBytes)} · ${FILE_SOURCE_LABELS[file.source]} · ${from}`}>{file.originalFilename}</Link>
                   </td>

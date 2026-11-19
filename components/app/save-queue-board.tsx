@@ -20,6 +20,8 @@ import { REQUEST_FOR_FIX, REQUEST_LABELS, STATUS_LABELS, type RequestType } from
 import { coverageText } from "@/lib/retention/income";
 import type { SaveCard, SaveQueue } from "@/lib/retention/queueStore";
 import { cardHref, HoldDialog } from "@/components/app/retention/save-card";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 // Whole dollars, rounded (it used to cut the cents off: $0.99 read $0).
 const money = (cents: number | null) => {
@@ -209,12 +211,12 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
                       </td>
                     )}
                     <td className="whitespace-nowrap">
-                      {readOnly ? <Link href={href} className="text-foreground hover:underline">Open ›</Link> : (
+                      {readOnly ? <Link href={href} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Open</Link> : (
                         <span className="inline-flex items-center gap-1">
                           {/* The fix is the row's job (spec card: [Call] [Start the fix]); without one, the call. A short verb, the fix named in its tooltip. */}
                           {firstType
-                            ? <Link href={`${href}?tab=fix&fix=${firstType}`} className="text-foreground hover:underline" title={`Start the fix: ${first!.label}${fixes.length > 1 ? ` (+${fixes.length - 1} more)` : ""}`}>Fix ›</Link>
-                            : <Link href={`${href}?tab=calls`} className="text-foreground hover:underline" title={first ? `Log call · then ${first.label}` : "Log call"}>Call ›</Link>}
+                            ? <Link href={`${href}?tab=fix&fix=${firstType}`} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")} title={`Start the fix: ${first!.label}${fixes.length > 1 ? ` (+${fixes.length - 1} more)` : ""}`}>Fix</Link>
+                            : <Link href={`${href}?tab=calls`} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")} title={first ? `Log call · then ${first.label}` : "Log call"}>Call</Link>}
                           <MoreMenu row label={`More for ${name}`} items={[
                             ...fixes.slice(1).map((f) => { const type = startable(card, f.action); return type ? { label: `Start: ${f.label}`, href: `${href}?tab=fix&fix=${type}` } : null; }),
                             firstType && { label: "Log call", href: `${href}?tab=calls` },

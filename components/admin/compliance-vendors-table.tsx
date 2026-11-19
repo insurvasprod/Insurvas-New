@@ -9,7 +9,8 @@ import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile
 import { Callout, Field, KeyValues, control, st, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
-import { PageHeader } from "@/components/ui/page-header";
+import { useTitleAction } from "@/components/admin/platform/title-action";
+import { PLATFORM_ACTION } from "@/lib/adminPlatform/titleActions";
 import { TableCard } from "@/components/ui/table-card";
 import { Pager, paginate } from "@/components/ui/pager";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -26,6 +27,7 @@ import {
   type RegistryDialing,
 } from "@/lib/compliance/registryView";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * Compliance (board p-adm-compliance): the vendor figures, the dial-gate alert when dialing is at
  * risk, and the vendor registry. The board has no action column, so a row opens the vendor's dialog, which holds every
@@ -94,6 +96,8 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
   };
 
   function startCreate() { setEditingId(null); setForm(emptyForm); setOpen(true); }
+  // "Register a vendor" sits on the Platform frame's title line (admin round 1, 2026-11-18) and opens the dialog here.
+  useTitleAction(PLATFORM_ACTION.registerVendor, startCreate);
   function startEdit(vendor: ComplianceVendor) {
     setEditingId(vendor.id);
     setForm({ name: vendor.name, vendor_type: vendor.vendor_type, endpoint: vendor.endpoint, credentials: "", is_enabled: vendor.is_enabled, priority: String(vendor.priority), cost_per_lookup_cents: String(vendor.cost_per_lookup_cents) });
@@ -168,8 +172,6 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <PageHeader title="Compliance" actions={<Button type="button" onClick={startCreate}>Register a vendor</Button>} />
-
       <BoardStatGrid>
         <BoardStatTile label="Registered" value={vendors.length.toLocaleString("en-US")} />
         <BoardStatTile label="Enabled" value={enabledCount.toLocaleString("en-US")} />
@@ -299,7 +301,7 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
               </Field>
               {!editing && (
                 <label htmlFor={`${formId}-enabled`} className="flex items-center gap-2 pt-8 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
-                  <input id={`${formId}-enabled`} type="checkbox" checked={form.is_enabled} onChange={(e) => setForm({ ...form, is_enabled: e.target.checked })} /> Enabled
+                  <CheckBox id={`${formId}-enabled`} checked={form.is_enabled} onChange={(e) => setForm({ ...form, is_enabled: e.target.checked })} /> Enabled
                 </label>
               )}
             </div>

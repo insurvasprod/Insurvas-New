@@ -16,6 +16,7 @@ import type { QuestionDraft } from "@/lib/salesSettings/fieldSetView";
 import type { NamedCarrier, ProductLine } from "@/lib/salesSettings/views";
 
 import { DialogActions, SalesDialog, WithReason, checkbox, plural } from "./shared";
+import { CheckBox } from "@/components/ui/check-box";
 
 /** A set the new one can start from: what the pair uses now, or one of the agency's own. */
 export type StartFrom = { id: string; label: string; detail: string };
@@ -263,7 +264,7 @@ export function CopyToCarriersDialog({ pair, targets, onSubmit, onClose }: {
         {targets.length === 0 && <p className="m-0 text-sm text-[var(--body)]">No other carrier sells this product line yet.</p>}
         {targets.map((t) => (
           <label key={t.key} className={`flex items-center gap-3 rounded-md px-2 py-2 text-sm ${t.free ? "cursor-pointer hover:bg-[var(--surface-alt)]" : "opacity-60"}`}>
-            <input type="checkbox" className={checkbox} disabled={!t.free} checked={picked.includes(t.key)} onChange={() => toggle(t.key)} />
+            <CheckBox disabled={!t.free} checked={picked.includes(t.key)} onChange={() => toggle(t.key)} />
             <span className="min-w-0 flex-1 font-semibold text-[var(--ink)]">{t.label}</span>
             <span className="text-xs text-[var(--body)]">{t.why}</span>
           </label>

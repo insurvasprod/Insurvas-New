@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Check, ChevronDown, Search } from "lucide-react";
 
+import { StampCheck } from "@/components/ui/done-stamp";
+import { useGlidePill } from "@/components/ui/tab-track";
 import { cn } from "@/lib/utils";
 
 export type MenuCardItem = {
@@ -15,6 +17,8 @@ export type MenuCardItem = {
   state?: "done" | "current" | "todo" | "paused";
   /** After the label, right-aligned: minutes, a count. */
   trailing?: ReactNode;
+  /** In the ring's place, for a page that has no done state (Docs' "How it works"). */
+  icon?: ReactNode;
 };
 
 export type MenuCardGroup = {
@@ -31,8 +35,28 @@ export type MenuCardGroup = {
   items: (MenuCardItem & { section?: string })[];
 };
 
-function Ring({ state }: { state?: MenuCardItem["state"] }) {
+/**
+ * The state each item was last seen in, per menu (the menu's label), kept in the browser across client navigations:
+ * a step finished on its own page (Get set up's guide walks the real screen) reads as "just done" when the menu is
+ * drawn again, so its tick still pops. Written only in the browser, after a render; the server never reads it.
+ */
+const seenStates = new Map<string, MenuCardItem["state"]>();
+
+type Ticks = { key: string; states: ReadonlyMap<string, MenuCardItem["state"]>; popped: ReadonlySet<string> };
+/** Items that turned done since `before` (a state each had then), so their tick pops (Tier 2 motion, 2026-11-18). */
+const turnedDone = (items: MenuCardItem[], before: (key: string) => MenuCardItem["state"] | undefined) =>
+  items.filter((item) => { const was = before(item.key); return item.state === "done" && was !== undefined && was !== "done"; }).map((item) => item.key);
+
+function Ring({ state, popped = false }: { state?: MenuCardItem["state"]; popped?: boolean }) {
   if (!state) return null;
+  // A tick that just turned done pops in and its check draws (StampCheck, --t-stamp), once; otherwise it is still.
+  if (state === "done" && popped) {
+    return (
+      <span aria-hidden="true" data-menu-tick="" className="m-pop inline-flex size-4 shrink-0 items-center justify-center rounded-full border-[1.5px] border-transparent bg-[var(--success)] text-[var(--on-success)]">
+        <StampCheck className="size-2.5" />
+      </span>
+    );
+  }
   return (
     <span aria-hidden="true" className={cn(
       "inline-flex size-4 shrink-0 items-center justify-center rounded-full border-[1.5px]",
@@ -76,22 +100,46 @@ export function MenuCard({ groups, top, header, footer, filterPlaceholder, label
       .map((group) => ({ ...group, items: group.items.filter((item) => item.label.toLowerCase().includes(words) || group.label.toLowerCase().includes(words)) }))
       .filter((group) => group.items.length > 0);
   }, [groups, words]);
+  // The active item's ground is one pill that glides to the item you open (useGlidePill, as the rails' does), and
+  // carries over from the last menu of this name, so a page change reads as one glide rather than a cut.
+  const track = useRef<HTMLDivElement>(null);
+  const pill = useGlidePill(track, { items: "a[data-menu-item]", chosen: '[aria-current="page"]', watch: "aria-current", remember: `menu:${label}` });
+  const activeNested = groups.some((group) => group.number !== undefined && group.items.some((item) => item.active));
+
+  // Ticks that pop: an item that turned done since this menu last drew it, here or (seenStates) on an earlier page.
+  const everything = useMemo(() => [...(top ?? []), ...groups.flatMap((group) => group.items)], [top, groups]);
+  const stateKey = everything.map((item) => `${item.key}:${item.state ?? ""}`).join("|");
+  const [ticks, setTicks] = useState<Ticks>(() => ({
+    key: stateKey,
+    states: new Map(everything.map((item) => [item.key, item.state])),
+    popped: new Set(typeof window === "undefined" ? [] : turnedDone(everything, (key) => seenStates.get(`${label}/${key}`))),
+  }));
+  if (ticks.key !== stateKey) {
+    const popped = new Set([...ticks.popped, ...turnedDone(everything, (key) => ticks.states.get(key))]);
+    setTicks({ key: stateKey, states: new Map(everything.map((item) => [item.key, item.state])), popped });
+  }
+  useEffect(() => {
+    for (const item of everything) seenStates.set(`${label}/${item.key}`, item.state);
+  }, [everything, label]);
+
   const toggle = (key: string) => setOpen((now) => { const next = new Set(now); if (next.has(key)) next.delete(key); else next.add(key); return next; });
 
   const link = (item: MenuCardItem, nested: boolean) => (
     <Link
       key={item.key}
       href={item.href}
+      data-menu-item=""
       aria-current={item.active ? "page" : undefined}
       className={cn(
         "relative flex min-h-[32px] w-full items-start gap-2.5 rounded-[8px] py-1.5 pr-2 text-left text-sm leading-snug no-underline transition-colors",
         nested ? "pl-3" : "pl-2.5",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
-        item.active ? "bg-[var(--primary-soft)] font-semibold text-[var(--ink)]" : "text-[var(--body)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]",
+        // The active ground is the gliding pill once it is measured; until then (the first paint) its own.
+        item.active ? cn(!pill && "bg-[var(--primary-soft)]", "font-semibold text-[var(--ink)]") : "text-[var(--body)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]",
       )}
     >
-      {item.active && nested ? <span aria-hidden="true" className="absolute top-1.5 bottom-1.5 -left-[13px] w-0.5 rounded-full bg-[var(--primary)]" /> : null}
-      {item.state ? <span className="mt-0.5"><Ring state={item.state} /></span> : null}
+      {item.active && nested && !pill ? <span aria-hidden="true" className="absolute top-1.5 bottom-1.5 -left-[13px] w-0.5 rounded-full bg-[var(--primary)]" /> : null}
+      {item.state ? <span className="mt-0.5"><Ring state={item.state} popped={ticks.popped.has(item.key)} /></span> : item.icon ? <span aria-hidden="true" className="mt-0.5 inline-flex size-4 shrink-0 items-center justify-center text-[var(--muted)]">{item.icon}</span> : null}
       <span className="min-w-0 flex-1">{item.label}</span>
       {item.trailing ? <span className="mt-0.5 shrink-0 text-xs tabular-nums text-[var(--muted)]">{item.trailing}</span> : null}
     </Link>
@@ -114,7 +162,13 @@ export function MenuCard({ groups, top, header, footer, filterPlaceholder, label
           />
         </label>
       ) : null}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pt-2 pb-2">
+      {/* Scrolls without a visible bar (owner 2026-11-17: "remove the scroll"); inline, as a global style sets it thin. */}
+      <div ref={track} data-menu-track="" className="relative isolate min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pt-2 pb-2" style={{ scrollbarWidth: "none" }}>
+        {pill ? (
+          <span aria-hidden="true" data-tab-pill={pill.glide ? "glide" : ""} data-tab-indicator="menu" style={{ transform: `translate(${pill.left}px, ${pill.top}px)`, width: pill.width, height: pill.height }}>
+            {activeNested ? <span className="absolute top-1.5 bottom-1.5 -left-[13px] w-0.5 rounded-full bg-[var(--primary)]" /> : null}
+          </span>
+        ) : null}
         {top?.length ? <div className="mb-1 flex flex-col">{top.map((item) => link(item, false))}</div> : null}
         <div className="flex flex-col gap-1">
           {shown.map((group) => {

@@ -17,6 +17,7 @@ import type { AssignDrawerMember } from "@/components/app/lead-list-assign-drawe
 import { LeadListAutoAssign, type AutoAssignMember } from "@/components/app/lead-list-auto-assign";
 import { useSolo } from "@/components/app/solo-context";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * The lead list: inventory, not progress.
  *
@@ -305,9 +306,7 @@ function LeadListLeads({ open, members, onAssigned }: { open: LeadList; members:
               <thead>
                 <tr>
                   {!solo && <th className="w-10">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-[var(--primary)]"
+                    <CheckBox
                       aria-label="Select every lead that can be assigned"
                       checked={selectable.length > 0 && selected.size === selectable.length}
                       onChange={(event) => setSelected(event.target.checked ? new Set(selectable.map((lead) => lead.workItemId as string)) : new Set())}
@@ -321,9 +320,7 @@ function LeadListLeads({ open, members, onAssigned }: { open: LeadList; members:
                 {leadRows.map((lead) => (
                   <tr key={lead.leadId} className="m-row">
                     {!solo && <td>
-                      <input
-                        type="checkbox"
-                        className="size-4 accent-[var(--primary)]"
+                      <CheckBox
                         aria-label={`Select ${lead.name}`}
                         disabled={!lead.workItemId}
                         checked={Boolean(lead.workItemId && selected.has(lead.workItemId))}

@@ -1,0 +1,86 @@
+[
+  {
+    "src": "/docs/shots/settings/plan-and-billing/1.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check your plan and its limits",
+    "focus": {
+      "x": 264,
+      "y": 35,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/plan-and-billing/2.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Compare plans when you need more",
+    "focus": {
+      "x": 720,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/plan-and-billing/3.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Look over your Invoices",
+    "focus": {
+      "x": 261,
+      "y": 361,
+      "w": 862,
+      "h": 539
+    }
+  },
+  {
+    "src": "/docs/shots/settings/plan-and-billing/4.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click View on an invoice",
+    "focus": {
+      "x": 720,
+      "y": 450,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/plan-and-billing/5.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Download the PDF for your records",
+    "focus": {
+      "x": 601,
+      "y": 450,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/plan-and-billing/6.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check how you pay",
+    "focus": {
+      "x": 578,
+      "y": 361,
+      "w": 862,
+      "h": 539
+    }
+  },
+  {
+    "src": "/docs/shots/settings/plan-and-billing/7.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Pause or cancel… is here if you need it",
+    "focus": {
+      "x": 720,
+      "y": 352,
+      "w": 720,
+      "h": 450
+    }
+  }
+]

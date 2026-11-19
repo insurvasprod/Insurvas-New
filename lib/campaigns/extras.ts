@@ -89,10 +89,15 @@ async function testBatches(tenantId: string, faults: string[]) {
 
 async function outcomes(tenantId: string, entitlement: Entitlement, faults: string[]) {
   if (!hasFeature(entitlement, "true_cpa")) return null;
+  // The switch and the report are read together (speed pass 2026-11-12): the report was the slowest read on
+  // the page and waited a round trip for the switch. A switched-off feature still shows nothing.
+  // Its pre-counted copy (20261118100000), refreshed every minute while in use: the 90 days ending today.
+  const reportRead = getVendorScorecard(tenantId, {}, entitlement.access === "read_only", { kept: true });
+  reportRead.catch(() => undefined);
   const kill = await featureKillState("true_cpa", tenantId).catch(() => ({ killed: true }));
   if (kill.killed) return null;
   try {
-    const report = await getVendorScorecard(tenantId, {}, entitlement.access === "read_only");
+    const report = await reportRead;
     return Object.fromEntries(
       report.rows.map((row) => [
         row.campaign_id,

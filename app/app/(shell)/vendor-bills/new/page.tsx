@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { EDITABLE } from "@/lib/accounting/invoicesCore";
@@ -9,6 +10,7 @@ import { AccountingPage } from "@/components/app/accounting/accounting-page";
 import { BILL_FORM_ACTIONS } from "@/lib/accounting/billTabs";
 import { InvoiceEntry } from "@/components/app/accounting/invoices-board";
 import { EmptyState } from "@/components/ui/page-states";
+import { StreamSection, TitleShape } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
 
 /**
@@ -29,26 +31,45 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
   if (!edit && template && (template === "first" || UUID.test(template))) redirect(`/app/vendor-bills?template=${template}`);
   if (edit && !UUID.test(edit)) notFound();
   const tenantId = guard.context.tenantId;
-  let loaded: { sources: Awaited<ReturnType<typeof invoiceSources>>; initial: Awaited<ReturnType<typeof getInvoice>> | undefined } | null = null;
-  let problem: string | null = null;
-  try {
-    const [sources, initial] = await Promise.all([invoiceSources(tenantId), edit ? getInvoice(tenantId, edit) : Promise.resolve(undefined)]);
-    loaded = { sources, initial };
-  } catch (error) {
-    if (!(error instanceof InvoiceError)) throw error;
-    if (error.status === 404) notFound();
-    problem = error.message;
-  }
-  if (loaded?.initial && !EDITABLE.includes(loaded.initial.status)) {
-    return <AccountingPage step="bills" title={`Bill ${loaded.initial.invoiceNumber}`}><TableCard><EmptyState title="This bill can no longer be changed" hint="Once a bill is approved, paid or void, correct it by voiding it and entering it again." /></TableCard></AccountingPage>;
-  }
+  // Frame first (UI-CONSISTENCY §7a): the title line and its button slot draw at once (an edit's name streams in behind
+  // a title shape); the form fills in as one block.
+  const read: EntryRead = (async () => {
+    try {
+      const [sources, initial] = await Promise.all([invoiceSources(tenantId), edit ? getInvoice(tenantId, edit) : Promise.resolve(undefined)]);
+      return { loaded: { sources, initial }, problem: null };
+    } catch (error) {
+      if (!(error instanceof InvoiceError)) throw error;
+      if (error.status === 404) notFound();
+      return { loaded: null, problem: error.message };
+    }
+  })();
   return (
     <AccountingPage
       step="bills"
-      title={loaded?.initial ? `Edit bill ${loaded.initial.invoiceNumber}` : "Enter a bill"}
-      actions={loaded ? <span id={BILL_FORM_ACTIONS} className="contents" /> : undefined}
+      title={edit ? <Suspense fallback={<TitleShape />}><EntryTitle read={read} /></Suspense> : "Enter a bill"}
+      // The form fills these buttons (BILL_FORM_ACTIONS); the slot is there from the start.
+      actions={<span id={BILL_FORM_ACTIONS} className="contents" />}
     >
-      {loaded ? <InvoiceEntry sources={loaded.sources} initial={loaded.initial} /> : <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>}
+      <StreamSection shape="form" rows={6}>
+        <EntryForm read={read} />
+      </StreamSection>
     </AccountingPage>
   );
+}
+
+type EntryRead = Promise<{ loaded: { sources: Awaited<ReturnType<typeof invoiceSources>>; initial: Awaited<ReturnType<typeof getInvoice>> | undefined } | null; problem: string | null }>;
+
+async function EntryTitle({ read }: { read: EntryRead }) {
+  const { loaded } = await read;
+  if (!loaded?.initial) return "Enter a bill";
+  return EDITABLE.includes(loaded.initial.status) ? `Edit bill ${loaded.initial.invoiceNumber}` : `Bill ${loaded.initial.invoiceNumber}`;
+}
+
+async function EntryForm({ read }: { read: EntryRead }) {
+  const { loaded, problem } = await read;
+  if (!loaded) return <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>;
+  if (loaded.initial && !EDITABLE.includes(loaded.initial.status)) {
+    return <TableCard><EmptyState title="This bill can no longer be changed" hint="Once a bill is approved, paid or void, correct it by voiding it and entering it again." /></TableCard>;
+  }
+  return <InvoiceEntry sources={loaded.sources} initial={loaded.initial} />;
 }

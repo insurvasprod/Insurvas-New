@@ -1,5 +1,6 @@
 import type { TenantContext } from "@/lib/tenantAuth/requireTenant";
 import type { ProducerScope } from "@/lib/agency/visibilityCore";
+import type { MenuGate } from "@/lib/dashboard/roleHome";
 
 /**
  * What every dashboard view gets (owner 2026-11-06, /app/dashboard?view=…). A view is an async server
@@ -9,7 +10,8 @@ import type { ProducerScope } from "@/lib/agency/visibilityCore";
  *   - Read under `scope` (AG-0.5): a producer in an agency sees only their own and their downline's rows.
  *   - Show only what `available` and `context.role` open: a figure's link must be a page the reader can open
  *     (`firstOpenable` from lib/dashboard/roleHome); a figure whose page is closed to them is left out.
- *   - `noMoney` (a manager): no dollar figure anywhere.
+ *   - `noMoney`: no dollar figure anywhere. From the money permission (lib/dashboard/access seesMoney), never a role
+ *     name: a manager, a setter, an assistant and a retention rep see counts only.
  *   - Every tile, figure, row and list item links to the exact page behind it, filtered to what was clicked.
  *   - A read that fails leaves its card out or shows its empty line; it never throws the page.
  */
@@ -25,6 +27,8 @@ export type DashViewProps = {
   /** This request's "now". */
   now: number;
   noMoney: boolean;
+  /** The menu's narrowing for this session (lib/dashboard/access menuGate): every link a view offers passes it. */
+  gate?: MenuGate;
   /**
    * Read for the Overview (speed pass 2026-11-10): only what the Overview draws (the module's needs, its one
    * figure and the cards it borrows); lists and charts only the module's own view shows are not read. The

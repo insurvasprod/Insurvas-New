@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
 import { EVENT_LABELS, type RuleEvent, type RuleMode } from "@/lib/pipelineRules/rules";
 import type { BoardPipeline } from "@/lib/pipelineRules/store";
+import { IntentLink } from "@/components/ui/nav-pending";
 
 /**
  * Card moves (docs/la4/mockups-r7/carrier-sync-setup.html §2, direction A "By mode", owner 2026-11-10): what the list,
@@ -50,8 +50,8 @@ export function RuleStepper({ prev, next }: { prev: { href: string; name: string
   const cls = buttonVariants({ variant: "outline" });
   return (
     <>
-      {prev && <Link href={prev.href} className={`${cls} max-w-[220px]`} title={`Previous rule: ${prev.name}`}><ChevronLeft aria-hidden="true" /><span className="truncate">{prev.name}</span></Link>}
-      {next && <Link href={next.href} className={`${cls} max-w-[220px]`} title={`Next rule: ${next.name}`}><span className="truncate">{next.name}</span><ChevronRight aria-hidden="true" /></Link>}
+      {prev && <IntentLink transitionTypes={["nav-back"]} href={prev.href} className={`${cls} max-w-[220px]`} title={`Previous rule: ${prev.name}`}><ChevronLeft aria-hidden="true" /><span className="truncate">{prev.name}</span></IntentLink>}
+      {next && <IntentLink transitionTypes={["nav-forward"]} href={next.href} className={`${cls} max-w-[220px]`} title={`Next rule: ${next.name}`}><span className="truncate">{next.name}</span><ChevronRight aria-hidden="true" /></IntentLink>}
     </>
   );
 }

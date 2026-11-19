@@ -97,7 +97,7 @@ export function RulesList({ rules, bucket, toCheck, board, carriers, capped, can
   }
 
   const empty = rules.length === 0 ? (
-    <EmptyState title="No card-move rules yet" hint="A rule moves a lead's card when something happens to its policy, and adds a note. It starts in forecast: it records what it would do and moves nothing until you switch it to live." action={canCreate ? <Link href={`${RULES_HREF}/new`} className={buttonVariants()}>New rule</Link> : undefined} />
+    <EmptyState title="No card-move rules yet" hint="A rule moves a lead's card when something happens to its policy, and adds a note. It starts in forecast: it records what it would do and moves nothing until you switch it to live." action={canCreate ? <Link href={`${RULES_HREF}/new`} className={buttonVariants()}>New Rule</Link> : undefined} />
   ) : inTab.length === 0 ? (
     bucket === "live" ? <EmptyState title="No rule is live" hint="No rule is on, so no card moves. Open a forecast rule and switch it to live." action={<Link href={`${RULES_HREF}?mode=forecast`} className={buttonVariants({ variant: "outline" })}>Show Forecast</Link>} />
     : bucket === "forecast" ? <EmptyState title="No rule in forecast" hint="A new rule starts in forecast: it records what it would do and moves nothing until you switch it to live." />

@@ -2,7 +2,8 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { commitLeadImport } from "@/lib/agentTemplates/importCommit";
-import { leadDuplicateDecisionError, type LeadDuplicateDecision, type LeadDuplicateQueue, type LeadDuplicateSide } from "./types";
+import { sealLeadValues } from "@/lib/leadValues/seal";
+import { LEAD_DUPLICATE_FIELDS, leadDuplicateDecisionError, type LeadDuplicateDecision, type LeadDuplicateQueue, type LeadDuplicateSide } from "./types";
 
 /**
  * Same-phone leads, asked about on Clean (owner 2026-10-29): "if you import the same file twice and
@@ -55,7 +56,9 @@ export async function queueLeadDuplicates(tenantId: string, rows: readonly Queue
     tenant_id: tenantId,
     lead_id: row.leadId,
     phone: row.phone,
-    incoming: stripForStorage(row.incoming),
+    // The held row is a lead's values in waiting: its SSN and bank values are stored sealed like the lead's
+    // own (lib/leadValues/seal.ts), and "Keep both" commits them as they are.
+    incoming: sealIncoming(tenantId, stripForStorage(row.incoming)),
     campaign_id: row.campaignId,
     import_batch_id: row.batchId,
     source_key: row.sourceKey,
@@ -83,6 +86,10 @@ export async function queueLeadDuplicates(tenantId: string, rows: readonly Queue
 }
 
 /** Tenant and creator are set again when the row is added; kept out of the stored copy. */
+function sealIncoming(tenantId: string, item: Record<string, unknown>) {
+  return "values" in item ? { ...item, values: sealLeadValues(tenantId, item.values) } : item;
+}
+
 function stripForStorage(item: Record<string, unknown>) {
   const { tenant_id: _tenant, created_by: _creator, lead_id: _lead, ...rest } = item;
   void _tenant; void _creator; void _lead;
@@ -151,10 +158,18 @@ export async function getLeadDuplicateQueue(tenantId: string, index = 0): Promis
   };
 }
 
-/** The values a person compares: strings and numbers only, never consent blobs or nested objects. */
+/**
+ * The keys the review screen compares (LEAD_DUPLICATE_FIELDS, which include every name key), and only
+ * those. The screen reads nothing else, and a lead or an import row can carry an SSN or bank number that
+ * must not leave the server here (security review 2026-11, H-1).
+ */
+const COMPARED_KEYS: ReadonlySet<string> = new Set(LEAD_DUPLICATE_FIELDS.flatMap((field) => field.keys));
+
+/** The values a person compares: the compared keys only, as strings, never consent blobs or nested objects. */
 function pickValues(values: Record<string, unknown>) {
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(values)) {
+    if (!COMPARED_KEYS.has(key)) continue;
     if (typeof value === "string" && value.trim()) out[key] = value.trim();
     else if (typeof value === "number" || typeof value === "boolean") out[key] = String(value);
   }

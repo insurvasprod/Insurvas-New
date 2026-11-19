@@ -1,5 +1,6 @@
 import "server-only";
 
+import { adminHostSetupGaps } from "@/lib/adminAuth/adminHost";
 import { getPeriodBillingHeartbeat } from "@/lib/billing/monitor";
 import { describeBillingHeartbeat } from "@/lib/billing/heartbeat";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
@@ -165,6 +166,8 @@ async function platformState(now: number) {
     pastDueCount: pastDue,
     seatLimited: seats,
     creditUsage: credits,
+    // Read from the deployment's own settings, not a table: H-2 (lib/adminAuth/adminHost.ts).
+    adminHostGaps: adminHostSetupGaps(process.env),
     trials: (trials ?? []).map((row) => ({ subscriptionId: row.subscription_id, tenantId: row.tenant_id, tenantName: row.tenant_name, trialEndsAt: row.trial_ends_at, startedAt: row.started_at, daysRemaining: row.days_remaining, hasPaymentMethod: row.has_payment_method })),
     audit: audit ?? [],
   };

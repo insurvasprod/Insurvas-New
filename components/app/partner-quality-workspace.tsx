@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Download } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cardSurface } from "@/components/ui/card";
 import { BarList, ChartHeading, ChartLegend, type BarListRow } from "@/components/ui/chart";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
@@ -136,7 +136,13 @@ export function PartnerQualityWorkspace({ initialPeriod, framed = false }: { ini
     setPage(1);
   }
 
-  if (loading && !data) return framed ? <FramedLoading /> : <PageLoading />;
+  // Frame first (UI-CONSISTENCY §7a): standalone, the title and its buttons draw at once and the report loads under them.
+  if (loading && !data) return framed ? <FramedLoading /> : (
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      <PageHeader title="Partner quality" description="How good each lead source's leads are, against the period before." breadcrumbs={[{ label: "Reports" }, { label: "Partner quality" }]} />
+      <PageLoading header={false} />
+    </div>
+  );
   if (!data) return <div className="space-y-6">{!framed && <PageHeader title="Partner quality" />}<ErrorState detail={error || "Could not load partner quality"} action={<Button variant="outline" onClick={() => void load(period)}>Try again</Button>} /></div>;
 
   const active: Period = { from: data.from, to: data.to };
@@ -231,7 +237,7 @@ export function PartnerQualityWorkspace({ initialPeriod, framed = false }: { ini
           <ChartHeading
             title="Leads sent and submitted, by partner"
             period={`${periodText(active)} · ${count(shownSent)} sent · ${count(shownSubmitted)} submitted (${rate(percentOf(shownSubmitted, shownSent), shownSent)})${total.sent ? ` · ${percent(pass)} passed screening` : ""}`}
-            action={<Link href={showHref(listBase, "table")} className="whitespace-nowrap text-sm font-medium text-foreground underline-offset-4 hover:underline">Open the rows ›</Link>}
+            action={<Link href={showHref(listBase, "table")} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "no-underline whitespace-nowrap")}>Open the Rows</Link>}
           />
           <BarList rows={chartRows} summary={`Leads sent by each partner, ${periodText(active)}, with the submitted part solid inside.`} unit="leads" labelWidth="14rem" />
           <ChartLegend items={[

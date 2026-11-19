@@ -18,7 +18,7 @@
  *   worked, closes as, archive and restore; each stage's agent questions (AgentQuestionsDialog).
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   Ban, CalendarClock, Check, CircleCheck, CircleX, Clock, DollarSign, FileCheck, GripVertical, Hash, MessageSquare,
@@ -48,6 +48,9 @@ import {
 } from "@/lib/pipelines/outcomesBoard";
 import { cardSurface } from "@/components/ui/card";
 import { LeaveGuard } from "@/components/ui/leave-guard";
+import { useFlip } from "@/components/ui/use-flip";
+import { useDragLift } from "@/components/ui/use-drag-lift";
+import { reducedMotion } from "@/components/ui/motion-tokens";
 
 type Loaded = { doc: BoardDoc; agency: Record<string, string>; rowIds: Record<string, string>; leadCounts: Record<string, number>; rulesReady: boolean; nextActionReady: boolean; pipelineOutcomesReady: boolean };
 type Picked = { kind: "outcome"; key: string } | { kind: "stage"; id: string } | { kind: "pipeline" } | null;
@@ -161,29 +164,14 @@ export function PipelinesOutcomesSettings() {
   const [drag, setDrag] = useState<{ id: string; x: number; y: number; dx: number; dy: number; width: number; over: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const slots = useRef(new Map<string, { top: number; left: number }>());
-  const dropFrom = useRef<{ id: string; top: number; left: number } | null>(null);
   const swallowClick = useRef(false);
 
-  // FLIP: a stage whose slot moved since the last render slides from where it was (or, just dropped, from
-  // where the pointer let go of it) to where it is now. Slots are measured inside the list, so scrolling
-  // never reads as a move.
-  useLayoutEffect(() => {
-    const list = listRef.current;
-    if (!list) { slots.current.clear(); return; }
-    const next = new Map<string, { top: number; left: number }>();
-    for (const row of list.querySelectorAll<HTMLElement>("[data-flip-id]")) {
-      const id = row.dataset.flipId as string;
-      const slot = { top: row.offsetTop, left: row.offsetLeft };
-      next.set(id, slot);
-      const was = dropFrom.current?.id === id ? dropFrom.current : slots.current.get(id);
-      if (was && (Math.abs(was.top - slot.top) > 1 || Math.abs(was.left - slot.left) > 1)) {
-        row.animate([{ transform: `translate(${was.left - slot.left}px, ${was.top - slot.top}px)` }, { transform: "none" }], { duration: 240, easing: "cubic-bezier(.2,.8,.2,1)" });
-      }
-    }
-    dropFrom.current = null;
-    slots.current = next;
-  });
+  // FLIP (the shared kit since Wave C, components/ui/use-flip.ts): a stage whose slot moved since the last render
+  // slides from where it was (or, just dropped, from where the pointer let go of it) to where it is now, on the motion
+  // tokens. Slots are measured inside the list, so scrolling never reads as a move.
+  const flip = useFlip(listRef);
+  // An outcome picked up to route it lifts and follows the pointer (no browser ghost).
+  const lift = useDragLift();
 
   // The map fills what is left under the top bar, and an open editor is docked under it (owner
   // 2026-11-03): the map shrinks to make room, so there is nothing to scroll to. Sized by the layout,
@@ -265,7 +253,7 @@ export function PipelinesOutcomesSettings() {
       if (kind === "outcome" && id) route(id, target);
     };
   }
-  const startDrag = (kind: "outcome", id: string) => (event: DragEvent) => { event.dataTransfer.setData(DRAG_TYPE, `${kind}|${id}`); event.dataTransfer.effectAllowed = "move"; };
+  const startDrag = (kind: "outcome", id: string) => (event: DragEvent) => { event.dataTransfer.setData(DRAG_TYPE, `${kind}|${id}`); event.dataTransfer.effectAllowed = "move"; lift.lift(event); };
 
   /**
    * Grab a stage: past a few pixels it lifts off and follows the pointer, the stages part to show where it
@@ -320,8 +308,7 @@ export function PipelinesOutcomesSettings() {
       document.body.style.cursor = "";
       swallowClick.current = true;
       setTimeout(() => { swallowClick.current = false; }, 0);
-      const box = list.getBoundingClientRect();
-      dropFrom.current = { id: stageId, top: pointer.y - dy - box.top, left: pointer.x - dx - box.left };
+      flip.place(stageId, new DOMRect(pointer.x - dx, pointer.y - dy, rect.width, rect.height));
       setDrag(null);
       moveStageTo(stageId, over);
     };
@@ -554,12 +541,12 @@ export function PipelinesOutcomesSettings() {
                 const target = pickedOutcome && (() => { const d = dest.get(pickedOutcome.key)?.dest; return d?.kind === "stage" && d.stageId === stage.id; })();
                 const on = picked?.kind === "stage" && picked.id === stage.id;
                 if (drag?.id === stage.id) {
-                  return <div key={stage.id} data-flip-id={stage.id} aria-hidden="true" className="box-border h-[52px] rounded-[12px] border-[1.5px] border-dashed border-[var(--primary)] bg-[var(--primary-soft)]" />;
+                  return <div key={stage.id} data-flip-key={stage.id} aria-hidden="true" className="m-drop-gap box-border h-[52px] rounded-[12px]" />;
                 }
                 return (
                   <div
                     key={stage.id}
-                    data-flip-id={stage.id}
+                    data-flip-key={stage.id}
                     role="button"
                     tabIndex={0}
                     aria-label={`${stage.name || "New stage"}: click to edit, hold and drag to reorder`}
@@ -644,7 +631,8 @@ export function PipelinesOutcomesSettings() {
       {drag && heldStage && createPortal(
         <div
           aria-hidden="true"
-          className="pointer-events-none fixed z-[1000] box-border flex h-[52px] rotate-[1.5deg] items-center gap-2 rounded-[12px] border-[1.5px] border-l-4 border-[var(--primary)] bg-[var(--color-card)] py-0 pr-2.5 pl-1.5 shadow-[0_18px_40px_-12px_rgb(0_0_0/0.55)]"
+          data-still={reducedMotion() ? "" : undefined}
+          className="m-lift box-border flex h-[52px] items-center gap-2 rounded-[12px] border-[1.5px] border-l-4 border-[var(--primary)] bg-[var(--color-card)] py-0 pr-2.5 pl-1.5"
           style={{ left: drag.x - drag.dx, top: drag.y - drag.dy, width: drag.width, borderLeftColor: KIND_COLOR[heldStage.stage_type], cursor: "grabbing" }}
         >
           <StageFace stage={heldStage} count={outcomes.filter((o) => { const d = dest.get(o.key)?.dest; return d?.kind === "stage" && d.stageId === heldStage.id; }).length} />

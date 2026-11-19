@@ -14,7 +14,7 @@
  */
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ClipboardCheck, Coffee, Headset, PhoneOff, Phone, Users } from "lucide-react";
 
 import { Callout, st } from "@/components/app/settings/primitives";
@@ -28,6 +28,7 @@ import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { Pager, paginate } from "@/components/ui/pager";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
+import { useArrivals } from "@/components/ui/use-arrivals";
 import { productLineLabel } from "@/lib/format/productLine";
 import { languageKey, languageName } from "@/lib/transferInbox/constants";
 import { cn } from "@/lib/utils";
@@ -79,6 +80,16 @@ function AvailabilityStatus({ availability, onCall }: { availability: Availabili
   return <StatusChip tone={tone} dot>{label}</StatusChip>;
 }
 
+/**
+ * How a card arrived, fixed when it mounts (key it by the caller): a list change later never swaps its class and so
+ * never replays it. `m-alert-in` (rise only, no shake) for a caller new since the last read, `m-content-in` for one who
+ * moved up to the front.
+ */
+function Arrival({ enter, children }: { enter: "m-alert-in" | "m-content-in" | null; children: ReactNode }) {
+  const [className] = useState(enter);
+  return <div className={cn("min-w-0", className)}>{children}</div>;
+}
+
 export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false }: { currentUserId: string; readOnly: boolean; canSeeTeam: boolean; /** Solo mode: no Team page; All callers instead. */ solo?: boolean }) {
   const { floor, error, now, saving, availability, setAvailability, refresh, claim, accept, sendNudge } = useFloor({ readOnly });
   const [pop, setPop] = useState<Pop>("none");
@@ -101,13 +112,25 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
   }, [floor?.waiting]);
 
   const line = useMemo(() => [...(floor?.waiting ?? [])].sort((a, b) => new Date(a.queuedAt).getTime() - new Date(b.queuedAt).getTime()), [floor?.waiting]);
+  // A caller (or a passed call) new since the last floor read rises in once with m-alert-in (Wave C motion,
+  // 2026-11-18: rise only, no shake); nothing is new on the first read, so the page never lights up as it opens.
+  const isNewCaller = useArrivals(line.map((item) => item.id), Boolean(floor));
+  const isNewHandoff = useArrivals((floor?.pendingHandoffs ?? []).map((handoff) => handoff.id), Boolean(floor));
   const myCalls = useMemo(() => (floor?.onCalls ?? []).filter((call) => call.agentId === currentUserId).sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime()), [floor?.onCalls, currentUserId]);
 
   const [linePage, setLinePage] = useState(1);
   const linePageSize = useFittingPageSize(560, 65);
 
   if (!floor) {
-    if (!error) return <PageLoading />;
+    // Frame first (UI-CONSISTENCY §7a): the title and the step bar draw at once; the line loads where it will be.
+    if (!error) {
+      return (
+        <div className="m-stagger flex w-full min-w-0 flex-col gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-56px)]">
+          <PageHeader title="Inbound" lead={<InboundStepBar current={0} />} actions={canSeeTeam ? <Button asChild variant="outline"><Link href={solo ? "/app/inbound/team?tab=all" : "/app/inbound/team"}><Users aria-hidden="true" />{solo ? "All callers" : "Team"}</Link></Button> : undefined} />
+          <PageLoading header={false} strip={false} />
+        </div>
+      );
+    }
     return (
       <div className="flex w-full min-w-0 flex-col gap-6">
         <PageHeader title="Inbound" />
@@ -146,7 +169,9 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
     const speaks = next.language && languageKey(next.language) !== "english" ? languageName(next.language) : null;
     const facts = [next.age, next.state, speaks, productLineLabel(next.productLine), next.partnerName ? `from ${next.partnerName}` : null].filter(Boolean).join(" · ");
     return (
-      <section aria-label="Next caller" className="m-glass flex min-w-0 flex-col gap-4 rounded-xl border border-[color-mix(in_srgb,var(--primary)_45%,var(--border))] p-5">
+      // A different caller at the front settles in (m-content-in); one who just joined the line rises in (m-alert-in).
+      <Arrival key={next.id} enter={isNewCaller(next.id) ? "m-alert-in" : "m-content-in"}>
+      <section aria-label="Next caller" className={cn("m-glass flex min-w-0 flex-col gap-4 rounded-xl border border-[color-mix(in_srgb,var(--primary)_45%,var(--border))] p-5")}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <span className="text-xs font-semibold text-[var(--accent-ink)]">Next caller</span>
@@ -172,6 +197,7 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
           {!readOnly && <Button type="button" variant="ghost" size="sm" className="ml-auto" disabled={saving === `nudge:${next.id}`} onClick={() => void sendNudge(next.id, null)}>{saving === `nudge:${next.id}` ? "Asking…" : "Ask the team to help"}</Button>}
         </div>
       </section>
+      </Arrival>
     );
   })();
 
@@ -199,7 +225,8 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
       <div className="grid min-w-0 gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_330px]">
         <div className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:overflow-y-auto">
           {floor.pendingHandoffs.map((handoff) => (
-            <section key={handoff.id} aria-label="A call passed to you" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color-mix(in_srgb,var(--primary)_35%,var(--border))] bg-[var(--primary-soft)] px-4 py-3">
+            <Arrival key={handoff.id} enter={isNewHandoff(handoff.id) ? "m-alert-in" : null}>
+            <section aria-label="A call passed to you" className={cn("flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color-mix(in_srgb,var(--primary)_35%,var(--border))] bg-[var(--primary-soft)] px-4 py-3")}>
               <span className="min-w-0 text-sm text-[var(--body)]">
                 <strong className="font-semibold text-[var(--ink)]">{handoff.bufferName} passed you a caller</strong> · {handoff.customer}, {productLineLabel(handoff.productLine)}, {handoff.progressPercentage}% checked
                 {handoff.expiresAt && new Date(handoff.expiresAt).getTime() > now ? `. Goes back to ${handoff.bufferName} at ${new Date(handoff.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.` : "."}
@@ -208,6 +235,7 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
                 {saving === `handoff:${handoff.id}` ? "Taking over…" : "Take over the call"}
               </Button>
             </section>
+            </Arrival>
           ))}
 
           {next ? nextCard : (

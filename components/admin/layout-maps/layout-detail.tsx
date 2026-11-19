@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FileUp, Plus, X } from "lucide-react";
 
-import { AdminPageHeader } from "@/components/admin/page-header";
+import { LAYOUT_ACTIONS_SLOT, LAYOUT_TABS_SLOT } from "@/components/admin/catalog/layout-slots";
+import { StepSlot } from "@/components/app/step-frame/step-slot";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -25,9 +27,11 @@ import type { AssignmentView, CarrierOption, LayoutMapView, WaitingFile } from "
 import { keptEntry, nextKeptField } from "@/lib/ingestion/layoutDraft";
 import { notify } from "@/lib/notify";
 
-import { KEPT, STATUS, TRANSFORM_LABEL, call, draftOf, enumValues, mergeColumns, payload, readPdfText, readSample, type Draft } from "./shared";
+import { KEPT, STATUS, TRANSFORM_LABEL, call, carrierHref, draftOf, enumValues, mergeColumns, payload, readPdfText, readSample, type Draft } from "./shared";
 import { LeaveGuard } from "@/components/ui/leave-guard";
+import { MoreMenu } from "@/components/ui/more-menu";
 
+import { CheckBox } from "@/components/ui/check-box";
 type Tab = "columns" | "settings" | "carriers" | "versions";
 const select = `${toolbarControl} w-full`;
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : "—");
@@ -62,6 +66,7 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
   const [waitingFor, setWaitingFor] = useState<{ fileType: string; files: WaitingFile[] } | null>(null);
   const [assignCarrier, setAssignCarrier] = useState("");
   const sampleInput = useRef<HTMLInputElement>(null);
+  const codeOf = useMemo(() => new Map(carriers.map((item) => [item.id, item.code])), [carriers]);
 
   const editable = open?.status === "draft" || open?.status === "in_review";
   const openDraft = sorted.find((map) => map.status === "draft" || map.status === "in_review") ?? null;
@@ -163,18 +168,26 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
     notify.done(merged.added ? `${merged.added} column${merged.added === 1 ? "" : "s"} added from ${file.name}. Check each one before saving.` : `Every column of ${file.name} is already listed.`);
   });
 
-  const removeButton = !removed ? <Button type="button" variant="outline" className="text-[var(--error-ink)]" disabled={busy !== null} onClick={() => setRemoving(true)}>Delete layout</Button> : null;
+  const retire = () => run("retire", async () => { const { map } = await call<{ map: LayoutMapView }>(`/api/admin/layout-maps/${open.id}/retire`, { method: "POST" }); await reload(map.id); notify.done(`Version ${map.version} retired.`); });
+  // At most two buttons on the title line; the rest sit in More (MoreMenu).
+  const more = (
+    <MoreMenu
+      items={[
+        editable && { label: `Delete draft v${open.version}…`, onSelect: () => setDeleting(true), disabled: busy !== null },
+        !editable && open.status === "published" && { label: `Retire v${open.version}`, onSelect: retire, disabled: busy !== null },
+        !removed && { label: "Delete layout…", onSelect: () => setRemoving(true), disabled: busy !== null },
+      ]}
+    />
+  );
   const actions = editable ? (
     <>
-      {removeButton}
-      <Button type="button" variant="outline" disabled={busy !== null} onClick={() => setDeleting(true)}>Delete draft</Button>
+      {more}
       <Button type="button" variant="outline" disabled={busy !== null || !dirty} onClick={() => save()}>{busy === "save" ? "Saving…" : "Save draft"}</Button>
       <Button type="button" disabled={busy !== null || localProblems.length > 0} title={localProblems[0]} onClick={publish}>Publish v{open.version}</Button>
     </>
   ) : (
     <>
-      {removeButton}
-      {open.status === "published" && <Button type="button" variant="outline" disabled={busy !== null} onClick={() => run("retire", async () => { const { map } = await call<{ map: LayoutMapView }>(`/api/admin/layout-maps/${open.id}/retire`, { method: "POST" }); await reload(map.id); notify.done(`Version ${map.version} retired.`); })}>Retire</Button>}
+      {more}
       {openDraft
         ? <Button type="button" onClick={() => setOpenId(openDraft.id)}>Open draft v{openDraft.version}</Button>
         : <Button type="button" disabled={busy !== null} onClick={() => run("version", async () => { const { map } = await call<{ map: LayoutMapView }>(`/api/admin/layout-maps/${open.id}/versions`, { method: "POST" }); await reload(map.id); notify.done(`Version ${map.version} started as a draft.`); })}>{removed ? "Bring it back" : "Change it"}: start v{(sorted[0]?.version ?? open.version) + 1}</Button>}
@@ -182,32 +195,24 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
   );
 
   const errors = problems.length ? problems : editable ? localProblems : [];
+  const tabBar = (
+    <ViewTabs
+      label="Layout views"
+      value={tab}
+      onChange={setTab}
+      tabs={[{ key: "columns", label: "Columns", count: draft.entries.length }, { key: "settings", label: "File settings" }, { key: "carriers", label: "Carriers", count: assignments.length }, { key: "versions", label: "Versions", count: versions.length }]}
+    />
+  );
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-4">
       {/* Saving and publishing check the whole map, so the guard offers Discard or Stay. */}
       <LeaveGuard dirty={editable && dirty} onDiscard={() => setDraft(draftOf(open))} what={`the draft of ${open.name}`} />
-      <AdminPageHeader title={open.name} subtitle={`${FILE_TYPE_LABELS[open.fileType]} · ${layoutKey}${removed ? " · deleted" : ""}`} backHref="/admin/layout-maps" backLabel="Layout maps"
-        // The page's sub-pages: the sub-page bar on the title's line (UI-CONSISTENCY §8b).
-        tabs={
-          <ViewTabs
-            label="Layout views"
-            value={tab}
-            onChange={setTab}
-            tabs={[{ key: "columns", label: "Columns", count: draft.entries.length }, { key: "settings", label: "File settings" }, { key: "carriers", label: "Carriers", count: assignments.length }, { key: "versions", label: "Versions", count: versions.length }]}
-          />
-        }
-        actions={
-            <>
-              {sorted.length > 1 && (
-                <select aria-label="Version" className={toolbarControl} value={open.id} disabled={busy !== null} onChange={(event) => { setOpenId(event.target.value); setPage(1); }}>
-                  {sorted.map((map) => <option key={map.id} value={map.id}>v{map.version} · {STATUS[map.status].label}</option>)}
-                </select>
-              )}
-              {actions}
-            </>
-        }
-      />
+      {/* The sub-page bar and the buttons hang on the draft, so they are portalled onto the frame's title line. */}
+      <StepSlot id={LAYOUT_TABS_SLOT}>{tabBar}</StepSlot>
+      {/* Another version opens from the Versions tab (its Open), so the title line keeps its room for the bar. */}
+      <StepSlot id={LAYOUT_ACTIONS_SLOT}>{actions}</StepSlot>
+
 
       <StatStrip label="This layout">
         <StatTile label="Version" value={`v${open.version}`} footnote={STATUS[open.status].label.toLowerCase()} />
@@ -218,8 +223,9 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
       </StatStrip>
 
       {errors.length > 0 && (
-        <ul role="alert" className="m-0 list-disc space-y-1 rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] py-3 pl-8 pr-4 text-sm text-[var(--error-ink)]">
-          {errors.slice(0, 6).map((problem) => <li key={problem}>{problem}</li>)}
+        <ul role="alert" className="m-0 grid list-none gap-1 p-0 text-sm text-[var(--error-ink)]">
+          {errors.slice(0, 6).map((problem) => <li key={problem} className="flex items-start gap-2"><span className="mt-[7px] size-1.5 shrink-0 rounded-full bg-[var(--error)]" aria-hidden="true" />{problem}</li>)}
+          {errors.length > 6 && <li className="pl-3.5 text-muted-foreground">and {errors.length - 6} more</li>}
         </ul>
       )}
 
@@ -309,7 +315,7 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
                             </select>
                           )}
                         </td>
-                        <td><input aria-label="Required" type="checkbox" className="size-4 accent-[var(--primary)]" disabled={isKept} checked={entry.required} onChange={(event) => update(index, { required: event.target.checked })} /></td>
+                        <td><CheckBox aria-label="Required" disabled={isKept} checked={entry.required} onChange={(event) => update(index, { required: event.target.checked })} /></td>
                         <td>{entry.dataType === "enum" ? <Input aria-label="Carrier's words" className="h-9" placeholder={`e.g. M=${fields.find((field) => field.key === entry.targetField)?.enumValues?.[0] ?? "value"}; Q=…`} value={entry.enumText} onChange={(event) => update(index, { enumText: event.target.value })} /> : <span className="text-muted-foreground">—</span>}</td>
                         <td>{editable && <Button type="button" variant="ghost" size="icon" aria-label={`Remove ${entry.sourceColumn || "this column"}`} onClick={() => setDraft({ ...draft, entries: draft.entries.filter((_, at) => at !== index) })}><X className="size-4" /></Button>}</td>
                       </tr>
@@ -382,7 +388,7 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
               <tbody>
                 {paginate(assignments, carrierPage, pageSize).rows.map((row) => (
                   <tr key={row.id}>
-                    <td className="font-semibold text-foreground">{row.carrierName}</td>
+                    <td className="font-semibold">{codeOf.get(row.carrierId) ? <Link href={carrierHref(codeOf.get(row.carrierId) as string)} className="text-foreground hover:underline">{row.carrierName}</Link> : row.carrierName}</td>
                     <td>{FILE_TYPE_LABELS[row.fileType]}</td>
                     <td className="text-right"><Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => run(`remove-${row.id}`, async () => { await call(`/api/admin/layout-maps/assignments?id=${row.id}`, { method: "DELETE" }); await reload(); notify.done(`${row.carrierName} no longer uses this layout.`); })}>Remove</Button></td>
                   </tr>

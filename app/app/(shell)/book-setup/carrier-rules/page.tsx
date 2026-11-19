@@ -1,7 +1,10 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
+import { Button } from "@/components/ui/button";
 import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState } from "@/components/ui/page-states";
+import { StreamSection } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { DataInPage } from "@/components/app/data-in/data-in-page";
@@ -34,17 +37,37 @@ export default async function SetupCarrierRulesPage({ searchParams }: { searchPa
   const tab: TermsTab = asked === "money" || asked === "files" ? asked : "windows";
   const tenantId = guard.context.tenantId;
   const readOnly = guard.entitlement.access === "read_only";
-  const view = await loadCarrierCoverage(tenantId);
+  // Frame first (UI-CONSISTENCY §7a): the title line, its views and Set the next window draw at once; the carriers
+  // stream in under them.
+  const view = loadCarrierCoverage(tenantId);
   const info = <InfoTip label="About carrier terms" side="right">{TERMS_INFO}</InfoTip>;
+  const tabs = (
+    <ViewTabs
+      label="Carrier terms views"
+      value={tab}
+      tabs={[{ key: "windows" as const, label: "Windows", href: TERMS_HREF }, { key: "money" as const, label: "Money", href: `${TERMS_HREF}?tab=money` }, { key: "files" as const, label: "Files", href: `${TERMS_HREF}?tab=files` }]}
+    />
+  );
+  const actions = tab === "windows" ? <Suspense fallback={<Button type="button" disabled>Set the next window</Button>}><Actions read={view} readOnly={readOnly} /></Suspense> : undefined;
 
-  if (!view.available) {
-    return (
-      <DataInPage step="carrier-rules" chip={info}>
-        <TableCard><EmptyState title={PENDING_TITLE} hint={PENDING_HINT} /></TableCard>
-      </DataInPage>
-    );
-  }
+  return (
+    <DataInPage step="carrier-rules" chip={info} tabs={tabs} actions={actions}>
+      <StreamSection shape="table"><Coverage read={view} tab={tab} readOnly={readOnly} /></StreamSection>
+    </DataInPage>
+  );
+}
 
+type View = ReturnType<typeof loadCarrierCoverage>;
+
+async function Actions({ read, readOnly }: { read: View; readOnly: boolean }) {
+  const view = await read;
+  if (!view.available || view.carriers.length === 0) return null;
+  return <WindowQueueButton queue={missingQueue(view.carriers)} asOf={view.asOf} readOnly={readOnly} label="Set the next window" />;
+}
+
+async function Coverage({ read, tab, readOnly }: { read: View; tab: TermsTab; readOnly: boolean }) {
+  const view = await read;
+  if (!view.available) return <TableCard><EmptyState title={PENDING_TITLE} hint={PENDING_HINT} /></TableCard>;
   const rows: CoverageListRow[] = view.carriers.map((carrier) => ({
     carrierId: carrier.carrierId,
     carrierName: carrier.carrierName,
@@ -54,18 +77,5 @@ export default async function SetupCarrierRulesPage({ searchParams }: { searchPa
     windows: windowRows(carrier),
     ...factsOf(carrier),
   }));
-  const tabs = (
-    <ViewTabs
-      label="Carrier terms views"
-      value={tab}
-      tabs={[{ key: "windows" as const, label: "Windows", href: TERMS_HREF }, { key: "money" as const, label: "Money", href: `${TERMS_HREF}?tab=money` }, { key: "files" as const, label: "Files", href: `${TERMS_HREF}?tab=files` }]}
-    />
-  );
-  const actions = tab === "windows" && rows.length > 0 ? <WindowQueueButton queue={missingQueue(view.carriers)} asOf={view.asOf} readOnly={readOnly} label="Set the next window" /> : undefined;
-
-  return (
-    <DataInPage step="carrier-rules" chip={info} tabs={tabs} actions={actions}>
-      <CarrierCoverageList rows={rows} tab={tab} asOf={view.asOf} readOnly={readOnly} />
-    </DataInPage>
-  );
+  return <CarrierCoverageList rows={rows} tab={tab} asOf={view.asOf} readOnly={readOnly} />;
 }

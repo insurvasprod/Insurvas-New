@@ -47,6 +47,11 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
   const needsDnc = !searchMode && !dncCleared;
   const [confirmed, setConfirmed] = useState(false);
   const [dialled, setDialled] = useState(false);
+  // Presentation only (Wave C motion, 2026-11-18): the call is being placed (the attempt, its disclosure and the
+  // dial in flight), and the outcome the last call was recorded with — for the call status and its Done stamp.
+  // Neither gates anything; the call's own steps still read attempt / confirmed / dialled / working.
+  const [placing, setPlacing] = useState(false);
+  const [recorded, setRecorded] = useState<{ label: string; n: number } | null>(null);
   const [rebuttal, setRebuttal] = useState<string | null>(null);
   const [editingScript, setEditingScript] = useState(false);
   const [draftSections, setDraftSections] = useState<Record<string, string>>({});
@@ -413,7 +418,7 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
   async function prepareAttempt(inbound = false) {
     if (!panel || panel.disclosure.blocking || !panel.eligibility.allowed || readOnly) return;
     if (!inbound && !panel.lead.workItemId) return;
-    setWorking(true);
+    setWorking(true); setPlacing(true);
     try {
       const response = await fetch("/api/app/dialer/attempt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lead_id: panel.lead.id, script_id: panel.script.id, script_version: panel.script.version || null, disclosure_state: panel.lead.state, disclosure_product_code: panel.lead.productCode, ...(inbound ? { inbound: true } : {}) }) });
       const body = await response.json().catch(() => null);
@@ -428,7 +433,7 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
       setConfirmed(true);
       await dial(body.attempt.id);
     } catch (error) { notify.fail("Could not prepare the call", { detail: error instanceof Error ? error.message : undefined }); }
-    finally { setWorking(false); }
+    finally { setWorking(false); setPlacing(false); }
   }
 
   async function confirmRead() {
@@ -462,7 +467,7 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
   async function dial(attemptId?: string) {
     const id = attemptId ?? attempt?.id;
     if (!id || (!attemptId && (!confirmed || working)) || !panel || dialled) return;
-    setWorking(true);
+    setWorking(true); setPlacing(true);
     try {
       const response = await fetch(`/api/app/dialer/attempt/${id}/click`, { method: "POST" });
       const body = await response.json().catch(() => null);
@@ -470,7 +475,7 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
       setDialled(true);
       window.location.href = `tel:${panel.lead.phone}`;
     } catch (error) { notify.block("Dialing is blocked", { detail: error instanceof Error ? error.message : "The compliance checks refused this number." }); }
-    finally { setWorking(false); setPanelReload((n) => n + 1); }
+    finally { setWorking(false); setPlacing(false); setPanelReload((n) => n + 1); }
   }
 
   /** A button or key press: some outcomes ask one more question before they are sent. */
@@ -498,6 +503,8 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
       }
       if (!response.ok) throw new Error(errorText(body, "Could not record disposition"));
       announceDisposition(value, body);
+      // The Done stamp plays while the next lead is served: it never waits, and nothing waits for it.
+      setRecorded((current) => ({ label: outcomeLabel(value), n: (current?.n ?? 0) + 1 }));
       resetCall();
       // "After a disposition — the next lead appears immediately." A search-opened lead stays open.
       // serveNextNow, not serveNext: resetCall's state has not landed in this closure yet, so
@@ -601,6 +608,8 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
     working,
     confirmed,
     dialled,
+    placing,
+    recorded,
     rebuttal,
     setRebuttal,
     editingScript,

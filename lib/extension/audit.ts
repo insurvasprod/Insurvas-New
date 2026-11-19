@@ -14,6 +14,8 @@ export const EXTENSION_AUDIT_ACTIONS = {
   "field_map.created": "Carrier field map draft created",
   "field_map.updated": "Carrier field map edited",
   "field_map.published": "Carrier field map published",
+  "field_map.rejected": "Carrier field map draft rejected",
+  "field_map.retired": "Carrier field map retired",
 } as const;
 export type ExtensionAuditAction = keyof typeof EXTENSION_AUDIT_ACTIONS;
 

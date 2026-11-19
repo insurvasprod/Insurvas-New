@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, control } from "@/components/ui/field";
@@ -12,7 +12,9 @@ import { manualAmountProblem, readableDay, shortDay } from "@/lib/accounting/ban
 import type { MatchStatus } from "@/lib/accounting/bankLabels";
 import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
 import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * The Match dialog (round 7, board 1·6, Dialog lg): every decision on a bank line, in one place, where the row
  * used to hold up to five buttons. Confirm the suggestion (or another open statement), decline it, match by hand
@@ -36,7 +38,7 @@ const failed = (err: unknown) => notify.fail(err instanceof Error && err.message
 
 type Candidate = { key: string; label: string; sub: string; cents: number; match?: Match; statement?: Stmt };
 
-export function BankMatchDialog({ txn, account, statements, readOnly, step, onClose, onChanged, onNext }: {
+export function BankMatchDialog({ txn, account, statements, readOnly, step, onClose, onChanged, onNext, onDone }: {
   txn: Txn;
   account: string;
   statements: Stmt[];
@@ -46,6 +48,11 @@ export function BankMatchDialog({ txn, account, statements, readOnly, step, onCl
   onChanged: () => void;
   /** Stepping and not at the last line: move on after a decision. */
   onNext?: () => void;
+  /**
+   * A decision that settles the line ("Matched", "Set aside"): the list stamps the row and refreshes once the stamp has
+   * played (Tier 2 motion, 2026-11-18), in place of `onChanged`. Without it, `onChanged` runs as before.
+   */
+  onDone?: (label: string) => void;
 }) {
   const confirmed = txn.matches.filter((m) => m.confirmed);
   const pending = txn.matches.filter((m) => !m.confirmed);
@@ -67,7 +74,8 @@ export function BankMatchDialog({ txn, account, statements, readOnly, step, onCl
   const [busy, setBusy] = useState(false);
   const stepping = step !== null;
   const last = !onNext;
-  const after = () => { onChanged(); if (onNext) onNext(); else onClose(); };
+  const settle = (label: string) => { if (onDone) onDone(label); else onChanged(); };
+  const after = (label?: string) => { if (label) settle(label); else onChanged(); if (onNext) onNext(); else onClose(); };
 
   const confirm = async (andNext: boolean) => {
     const chosen = candidates.filter((c) => picked.has(c.key));
@@ -89,7 +97,7 @@ export function BankMatchDialog({ txn, account, statements, readOnly, step, onCl
         detail: `${txn.descriptionRaw} matched to ${chosen.map((c) => c.label.replace(" · statement ", " ")).join(", ")}.`,
         action: { label: "Undo", onClick: () => void Promise.all(made.map((id) => postBank({ op: "remove", match_id: id }))).then(onChanged, failed) },
       });
-      if (andNext) after(); else { onChanged(); onClose(); }
+      if (andNext) after("Matched"); else { settle("Matched"); onClose(); }
     } catch (err) {
       failed(err);
     } finally {
@@ -123,7 +131,7 @@ export function BankMatchDialog({ txn, account, statements, readOnly, step, onCl
         detail: `${money(manualCents)} of ${txn.descriptionRaw} to ${s ? `${s.carrierName} ${shortDay(s.statementDate)}` : "the statement"}.`,
         action: json?.result ? { label: "Undo", onClick: () => void postBank({ op: "remove", match_id: String(json.result) }).then(onChanged, failed) } : undefined,
       });
-      after();
+      after("Matched");
     } catch (err) {
       failed(err);
     } finally {
@@ -137,7 +145,7 @@ export function BankMatchDialog({ txn, account, statements, readOnly, step, onCl
     try {
       await postBank({ op: "ignore", transaction_id: txn.id, reason: reason.trim() });
       notify.done("Set aside: not carrier money", { action: { label: "Undo", onClick: () => void postBank({ op: "unignore", transaction_id: txn.id }).then(onChanged, failed) } });
-      after();
+      after("Set aside");
     } catch (err) {
       failed(err);
     } finally {
@@ -205,7 +213,7 @@ export function BankMatchDialog({ txn, account, statements, readOnly, step, onCl
               {confirmed.map((m) => (
                 <div key={m.id} className="m-content-in flex flex-wrap items-center justify-between gap-2">
                   <span><StatusChip tone="good">Matched</StatusChip> to {m.carrierName} · {readableDay(m.statementDate)} · {money(m.amountAppliedCents)}{m.confirmedAt ? <span className="text-muted-foreground"> · confirmed {shortDay(m.confirmedAt)}</span> : null}</span>
-                  <Link className={link} href={`/app/bank/payments/${m.statementId}?tab=deposit`}>Open the payment ›</Link>
+                  <Link className={cn(buttonVariants({ variant: "outline", size: "sm" }), "no-underline")} href={`/app/bank/payments/${m.statementId}?tab=deposit`}>Open the Payment</Link>
                 </div>
               ))}
               {pending.map((m) => <div key={m.id} className="m-content-in text-muted-foreground">Suggested: {m.carrierName} · {readableDay(m.statementDate)} · {money(m.amountAppliedCents)}</div>)}
@@ -260,7 +268,7 @@ export function BankMatchDialog({ txn, account, statements, readOnly, step, onCl
                     <li key={c.key}>
                       <div className="m-content-in">
                         <label className="flex cursor-pointer items-start gap-3 rounded-md px-2 py-2 hover:bg-[var(--surface-alt)]">
-                          <input type="checkbox" className="mt-1" checked={picked.has(c.key)} onChange={() => toggle(c.key)} />
+                          <CheckBox className="mt-1" checked={picked.has(c.key)} onChange={() => toggle(c.key)} />
                           <span className="min-w-0 flex-1 text-sm"><span className={c.match ? "font-medium" : ""}>{c.label}</span><span className="block text-xs text-muted-foreground">{c.sub}</span></span>
                           <span className="text-sm tabular-nums text-muted-foreground">{money(c.cents)}</span>
                         </label>

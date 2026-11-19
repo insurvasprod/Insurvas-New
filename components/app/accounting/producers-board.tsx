@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DoneStamp } from "@/components/ui/done-stamp";
 import { Field, control } from "@/components/ui/field";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 import { MoreMenu } from "@/components/ui/more-menu";
@@ -18,6 +19,7 @@ import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { Pager, paginate } from "@/components/ui/pager";
+import { afterStamp } from "@/components/ui/use-done-stamps";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { percent, type Basis, type NegativePolicy, type PaysOn, type ProducerRun } from "@/lib/accounting/producersCore";
 import { OF_LABELS, OWED_LABELS, currentSplit, dateLabel, dayLabel, daysAgo, monthLabel, periodLabel, splitText, today, type Split } from "@/lib/accounting/producerLabels";
@@ -93,6 +95,9 @@ function RunDialog({ queue, names, readOnly, mine = false, onClose }: { queue: R
   const [asking, setAsking] = useState({ on: today(), method: "ach", reference: "" });
   const [voiding, setVoiding] = useState<string | null>(null);
   const [changed, setChanged] = useState(false);
+  // The run just marked paid: "Paid" stamps in for the status chip, and the dialog closes (or steps on) once the check
+  // has drawn (Tier 2 motion, 2026-11-18).
+  const [stamped, setStamped] = useState<string | null>(null);
   const run = queue[at];
   if (!run) return null;
   const stepping = queue.length > 1;
@@ -107,7 +112,8 @@ function RunDialog({ queue, names, readOnly, mine = false, onClose }: { queue: R
       notify.done(done);
       setVoiding(null);
       setChanged(true);
-      if (stepping && !last) { setAt(at + 1); setAsking({ on: today(), method: "ach", reference: "" }); } else close(true);
+      const proceed = () => { if (stepping && !last) { setAt(at + 1); setAsking({ on: today(), method: "ach", reference: "" }); } else close(true); };
+      if (body.action === "paid") { setStamped(run.id); afterStamp(proceed); } else proceed();
     } catch (err) {
       notify.fail(err instanceof Error ? err.message : "That didn't save");
     } finally {
@@ -139,7 +145,7 @@ function RunDialog({ queue, names, readOnly, mine = false, onClose }: { queue: R
         <DialogHeader>
           <DialogTitle>{who ? `${who} · ` : ""}{periodLabel(run.periodStart, run.periodEnd)}{stepping ? <span className="ml-2 text-xs font-normal text-muted-foreground">{at + 1} of {queue.length}</span> : null}</DialogTitle>
           <DialogDescription className="flex flex-wrap items-center gap-2 text-[var(--body)]">
-            <StatusChip tone={RUN_TONE[run.status]}>{runStatus(run)}</StatusChip>
+            {stamped === run.id ? <DoneStamp label="Paid" /> : <StatusChip tone={RUN_TONE[run.status]}>{runStatus(run)}</StatusChip>}
             <span>{figures}</span>
           </DialogDescription>
           {mine ? <p className="text-sm text-muted-foreground">Your balance after this run: {money(run.balanceAfterCents)}</p> : null}
@@ -156,7 +162,7 @@ function RunDialog({ queue, names, readOnly, mine = false, onClose }: { queue: R
           <Button type="button" variant="outline" disabled={busy} onClick={() => close()}>Close</Button>
           {canAct && run.status === "draft" ? (
             <Button type="button" disabled={busy} onClick={() => void act({ action: "publish" }, "Published: the cost is booked")}>{stepping && !last ? <>Publish and next<ChevronRight aria-hidden="true" /></> : "Publish"}</Button>
-          ) : canAct && run.status === "published" && run.netCents > 0 ? (
+          ) : canAct && run.status === "published" && run.netCents > 0 && stamped !== run.id ? (
             <Button type="button" disabled={busy || !asking.on} onClick={() => void act({ action: "paid", paid_on: asking.on, method: asking.method, reference: asking.reference.trim() || null }, "Marked paid")}>Mark {money(run.netCents)} paid</Button>
           ) : stepping && !last ? (
             <Button type="button" disabled={busy} onClick={() => setAt(at + 1)}>Next<ChevronRight aria-hidden="true" /></Button>

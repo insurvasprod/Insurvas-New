@@ -5,7 +5,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { adminsFootnote, roleFootnote, sortStaff, staffSummary, type StaffRow } from "@/lib/adminStaff/present";
 import { AdminUsersTable } from "@/components/admin/admin-users-table";
 import { CreateAdminDialog } from "@/components/admin/create-admin-dialog";
-import { PageHeader } from "@/components/ui/page-header";
+import { PlatformPage } from "@/components/admin/platform/platform-page";
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
 
 export default async function AdminUsersPage() {
@@ -29,24 +29,24 @@ export default async function AdminUsersPage() {
   const onlyOneSuperAdmin = summary.activeSuperAdmins <= 1;
 
   return (
-    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <PageHeader title="Admin users" actions={<CreateAdminDialog />} />
+    <PlatformPage step="admins" info="Insurvas staff who can sign in to this console, and their roles. Super admin only." actions={<CreateAdminDialog />}>
+      <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+        <BoardStatGrid>
+          <BoardStatTile label="Admins" value={summary.total} footnote={adminsFootnote(summary)} />
+          <BoardStatTile
+            label="Super admins"
+            value={summary.superAdmins}
+            footnote={`${summary.activeSuperAdmins} active`}
+            // The figure is a signal only when one more departure would leave nobody who can manage staff.
+            tone={onlyOneSuperAdmin ? "warning" : "default"}
+            title={onlyOneSuperAdmin ? "Only one super admin is active. The last one cannot be deactivated or demoted." : undefined}
+          />
+          <BoardStatTile label="Billing admins" value={summary.billingAdmins} footnote={roleFootnote(summary.billingDeactivated)} />
+          <BoardStatTile label="Support agents" value={summary.supportAgents} footnote={roleFootnote(summary.supportDeactivated)} />
+        </BoardStatGrid>
 
-      <BoardStatGrid>
-        <BoardStatTile label="Admins" value={summary.total} footnote={adminsFootnote(summary)} />
-        <BoardStatTile
-          label="Super admins"
-          value={summary.superAdmins}
-          footnote={`${summary.activeSuperAdmins} active`}
-          // The figure is a signal only when one more departure would leave nobody who can manage staff.
-          tone={onlyOneSuperAdmin ? "warning" : "default"}
-          title={onlyOneSuperAdmin ? "Only one super admin is active. The last one cannot be deactivated or demoted." : undefined}
-        />
-        <BoardStatTile label="Billing admins" value={summary.billingAdmins} footnote={roleFootnote(summary.billingDeactivated)} />
-        <BoardStatTile label="Support agents" value={summary.supportAgents} footnote={roleFootnote(summary.supportDeactivated)} />
-      </BoardStatGrid>
-
-      <AdminUsersTable admins={staff} currentAdminId={admin.id} activeSuperAdmins={summary.activeSuperAdmins} />
-    </div>
+        <AdminUsersTable admins={staff} currentAdminId={admin.id} activeSuperAdmins={summary.activeSuperAdmins} />
+      </div>
+    </PlatformPage>
   );
 }

@@ -9,6 +9,7 @@ import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarCheckbox, Toolba
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Sheet } from "@/components/ui/sheet";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
@@ -51,11 +52,25 @@ const toInt = (value: string) => (value.trim() === "" ? null : Number(value));
  * files arrive. A missing rule is shown missing — with how many in-force policies it leaves without
  * a countdown — and an unverified one is shown unverified.
  */
-export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asOf }: { carriers: CarrierRulesRow[]; plane: "agency" | "platform"; endpoint: string; readOnly: boolean; asOf: string }) {
+export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asOf, editor = "dialog", recordHrefBase, hideToolbar = false, initialGapsOnly = false }: {
+  carriers: CarrierRulesRow[];
+  plane: "agency" | "platform";
+  endpoint: string;
+  readOnly: boolean;
+  asOf: string;
+  /** Admin round 1 (catalog.html screen 9): the console opens a carrier's rules in a right sheet; the default stays a dialog. */
+  editor?: "dialog" | "sheet";
+  /** Admin only: "Finding its files" links to the carrier's record at `${recordHrefBase}${code}`. */
+  recordHrefBase?: string;
+  /** Admin only: one carrier's rules on its record, without the search and filter row. */
+  hideToolbar?: boolean;
+  /** Admin only: start on "Only carriers with a missing rule" (the rail's count lands here). */
+  initialGapsOnly?: boolean;
+}) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [query, setQuery] = useState("");
-  const [gapsOnly, setGapsOnly] = useState(false);
+  const [gapsOnly, setGapsOnly] = useState(initialGapsOnly);
   const [openId, setOpenId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Record<string, string>>>({});
@@ -86,10 +101,146 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
   const draft = (key: string) => drafts[key] ?? {};
   const setDraft = (key: string, field: string, value: string) => setDrafts((current) => ({ ...current, [key]: { ...(current[key] ?? {}), [field]: value } }));
 
+  /** One carrier's editor: its missing rules, each rule, commission and files, the commissions department, finding its files. */
+  const editorBody = (open: CarrierRulesRow) => (
+    <>
+      {/* LA-4.17: each missing rule, with the policies it leaves without a countdown. */}
+      {open.gaps.length > 0 && (
+        <ul role="status" aria-label="Missing rules" className="m-0 grid list-disc gap-1 pl-5 text-sm text-[var(--warning-ink)]">
+          {open.gaps.map((gap) => <li key={gap.sentence}>{gap.sentence}</li>)}
+        </ul>
+      )}
+
+
+      <fieldset disabled={readOnly || busy !== null} className="grid gap-4 text-sm">
+        {RULE_TYPES.map((type) => {
+          const rule = open.rules[type];
+          const key = `${open.carrierId}:${type}`;
+          const d = draft(key);
+          return (
+            <section key={type} className="grid gap-2 border-t border-border pt-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="m-0 text-sm font-semibold text-foreground">{RULE_TYPE_LABELS[type].label}</h3>
+                  <span className={`text-xs ${rule ? "text-muted-foreground" : "text-[var(--warning-ink)]"}`}>
+                    {rule ? `${rule.windowDays ?? "—"} day window${rule.graceDays !== null ? `, ${rule.graceDays} day grace` : ""} · ${rule.scope === "agency" ? "yours" : "platform"} · ${rule.source ? RULE_SOURCE_LABELS[rule.source].toLowerCase() : ""} · ${rule.verified ? "verified" : "unverified"} · from ${fileDay(rule.effectiveFrom)}` : `Not set: no countdown for the ${RULE_TYPE_LABELS[type].window}`}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {rule && !rule.verified && (rule.scope === plane) && <Button type="button" variant="outline" size="sm" onClick={() => void post(`${key}-v`, { action: "verify", rule_id: rule.id }, "Rule marked verified.")}>Mark verified</Button>}
+                  {plane === "agency" && rule?.scope === "agency" && <Button type="button" variant="outline" size="sm" onClick={() => void post(`${key}-c`, { action: "clear_override", carrier_id: open.carrierId, rule_type: type }, "Back to the platform's rule.")}>Use the platform&apos;s rule</Button>}
+                  {!readOnly && editing !== key && <Button type="button" variant="outline" size="sm" onClick={() => setEditing(key)}>{rule ? "Change" : "Set"}</Button>}
+                </div>
+              </div>
+              {editing === key && (<>
+              <div className="grid gap-3 sm:grid-cols-4">
+                <div className="grid gap-1"><Label htmlFor={`${key}-w`}>Window (days)</Label><Input id={`${key}-w`} className="h-9" inputMode="numeric" value={d.window ?? ""} onChange={(e) => setDraft(key, "window", e.target.value.replace(/\D/g, ""))} /></div>
+                <div className="grid gap-1"><Label htmlFor={`${key}-g`}>Grace (days)</Label><Input id={`${key}-g`} className="h-9" inputMode="numeric" value={d.grace ?? ""} onChange={(e) => setDraft(key, "grace", e.target.value.replace(/\D/g, ""))} /></div>
+                <div className="grid gap-1"><Label htmlFor={`${key}-r`}>Redraft attempts</Label><Input id={`${key}-r`} className="h-9" inputMode="numeric" value={d.redrafts ?? ""} onChange={(e) => setDraft(key, "redrafts", e.target.value.replace(/\D/g, ""))} /></div>
+                <div className="grid gap-1"><Label htmlFor={`${key}-i`}>Days between redrafts</Label><Input id={`${key}-i`} className="h-9" inputMode="numeric" value={d.interval ?? ""} onChange={(e) => setDraft(key, "interval", e.target.value.replace(/\D/g, ""))} /></div>
+                <div className="grid gap-1">
+                  <Label htmlFor={`${key}-s`}>Where it comes from</Label>
+                  <select id={`${key}-s`} className={select} value={d.source ?? ""} onChange={(e) => setDraft(key, "source", e.target.value)}>
+                    <option value="">Choose</option>
+                    {RULE_SOURCES.map((source) => <option key={source} value={source}>{RULE_SOURCE_LABELS[source]}</option>)}
+                  </select>
+                </div>
+                <div className="grid gap-1"><Label htmlFor={`${key}-f`}>Applies from</Label><Input id={`${key}-f`} type="date" className="h-9" value={d.from ?? asOf} onChange={(e) => setDraft(key, "from", e.target.value)} /></div>
+                <div className="grid gap-1 sm:col-span-2"><Label htmlFor={`${key}-n`}>Notes</Label><Input id={`${key}-n`} className="h-9" maxLength={1000} value={d.notes ?? ""} onChange={(e) => setDraft(key, "notes", e.target.value)} /></div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
+                <Button type="button" size="sm" disabled={!d.source || !(d.window || d.grace || d.redrafts)} onClick={() => void post(key, { action: "add_rule", carrier_id: open.carrierId, rule_type: type, window_days: toInt(d.window ?? ""), grace_days: toInt(d.grace ?? ""), redraft_attempts: toInt(d.redrafts ?? ""), redraft_interval_days: toInt(d.interval ?? ""), source: d.source as RuleSource, notes: d.notes?.trim() || null, effective_from: d.from ?? asOf }, `${RULE_TYPE_LABELS[type].label} rule saved.`)}>Save rule</Button>
+              </div>
+              </>)}
+            </section>
+          );
+        })}
+
+        <section className="grid gap-2 border-t border-border pt-4">
+          <h3 className="m-0 text-sm font-semibold text-foreground">Commission and files</h3>
+          {(() => {
+            const key = `${open.carrierId}:settings`;
+            const d = draft(key);
+            const s = open.settings;
+            const value = (field: keyof typeof s, fallback: string) => d[field] ?? (s[field].value === null ? fallback : String(s[field].value));
+            return (
+              <>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid gap-1">
+                    <Label htmlFor={`${key}-t`}>Commission triggers</Label>
+                    <select id={`${key}-t`} className={select} value={value("commissionTrigger", "")} onChange={(e) => setDraft(key, "commissionTrigger", e.target.value)}>
+                      <option value="">Not set</option>
+                      {COMMISSION_TRIGGERS.map((trigger) => <option key={trigger} value={trigger}>{TRIGGER_LABEL[trigger]}</option>)}
+                    </select>
+                  </div>
+                  <div className="grid gap-1"><Label htmlFor={`${key}-l`}>Payment lag (days)</Label><Input id={`${key}-l`} className="h-9" inputMode="numeric" value={value("expectedLagDays", "")} onChange={(e) => setDraft(key, "expectedLagDays", e.target.value.replace(/\D/g, ""))} /></div>
+                  <div className="grid gap-1">
+                    <Label htmlFor={`${key}-c`}>Files arrive</Label>
+                    <select id={`${key}-c`} className={select} value={value("expectedCadence", "")} onChange={(e) => setDraft(key, "expectedCadence", e.target.value)}>
+                      <option value="">Not set</option>
+                      {CADENCES.map((cadence) => <option key={cadence} value={cadence}>{CADENCE_LABEL[cadence]}</option>)}
+                    </select>
+                  </div>
+                  <div className="grid gap-1"><Label htmlFor={`${key}-m`}>Minimum payout ($)</Label><Input id={`${key}-m`} className="h-9" inputMode="decimal" value={d.minimumPayoutCents ?? dollars(s.minimumPayoutCents.value)} onChange={(e) => setDraft(key, "minimumPayoutCents", e.target.value.replace(/[^\d.]/g, ""))} /></div>
+                  <div className="grid gap-1"><Label htmlFor={`${key}-o`}>Tolerance ($)</Label><Input id={`${key}-o`} className="h-9" inputMode="decimal" value={d.toleranceCents ?? dollars(s.toleranceCents.value)} onChange={(e) => setDraft(key, "toleranceCents", e.target.value.replace(/[^\d.]/g, ""))} /></div>
+                  <div className="grid gap-1">
+                    <Label htmlFor={`${key}-p`}>Statement format</Label>
+                    <select id={`${key}-p`} className={select} value={value("statementFormat", "")} onChange={(e) => setDraft(key, "statementFormat", e.target.value)}>
+                      <option value="">Not set</option>
+                      {STATEMENT_FORMATS.map((format) => <option key={format} value={format}>{FORMAT_LABEL[format]}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <Button type="button" size="sm" onClick={() => void post(key, {
+                    action: "save_settings",
+                    carrier_id: open.carrierId,
+                    commission_trigger: value("commissionTrigger", "") || null,
+                    expected_lag_days: toInt(value("expectedLagDays", "")),
+                    minimum_payout_cents: toCents(d.minimumPayoutCents ?? dollars(s.minimumPayoutCents.value)),
+                    tolerance_cents: toCents(d.toleranceCents ?? dollars(s.toleranceCents.value)),
+                    expected_cadence: value("expectedCadence", "") || null,
+                    statement_format: value("statementFormat", "") || null,
+                  }, "Settings saved.")}>Save settings</Button>
+                </div>
+              </>
+            );
+          })()}
+        </section>
+
+        <section className="grid gap-2 border-t border-border pt-4 text-sm">
+          <h3 className="m-0 text-sm font-semibold text-foreground">Commissions department</h3>
+          {plane === "agency"
+            ? <CommissionsContactForm key={open.carrierId} carrierId={open.carrierId} carrierName={open.carrierName} saved={open.commissionsContact} onSaved={() => router.refresh()} />
+            : <p className="m-0 text-muted-foreground">Set by each agency, for its dispute letters.</p>}
+        </section>
+
+        <section className="grid gap-1 border-t border-border pt-4 text-sm">
+          <h3 className="m-0 text-sm font-semibold text-foreground">Finding its files</h3>
+          {open.guidance ? (
+            <dl className="m-0 grid gap-1 sm:grid-cols-[140px_1fr]">
+              {open.guidance.whereInPortal && <><dt className="text-muted-foreground">In the portal</dt><dd className="m-0 whitespace-pre-line">{open.guidance.whereInPortal}</dd></>}
+              {open.guidance.reportName && <><dt className="text-muted-foreground">Report</dt><dd className="m-0">{open.guidance.reportName}</dd></>}
+              {open.guidance.formatHint && <><dt className="text-muted-foreground">Format</dt><dd className="m-0">{open.guidance.formatHint}</dd></>}
+              {open.guidance.notes && <><dt className="text-muted-foreground">Notes</dt><dd className="m-0 whitespace-pre-line">{open.guidance.notes}</dd></>}
+            </dl>
+          ) : <p className="m-0 text-muted-foreground">No portal guidance written for this carrier yet.</p>}
+          <p className="m-0">Layout map: {open.elsewhere.layoutKey ? <span className="font-mono text-xs">{open.elsewhere.layoutKey}</span> : "none assigned"}</p>
+          <p className="m-0">
+            Portal: {open.elsewhere.portalOrigin ?? "not set"} · Policy number pattern: {open.elsewhere.referencePattern ? <span className="font-mono text-xs">{open.elsewhere.referencePattern}</span> : "not set"}
+            {plane === "agency" && <> · <Link href="/app/settings#carriers" className="font-semibold underline">Open the carrier</Link></>}
+                {recordHrefBase && <> · <Link href={`${recordHrefBase}${encodeURIComponent(open.carrierCode)}`} className="font-semibold underline">Open the carrier&apos;s record</Link></>}
+          </p>
+        </section>
+      </fieldset>
+    </>
+  );
+
   return (
     <>
       <TableCard
-        toolbar={
+        toolbar={hideToolbar ? undefined :
           <DataToolbar actions={<>
             {(query.trim() || gapsOnly) && <ClearFiltersButton onClick={() => { setQuery(""); setGapsOnly(false); setPage(1); }} />}
             <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
@@ -98,7 +249,7 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
             <ToolbarCheckbox checked={gapsOnly} onChange={(value) => { setGapsOnly(value); setPage(1); }} label="Only carriers with a missing rule" />
           </DataToolbar>
         }
-        footer={visible.length ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="carriers" onPage={setPage} /> : undefined}
+        footer={visible.length && !hideToolbar ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="carriers" onPage={setPage} /> : undefined}
       >
         {carriers.length === 0 ? (
           <EmptyState title="No carriers in the library" hint="Carriers come from the platform's carrier library." />
@@ -134,151 +285,34 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
         )}
       </TableCard>
 
-      <Dialog open={Boolean(open)} onOpenChange={(next) => { if (!next && !busy) setOpenId(null); }}>
-        <DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto sm:max-w-3xl">
-          {open && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="text-base">{open.carrierName}</DialogTitle>
-                <DialogDescription>{plane === "agency" ? "Your rules override the platform's. A change applies from its date; past countdowns keep the rule they used." : "The platform's defaults, for every agency without its own rule."}</DialogDescription>
-              </DialogHeader>
-              {/* LA-4.17: each missing rule, with the policies it leaves without a countdown. */}
-              {open.gaps.length > 0 && (
-                <ul role="status" className="m-0 grid list-none gap-1 rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">
-                  {open.gaps.map((gap) => <li key={gap.sentence}>{gap.sentence}</li>)}
-                </ul>
-              )}
-
-
-              <fieldset disabled={readOnly || busy !== null} className="grid gap-4 text-sm">
-                {RULE_TYPES.map((type) => {
-                  const rule = open.rules[type];
-                  const key = `${open.carrierId}:${type}`;
-                  const d = draft(key);
-                  return (
-                    <section key={type} className="grid gap-2 border-t border-border pt-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <h3 className="m-0 text-sm font-semibold text-foreground">{RULE_TYPE_LABELS[type].label}</h3>
-                          <span className={`text-xs ${rule ? "text-muted-foreground" : "text-[var(--warning-ink)]"}`}>
-                            {rule ? `${rule.windowDays ?? "—"} day window${rule.graceDays !== null ? `, ${rule.graceDays} day grace` : ""} · ${rule.scope === "agency" ? "yours" : "platform"} · ${rule.source ? RULE_SOURCE_LABELS[rule.source].toLowerCase() : ""} · ${rule.verified ? "verified" : "unverified"} · from ${fileDay(rule.effectiveFrom)}` : `Not set: no countdown for the ${RULE_TYPE_LABELS[type].window}`}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {rule && !rule.verified && (rule.scope === plane) && <Button type="button" variant="outline" size="sm" onClick={() => void post(`${key}-v`, { action: "verify", rule_id: rule.id }, "Rule marked verified.")}>Mark verified</Button>}
-                          {plane === "agency" && rule?.scope === "agency" && <Button type="button" variant="outline" size="sm" onClick={() => void post(`${key}-c`, { action: "clear_override", carrier_id: open.carrierId, rule_type: type }, "Back to the platform's rule.")}>Use the platform&apos;s rule</Button>}
-                          {!readOnly && editing !== key && <Button type="button" variant="outline" size="sm" onClick={() => setEditing(key)}>{rule ? "Change" : "Set"}</Button>}
-                        </div>
-                      </div>
-                      {editing === key && (<>
-                      <div className="grid gap-3 sm:grid-cols-4">
-                        <div className="grid gap-1"><Label htmlFor={`${key}-w`}>Window (days)</Label><Input id={`${key}-w`} className="h-9" inputMode="numeric" value={d.window ?? ""} onChange={(e) => setDraft(key, "window", e.target.value.replace(/\D/g, ""))} /></div>
-                        <div className="grid gap-1"><Label htmlFor={`${key}-g`}>Grace (days)</Label><Input id={`${key}-g`} className="h-9" inputMode="numeric" value={d.grace ?? ""} onChange={(e) => setDraft(key, "grace", e.target.value.replace(/\D/g, ""))} /></div>
-                        <div className="grid gap-1"><Label htmlFor={`${key}-r`}>Redraft attempts</Label><Input id={`${key}-r`} className="h-9" inputMode="numeric" value={d.redrafts ?? ""} onChange={(e) => setDraft(key, "redrafts", e.target.value.replace(/\D/g, ""))} /></div>
-                        <div className="grid gap-1"><Label htmlFor={`${key}-i`}>Days between redrafts</Label><Input id={`${key}-i`} className="h-9" inputMode="numeric" value={d.interval ?? ""} onChange={(e) => setDraft(key, "interval", e.target.value.replace(/\D/g, ""))} /></div>
-                        <div className="grid gap-1">
-                          <Label htmlFor={`${key}-s`}>Where it comes from</Label>
-                          <select id={`${key}-s`} className={select} value={d.source ?? ""} onChange={(e) => setDraft(key, "source", e.target.value)}>
-                            <option value="">Choose</option>
-                            {RULE_SOURCES.map((source) => <option key={source} value={source}>{RULE_SOURCE_LABELS[source]}</option>)}
-                          </select>
-                        </div>
-                        <div className="grid gap-1"><Label htmlFor={`${key}-f`}>Applies from</Label><Input id={`${key}-f`} type="date" className="h-9" value={d.from ?? asOf} onChange={(e) => setDraft(key, "from", e.target.value)} /></div>
-                        <div className="grid gap-1 sm:col-span-2"><Label htmlFor={`${key}-n`}>Notes</Label><Input id={`${key}-n`} className="h-9" maxLength={1000} value={d.notes ?? ""} onChange={(e) => setDraft(key, "notes", e.target.value)} /></div>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button type="button" variant="outline" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
-                        <Button type="button" size="sm" disabled={!d.source || !(d.window || d.grace || d.redrafts)} onClick={() => void post(key, { action: "add_rule", carrier_id: open.carrierId, rule_type: type, window_days: toInt(d.window ?? ""), grace_days: toInt(d.grace ?? ""), redraft_attempts: toInt(d.redrafts ?? ""), redraft_interval_days: toInt(d.interval ?? ""), source: d.source as RuleSource, notes: d.notes?.trim() || null, effective_from: d.from ?? asOf }, `${RULE_TYPE_LABELS[type].label} rule saved.`)}>Save rule</Button>
-                      </div>
-                      </>)}
-                    </section>
-                  );
-                })}
-
-                <section className="grid gap-2 border-t border-border pt-4">
-                  <h3 className="m-0 text-sm font-semibold text-foreground">Commission and files</h3>
-                  {(() => {
-                    const key = `${open.carrierId}:settings`;
-                    const d = draft(key);
-                    const s = open.settings;
-                    const value = (field: keyof typeof s, fallback: string) => d[field] ?? (s[field].value === null ? fallback : String(s[field].value));
-                    return (
-                      <>
-                        <div className="grid gap-3 sm:grid-cols-3">
-                          <div className="grid gap-1">
-                            <Label htmlFor={`${key}-t`}>Commission triggers</Label>
-                            <select id={`${key}-t`} className={select} value={value("commissionTrigger", "")} onChange={(e) => setDraft(key, "commissionTrigger", e.target.value)}>
-                              <option value="">Not set</option>
-                              {COMMISSION_TRIGGERS.map((trigger) => <option key={trigger} value={trigger}>{TRIGGER_LABEL[trigger]}</option>)}
-                            </select>
-                          </div>
-                          <div className="grid gap-1"><Label htmlFor={`${key}-l`}>Payment lag (days)</Label><Input id={`${key}-l`} className="h-9" inputMode="numeric" value={value("expectedLagDays", "")} onChange={(e) => setDraft(key, "expectedLagDays", e.target.value.replace(/\D/g, ""))} /></div>
-                          <div className="grid gap-1">
-                            <Label htmlFor={`${key}-c`}>Files arrive</Label>
-                            <select id={`${key}-c`} className={select} value={value("expectedCadence", "")} onChange={(e) => setDraft(key, "expectedCadence", e.target.value)}>
-                              <option value="">Not set</option>
-                              {CADENCES.map((cadence) => <option key={cadence} value={cadence}>{CADENCE_LABEL[cadence]}</option>)}
-                            </select>
-                          </div>
-                          <div className="grid gap-1"><Label htmlFor={`${key}-m`}>Minimum payout ($)</Label><Input id={`${key}-m`} className="h-9" inputMode="decimal" value={d.minimumPayoutCents ?? dollars(s.minimumPayoutCents.value)} onChange={(e) => setDraft(key, "minimumPayoutCents", e.target.value.replace(/[^\d.]/g, ""))} /></div>
-                          <div className="grid gap-1"><Label htmlFor={`${key}-o`}>Tolerance ($)</Label><Input id={`${key}-o`} className="h-9" inputMode="decimal" value={d.toleranceCents ?? dollars(s.toleranceCents.value)} onChange={(e) => setDraft(key, "toleranceCents", e.target.value.replace(/[^\d.]/g, ""))} /></div>
-                          <div className="grid gap-1">
-                            <Label htmlFor={`${key}-p`}>Statement format</Label>
-                            <select id={`${key}-p`} className={select} value={value("statementFormat", "")} onChange={(e) => setDraft(key, "statementFormat", e.target.value)}>
-                              <option value="">Not set</option>
-                              {STATEMENT_FORMATS.map((format) => <option key={format} value={format}>{FORMAT_LABEL[format]}</option>)}
-                            </select>
-                          </div>
-                        </div>
-                        <div>
-                          <Button type="button" size="sm" onClick={() => void post(key, {
-                            action: "save_settings",
-                            carrier_id: open.carrierId,
-                            commission_trigger: value("commissionTrigger", "") || null,
-                            expected_lag_days: toInt(value("expectedLagDays", "")),
-                            minimum_payout_cents: toCents(d.minimumPayoutCents ?? dollars(s.minimumPayoutCents.value)),
-                            tolerance_cents: toCents(d.toleranceCents ?? dollars(s.toleranceCents.value)),
-                            expected_cadence: value("expectedCadence", "") || null,
-                            statement_format: value("statementFormat", "") || null,
-                          }, "Settings saved.")}>Save settings</Button>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </section>
-
-                <section className="grid gap-2 border-t border-border pt-4 text-sm">
-                  <h3 className="m-0 text-sm font-semibold text-foreground">Commissions department</h3>
-                  {plane === "agency"
-                    ? <CommissionsContactForm key={open.carrierId} carrierId={open.carrierId} carrierName={open.carrierName} saved={open.commissionsContact} onSaved={() => router.refresh()} />
-                    : <p className="m-0 text-muted-foreground">Set by each agency, for its dispute letters.</p>}
-                </section>
-
-                <section className="grid gap-1 border-t border-border pt-4 text-sm">
-                  <h3 className="m-0 text-sm font-semibold text-foreground">Finding its files</h3>
-                  {open.guidance ? (
-                    <dl className="m-0 grid gap-1 sm:grid-cols-[140px_1fr]">
-                      {open.guidance.whereInPortal && <><dt className="text-muted-foreground">In the portal</dt><dd className="m-0 whitespace-pre-line">{open.guidance.whereInPortal}</dd></>}
-                      {open.guidance.reportName && <><dt className="text-muted-foreground">Report</dt><dd className="m-0">{open.guidance.reportName}</dd></>}
-                      {open.guidance.formatHint && <><dt className="text-muted-foreground">Format</dt><dd className="m-0">{open.guidance.formatHint}</dd></>}
-                      {open.guidance.notes && <><dt className="text-muted-foreground">Notes</dt><dd className="m-0 whitespace-pre-line">{open.guidance.notes}</dd></>}
-                    </dl>
-                  ) : <p className="m-0 text-muted-foreground">No portal guidance written for this carrier yet.</p>}
-                  <p className="m-0">Layout map: {open.elsewhere.layoutKey ? <span className="font-mono text-xs">{open.elsewhere.layoutKey}</span> : "none assigned"}</p>
-                  <p className="m-0">
-                    Portal: {open.elsewhere.portalOrigin ?? "not set"} · Policy number pattern: {open.elsewhere.referencePattern ? <span className="font-mono text-xs">{open.elsewhere.referencePattern}</span> : "not set"}
-                    {plane === "agency" && <> · <Link href="/app/settings#carriers" className="font-semibold underline">Open the carrier</Link></>}
-                  </p>
-                </section>
-              </fieldset>
-
-              <DialogFooter>
-                <Button type="button" variant="outline" disabled={busy !== null} onClick={() => setOpenId(null)}>Close</Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      {open && editor === "sheet" ? (
+        <Sheet
+          title={open.carrierName}
+          subtitle={plane === "agency" ? "Your rules override the platform's. A change applies from its date; past countdowns keep the rule they used." : "The platform's defaults, for every agency without its own rule."}
+          onClose={() => { if (!busy) setOpenId(null); }}
+          className="lg:w-[680px]"
+          footer={<><span className="flex-1" /><Button type="button" variant="outline" disabled={busy !== null} onClick={() => setOpenId(null)}>Close</Button></>}
+        >
+          {editorBody(open)}
+        </Sheet>
+      ) : editor === "dialog" ? (
+        <Dialog open={Boolean(open)} onOpenChange={(next) => { if (!next && !busy) setOpenId(null); }}>
+          <DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto sm:max-w-3xl">
+            {open && (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="text-base">{open.carrierName}</DialogTitle>
+                  <DialogDescription>{plane === "agency" ? "Your rules override the platform's. A change applies from its date; past countdowns keep the rule they used." : "The platform's defaults, for every agency without its own rule."}</DialogDescription>
+                </DialogHeader>
+                {editorBody(open)}
+                <DialogFooter>
+                  <Button type="button" variant="outline" disabled={busy !== null} onClick={() => setOpenId(null)}>Close</Button>
+                </DialogFooter>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </>
   );
 }

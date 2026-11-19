@@ -5,6 +5,8 @@ import { fetchAcceptanceStats, fetchUserAcceptances } from "@/lib/legal/queries"
 import { countEligibleUsers, fetchAdminLegalVersions, fetchLegalDrafts } from "@/lib/legal/admin";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { LegalScreen } from "@/components/admin/legal-screen";
+import { LegalDocTabs } from "@/components/admin/legal/doc-tabs";
+import { PlatformPage } from "@/components/admin/platform/platform-page";
 import { LEGAL_DOC_LABELS, LEGAL_DOC_TYPES, type LegalDocType } from "@/lib/legal/constants";
 
 export default async function LegalPage({
@@ -60,19 +62,25 @@ export default async function LegalPage({
     };
   }
 
-  // The header (title, description and the Terms / Privacy / DPA switch in its actions slot) is
-  // drawn by LegalScreen, because the switch is client state shared with the rest of the screen.
+  // Inside the Platform frame (admin round 1, 2026-11-18). The Terms · Privacy · DPA bar sits on the title line and
+  // switches `?doc=` in place; LegalScreen reads the same parameter.
   return (
-    <LegalScreen
-      canPublish={admin.role === "super_admin"}
-      initialDoc={initialDoc}
-      today={new Date().toISOString().slice(0, 10)}
-      stats={stats.map((s) => ({ ...s, label: LEGAL_DOC_LABELS[s.doc_type as LegalDocType] }))}
-      versions={versions}
-      drafts={draftRead.drafts}
-      draftsSupported={draftRead.supported}
-      eligibleUsers={eligibleUsers}
-      lookup={lookup}
-    />
+    <PlatformPage
+      step="legal"
+      info="The Terms, Privacy policy and DPA customers accept, every version of each, and any user's acceptance record. Publishing is super admin only."
+      tabs={<LegalDocTabs initialDoc={initialDoc} />}
+    >
+      <LegalScreen
+        canPublish={admin.role === "super_admin"}
+        initialDoc={initialDoc}
+        today={new Date().toISOString().slice(0, 10)}
+        stats={stats.map((s) => ({ ...s, label: LEGAL_DOC_LABELS[s.doc_type as LegalDocType] }))}
+        versions={versions}
+        drafts={draftRead.drafts}
+        draftsSupported={draftRead.supported}
+        eligibleUsers={eligibleUsers}
+        lookup={lookup}
+      />
+    </PlatformPage>
   );
 }

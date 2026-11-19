@@ -1,12 +1,14 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Activity, Award, BadgeDollarSign, Brain, ChartColumn, ChartLine, ChartNoAxesCombined, ChevronsLeft, ChevronsRight, Gauge, Network, UserRoundCheck, type LucideIcon } from "lucide-react";
 
 import { useMenuSections } from "@/components/ui/page-trail";
+import { CountBadge } from "@/components/ui/count-badge";
 import { IntentLink } from "@/components/ui/nav-pending";
 import { rememberReports } from "@/components/app/step-frame/frame-memory";
+import { RailCornerDot, RailHighlight, useRailGlide } from "@/components/app/step-frame/rail-glide";
 import { REPORTS_RAIL_COOKIE, REPORTS_VIEWS, sharedPeriod, type ReportsView } from "@/lib/reports/views";
 import { cn } from "@/lib/utils";
 import { peek, readResource, seed } from "@/lib/client/resource-cache";
@@ -57,6 +59,9 @@ export function ReportsRail({ view, initialCollapsed = false }: { view: ReportsV
 
   // Remembered for the shell's loading state, which redraws this menu while the next view loads (frame-memory.ts).
   useEffect(() => { rememberReports(collapsed); }, [collapsed]);
+  // The open view's highlight glides from view to view (rail-glide.tsx).
+  const list = useRef<HTMLUListElement | null>(null);
+  const pill = useRailGlide(list, "Reports");
 
   const toggle = () => {
     const next = !collapsed;
@@ -66,10 +71,11 @@ export function ReportsRail({ view, initialCollapsed = false }: { view: ReportsV
 
   return (
     <nav aria-label="Reports" data-collapsed={collapsed ? "" : undefined} className={cn(
-      "m-glass rounded-xl border border-[var(--border)] p-3 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:transition-[width] lg:duration-300 lg:ease-[cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-none",
+      "m-glass rounded-xl border border-[var(--border)] p-3 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:transition-[width] lg:duration-[var(--t-panel)] lg:ease-[var(--e-out)]",
       collapsed ? "lg:w-[72px] lg:px-2" : "lg:w-[248px]",
     )}>
-      <ul className="m-0 flex list-none gap-1 overflow-x-auto p-0 lg:flex-col lg:overflow-visible">
+      <ul ref={list} data-rail-track="" className="relative isolate m-0 flex list-none gap-1 overflow-x-auto p-0 [scrollbar-width:none]! lg:flex-col lg:overflow-visible [&::-webkit-scrollbar]:hidden">
+        <RailHighlight pill={pill} />
         {views.map((item, index) => {
           const on = item.key === view;
           // Down the rail slides forward, up it slides back (§ Motion).
@@ -86,22 +92,23 @@ export function ReportsRail({ view, initialCollapsed = false }: { view: ReportsV
                 aria-current={on ? "page" : undefined}
                 title={collapsed ? `${item.label} · ${sub}` : undefined}
                 className={cn(
-                  "group relative flex items-center gap-3 rounded-xl outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-[var(--primary)]",
+                  "group relative flex items-center gap-3 rounded-xl outline-none transition-colors duration-[var(--t-panel)] ease-[var(--e)] focus-visible:ring-2 focus-visible:ring-[var(--primary)]",
                   collapsed ? "justify-center px-1 py-2" : "px-3 py-2.5",
-                  on ? "bg-[var(--primary-soft)] ring-1 ring-inset ring-[color-mix(in_srgb,var(--primary)_50%,transparent)]" : "hover:bg-[color-mix(in_srgb,var(--ink)_5%,transparent)]",
+                  // The open step's ground is the gliding pill once it is measured; until then (the first paint) its own.
+                  on ? !pill && "bg-[var(--primary-soft)] ring-1 ring-inset ring-[color-mix(in_srgb,var(--primary)_50%,transparent)]" : "hover:bg-[color-mix(in_srgb,var(--ink)_5%,transparent)]",
                 )}
               >
                 <span aria-hidden="true" className={cn(
-                  "inline-grid size-[34px] shrink-0 place-items-center rounded-[10px] transition-colors duration-200",
+                  "inline-grid size-[34px] shrink-0 place-items-center rounded-[10px] transition-colors duration-[var(--t-panel)] ease-[var(--e)]",
                   on ? "bg-[var(--primary)] text-[var(--on-primary)]" : "bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] text-[var(--ink)]",
                 )}><Icon className="size-[18px]" strokeWidth={1.8} /></span>
                 <span className={cn("min-w-0 flex-1", collapsed && "lg:sr-only")}>
                   <span className="block whitespace-nowrap text-sm font-semibold text-[var(--ink)]">{item.label}</span>
                 </span>
-                {waiting > 0 ? (collapsed
-                  ? <span aria-hidden="true" className="absolute top-1.5 right-2 hidden size-2.5 rounded-full bg-[var(--warning)] ring-2 ring-[var(--canvas)] lg:block" />
-                  : <span className="inline-grid h-5 min-w-[22px] shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--warning)_18%,transparent)] px-[7px] text-xs font-bold text-[var(--warning-ink)] tabular-nums">{waiting.toLocaleString("en-US")}</span>
-                ) : null}
+                {collapsed
+                  ? <RailCornerDot on={waiting > 0} />
+                  // The count rolls when it changes, pops in when it appears and shrinks away at 0 (CountBadge).
+                  : <CountBadge value={waiting} tone="warning" className="shrink-0" />}
               </IntentLink>
             </li>
           );
@@ -115,7 +122,7 @@ export function ReportsRail({ view, initialCollapsed = false }: { view: ReportsV
         aria-expanded={!collapsed}
         aria-label={collapsed ? "Show the Reports menu" : "Collapse the Reports menu"}
         title={collapsed ? "Show labels" : "Collapse"}
-        className={cn("mt-2 hidden size-8 shrink-0 place-items-center rounded-lg text-[var(--ink)] outline-none transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] focus-visible:ring-2 focus-visible:ring-[var(--primary)] lg:grid", collapsed ? "mx-auto" : "ml-auto", "lg:mt-auto")}
+        className={cn("mt-2 hidden size-8 shrink-0 place-items-center rounded-lg text-[var(--ink)] outline-none transition-colors duration-[var(--t-micro)] ease-[var(--e)] hover:bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] focus-visible:ring-2 focus-visible:ring-[var(--primary)] lg:grid", collapsed ? "mx-auto" : "ml-auto", "lg:mt-auto")}
       >
         {collapsed ? <ChevronsRight className="size-4" aria-hidden="true" /> : <ChevronsLeft className="size-4" aria-hidden="true" />}
       </button>

@@ -1,0 +1,218 @@
+[
+  {
+    "src": "/docs/shots/settings/retention/1.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Ladder tab",
+    "focus": {
+      "x": 203,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/retention/2.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click First payment missed",
+    "focus": {
+      "x": 264,
+      "y": 0,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/retention/3.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Choose On or Off under Counts",
+    "focus": {
+      "x": 720,
+      "y": 25,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/retention/4.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set A deadline is urgent within",
+    "focus": {
+      "x": 264,
+      "y": 165,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/retention/5.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set Unreachable after",
+    "focus": {
+      "x": 264,
+      "y": 165,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/retention/6.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Who works it tab",
+    "focus": {
+      "x": 273,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/retention/7.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Pick who owns each queue",
+    "focus": {
+      "x": 223,
+      "y": 0,
+      "w": 1217,
+      "h": 761
+    }
+  },
+  {
+    "src": "/docs/shots/settings/retention/8.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set Share work between reps",
+    "focus": {
+      "x": 223,
+      "y": 29,
+      "w": 1217,
+      "h": 761
+    }
+  },
+  {
+    "src": "/docs/shots/settings/retention/9.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Requests tab",
+    "focus": {
+      "x": 411,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/retention/10.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set Fail a servicing request",
+    "focus": {
+      "x": 258,
+      "y": 0,
+      "w": 1182,
+      "h": 739
+    }
+  },
+  {
+    "src": "/docs/shots/settings/retention/11.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Win-back tab",
+    "focus": {
+      "x": 496,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/retention/12.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set the wait for each lapse reason",
+    "focus": {
+      "x": 264,
+      "y": 20,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/retention/13.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Radar tab",
+    "focus": {
+      "x": 584,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/retention/14.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Choose what The save queue takes",
+    "focus": {
+      "x": 264,
+      "y": 0,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/retention/15.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check the Risk bands",
+    "focus": {
+      "x": 264,
+      "y": 0,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/retention/16.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Look over the Scoring weights",
+    "focus": {
+      "x": 264,
+      "y": 0,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/retention/17.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set Queue: rest, most shown, sort",
+    "focus": {
+      "x": 264,
+      "y": 42,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/retention/18.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Decide on the Holdout",
+    "focus": {
+      "x": 264,
+      "y": 130,
+      "w": 1176,
+      "h": 735
+    }
+  }
+]

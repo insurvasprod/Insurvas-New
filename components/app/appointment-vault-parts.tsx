@@ -29,6 +29,7 @@ import {
   type LicenseRow,
 } from "@/lib/appointments/service-types";
 
+import { CheckBox } from "@/components/ui/check-box";
 export const today = new Date().toISOString().slice(0, 10);
 export const keyFor = (carrierId: string, state: string) => `${carrierId}:${state}`;
 const STATE_NAME = new Map<string, string>(US_STATES.map(([code, name]) => [code, name]));
@@ -158,12 +159,10 @@ export function AppointmentGrid({
                         <span className="sr-only">
                           {carrier.name} in {name}
                         </span>
-                        <input
-                          type="checkbox"
+                        <CheckBox
                           checked={selected.has(key)}
                           disabled={!canEdit}
                           onChange={(event) => toggle(key, event.target.checked)}
-                          className="size-4 accent-[var(--brand-500)]"
                         />
                       </label>
                     </td>
@@ -184,13 +183,11 @@ export function AppointmentGrid({
                 const key = keyFor(carrier.id, code);
                 return (
                   <label key={code} className="flex min-w-0 items-center gap-2 rounded-[8px] border border-[var(--border)] px-2.5 py-2 text-sm text-[var(--body)]">
-                    <input
-                      type="checkbox"
+                    <CheckBox
                       checked={selected.has(key)}
                       disabled={!canEdit}
                       aria-label={`${carrier.name} in ${name}`}
                       onChange={(event) => toggle(key, event.target.checked)}
-                      className="size-4 shrink-0 accent-[var(--brand-500)]"
                     />
                     <span className="truncate" title={name}>{code}</span>
                   </label>
@@ -378,10 +375,8 @@ export function LicenceDialog({
               const id = `license-line-${line.replace(/\W+/g, "-").toLowerCase()}`;
               return (
                 <label key={line} htmlFor={id} className="inline-flex items-center gap-2 rounded-[8px] border border-[var(--border)] px-3 py-2 text-sm text-[var(--body)]">
-                  <input
+                  <CheckBox
                     id={id}
-                    type="checkbox"
-                    className="size-4 accent-[var(--brand-500)]"
                     checked={form.lines.includes(line)}
                     onChange={(event) =>
                       setForm((current) => ({

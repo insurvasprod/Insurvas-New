@@ -3,11 +3,14 @@
 import { useEffect, useRef, type ClipboardEvent, type KeyboardEvent } from "react";
 
 import { cn } from "@/lib/utils";
+import { useDenyShake } from "@/components/ui/use-deny-shake";
 
 /**
  * Six boxes for a six-digit code. Typing moves to the next box, Backspace to the previous one, and a
  * pasted code ("123 456" included) fills every box at once. `onComplete` fires when the sixth digit
  * lands, so the code signs in without a button press (the button stays for anyone who wants it).
+ * A full code the page clears again was refused: the boxes shake once (`m-deny-now`, Wave B 2026-11-18) as they
+ * empty, and the first box takes the keyboard as before.
  */
 export function OtpInput({
   value,
@@ -28,7 +31,12 @@ export function OtpInput({
   // Keystrokes can arrive faster than the parent re-renders with the new value, so each one reads
   // the latest code from here rather than from the `value` its render saw.
   const latest = useRef(value);
-  useEffect(() => { latest.current = value; }, [value]);
+  const { deny, className: shake } = useDenyShake();
+  useEffect(() => {
+    // Only the page empties a full code (a keystroke goes through commit, which moves `latest` first): a wrong code.
+    if (value === "" && latest.current.length === 6) deny();
+    latest.current = value;
+  }, [value, deny]);
   const digits = Array.from({ length: 6 }, (_, index) => value[index] ?? "");
   const current = () => Array.from({ length: 6 }, (_, index) => latest.current[index] ?? "");
 
@@ -80,7 +88,7 @@ export function OtpInput({
   }
 
   return (
-    <div className="flex justify-center gap-2" role="group" aria-label="Six-digit code">
+    <div className={cn("flex justify-center gap-2", shake)} role="group" aria-label="Six-digit code">
       {digits.map((digit, index) => (
         <input
           key={index}

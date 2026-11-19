@@ -22,7 +22,9 @@ export default async function VendorPage({ params, searchParams }: { params: Pro
   if (!("owner" === guard.role || "producer" === guard.role))
     return <RoleGateNotice featureLabel="Vendors & campaigns" detail="Only owners and producers can see lead spend and vendor costs." />;
   if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Vendors & campaigns" detail="In an agency, the owner and admins handle vendors and lead spend." />;
-  const [{ vendorId }, { tab }] = await Promise.all([params, searchParams]);
+  // The address only: this page reads nothing before its frame (the vendor workspace loads its own data).
+  const { vendorId } = await params;
+  const { tab } = await searchParams;
   if (!UUID.test(vendorId)) notFound();
   const initialVendorTab = TABS.find((item) => item === tab) ?? "campaigns";
   return (

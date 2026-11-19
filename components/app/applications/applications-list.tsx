@@ -341,6 +341,7 @@ export function ApplicationsList({ rows: initialRows, sample = false, timeZone, 
                 count={selection.count}
                 noun={["application", "applications"]}
                 onClear={selection.clear}
+                selectAll={<SelectAllCheckbox selection={selection} ids={pageRows.map(rowId)} label="Select every application on this page" />}
                 actions={<Button type="button" variant="outline" onClick={() => exportCsv(shown.filter((row) => selection.selected.has(rowId(row))), "applications-selected.csv")}><Download aria-hidden="true" />Export selected</Button>}
               />
               <table className="portal-lead-table w-full min-w-[1160px] text-left text-sm">

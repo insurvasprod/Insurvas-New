@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit/log";
 import { getEntitlement } from "@/lib/entitlements/get";
-import { requirePartner } from "@/lib/partnerAuth/requirePartner";
+import { partnerMayOpen, partnerPageRefused, requirePartner } from "@/lib/partnerAuth/requirePartner";
 import { partnerUserActionSchema } from "@/lib/partnerAuth/schemas";
 import { setPartnerUserStatus } from "@/lib/partnerUsers/service";
 
@@ -11,6 +11,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   const auth = await requirePartner(["partner_admin"]);
   if (auth instanceof NextResponse) return auth;
+  // Partner type (lib/partnerAuth/portalAccess.ts): refused on the server, not only hidden from the menu.
+  if (!(await partnerMayOpen(auth.context, "team"))) return partnerPageRefused();
   const { userId } = await params;
   if (!UUID.test(userId)) return NextResponse.json({ error: "Partner user not found" }, { status: 404 });
   const parsed = partnerUserActionSchema.safeParse(await request.json().catch(() => null));

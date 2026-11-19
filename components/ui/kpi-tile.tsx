@@ -2,7 +2,9 @@ import type { ComponentType, ReactNode, SVGProps } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
 
 import { SparkLine } from "@/components/ui/chart";
+import { CountUp } from "@/components/ui/count-up";
 import { InfoTip } from "@/components/ui/info-tip";
+import { ROLL_MS } from "@/components/ui/motion-tokens";
 import { cn } from "@/lib/utils";
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -60,7 +62,11 @@ export function KpiTile({
         <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--primary-soft)] text-[var(--accent-ink)]" aria-hidden="true"><Glyph className="size-4" /></span>
       </div>
       <div className="mt-1 flex items-center gap-4">
-        <div className={cn("shrink-0 font-[family-name:var(--font-display)] text-[2rem] font-semibold leading-none tracking-[-0.035em] tabular-nums", figureTone === "warn" ? "text-[var(--warning-ink)]" : "text-foreground")}>{value}</div>
+        <div className={cn("shrink-0 font-[family-name:var(--font-display)] text-[2rem] font-semibold leading-none tracking-[-0.035em] tabular-nums", figureTone === "warn" ? "text-[var(--warning-ink)]" : "text-foreground")}>
+          {/* A plain number or numeric string rolls to its new value when it changes after the page is up, never on the
+              first paint (CountUp `changesOnly`, Tier 1 motion Wave A 2026-11-17); anything richer renders as given. */}
+          {typeof value === "number" || (typeof value === "string" && /\d/.test(value)) ? <CountUp text={String(value)} changesOnly duration={ROLL_MS} /> : value}
+        </div>
         {series && series.length > 1 ? <SparkLine className="h-7 flex-1" values={series} summary={seriesSummary ?? `${label} through the period`} /> : <div className="h-7 flex-1" aria-hidden="true" />}
       </div>
       {/* Always one line, filled or not, so a row of tiles is one height and the figures sit on one line. */}

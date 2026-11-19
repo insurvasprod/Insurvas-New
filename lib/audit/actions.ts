@@ -2,7 +2,9 @@
 export const AUDIT_ACTIONS = [
   "admin.login",
   "admin.logout",
+  "admin.sessions_ended",
   "security.login_unlocked",
+  "monitoring.job_run",
   "admin.created",
   "admin.updated",
   "tenant.created",
@@ -218,6 +220,9 @@ export const AUDIT_ACTIONS = [
   "field_map.created",
   "field_map.updated",
   "field_map.published",
+  // Admin › Catalog › Field maps (admin round 1): a platform draft turned down, a live map taken out of use.
+  "field_map.rejected",
+  "field_map.retired",
   "layout_map.created",
   "layout_map.updated",
   "layout_map.published",
@@ -351,12 +356,17 @@ export const AUDIT_ACTIONS = [
   "template.published",
   "template.default_set",
   "invoice.custom_created",
+  // Admin › Billing round 2 (billing-r2): an invoice emailed to its customer; a reconciliation difference explained.
+  "invoice.emailed",
+  "invoice.reconciliation_explained",
   "tenant.billing_mode_changed",
   "tenant.suspended",
   "tenant.unsuspended",
   "setting.updated",
   "payment_provider.connection_tested",
   "payment_provider.config_viewed",
+  // Admin › Billing round 1 (billing-r2): a stuck provider webhook run again by a super admin.
+  "payment_provider.webhook_replayed",
   "compliance_vendor.created",
   "compliance_vendor.updated",
   "compliance_vendor.connection_tested",
@@ -366,6 +376,10 @@ export const AUDIT_ACTIONS = [
   "credit_pack.purchased",
   "meter_pricing.updated",
   "credit_grant.created",
+  // Admin › Billing round 1 (billing-r2): a customer's owner emailed that a usage limit is near.
+  "usage_limit.owner_emailed",
+  // Admin › Billing round 1: a billing note on a customer's subscription (append-only).
+  "subscription.note_added",
   "maintenance.updated",
   "health_data.sealed",
   "tenant.workspace_purged",
@@ -497,6 +511,9 @@ export const AUDIT_ACTIONS = [
   "tenant.campaign_deleted",
   "tenant.lead_vendor_deleted",
   "tenant.lead_import_discarded",
+  // Roles r1 (2026-11-18): a goal or target on the compact Home set or cleared (/api/app/goals).
+  "tenant.goal_set",
+  "tenant.goal_cleared",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -504,7 +521,9 @@ export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "admin.login": "Admin login",
   "admin.logout": "Admin sign-out",
+  "admin.sessions_ended": "Admin signed out everywhere by a super admin",
   "security.login_unlocked": "Login lockout cleared",
+  "monitoring.job_run": "Scheduled job run now by a super admin",
   "admin.created": "Admin created",
   "admin.updated": "Admin updated",
   "tenant.created": "Tenant created",
@@ -720,6 +739,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "field_map.created": "Carrier field map draft created",
   "field_map.updated": "Carrier field map edited",
   "field_map.published": "Carrier field map published",
+  "field_map.rejected": "Carrier field map draft rejected",
+  "field_map.retired": "Carrier field map retired",
   "layout_map.created": "Carrier layout map version started",
   "layout_map.updated": "Carrier layout map draft edited",
   "layout_map.published": "Carrier layout map published",
@@ -852,12 +873,15 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "template.published": "Template draft published",
   "template.default_set": "Template made the product default",
   "invoice.custom_created": "Custom invoice raised",
+  "invoice.emailed": "Invoice emailed to the customer",
+  "invoice.reconciliation_explained": "Reconciliation difference explained",
   "tenant.billing_mode_changed": "Billing mode changed",
   "tenant.suspended": "Agency suspended",
   "tenant.unsuspended": "Agency unsuspended",
   "setting.updated": "Setting changed",
   "payment_provider.connection_tested": "Provider connection tested",
   "payment_provider.config_viewed": "Payment setup viewed",
+  "payment_provider.webhook_replayed": "Provider webhook replayed",
   "compliance_vendor.created": "Compliance vendor created",
   "compliance_vendor.updated": "Compliance vendor updated",
   "compliance_vendor.connection_tested": "Compliance vendor connection tested",
@@ -867,6 +891,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "credit_pack.purchased": "Credit pack added to invoice",
   "meter_pricing.updated": "Meter pricing changed",
   "credit_grant.created": "Credits granted",
+  "usage_limit.owner_emailed": "Owner emailed about a usage limit",
+  "subscription.note_added": "Billing note added",
   "maintenance.updated": "Maintenance mode changed",
   "health_data.sealed": "Health answers sealed",
   "tenant.workspace_purged": "Agency workspace deleted",
@@ -996,4 +1022,6 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "tenant.campaign_deleted": "An empty campaign was deleted (no leads, files, claims or invoices pointed at it)",
   "tenant.lead_vendor_deleted": "A lead vendor with no campaigns or history was deleted",
   "tenant.lead_import_discarded": "A file staged for review was discarded before import",
+  "tenant.goal_set": "A dashboard goal or target was set",
+  "tenant.goal_cleared": "A dashboard goal or target was cleared",
 };

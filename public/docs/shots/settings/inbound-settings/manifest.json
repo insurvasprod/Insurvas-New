@@ -1,0 +1,62 @@
+[
+  {
+    "src": "/docs/shots/settings/inbound-settings/1.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set Warn, Escalate and Expire on the ladder",
+    "focus": {
+      "x": 515,
+      "y": 96,
+      "w": 888,
+      "h": 555
+    }
+  },
+  {
+    "src": "/docs/shots/settings/inbound-settings/2.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Choose who hears about it",
+    "focus": {
+      "x": 283,
+      "y": 157,
+      "w": 1157,
+      "h": 723
+    }
+  },
+  {
+    "src": "/docs/shots/settings/inbound-settings/3.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Add a buffer agent",
+    "focus": {
+      "x": 720,
+      "y": 306,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/inbound-settings/4.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Choose who gets the next transfer",
+    "focus": {
+      "x": 476,
+      "y": 298,
+      "w": 964,
+      "h": 603
+    }
+  },
+  {
+    "src": "/docs/shots/settings/inbound-settings/5.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Save",
+    "focus": {
+      "x": 720,
+      "y": 450,
+      "w": 720,
+      "h": 450
+    }
+  }
+]

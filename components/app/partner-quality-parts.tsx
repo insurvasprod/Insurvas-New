@@ -13,6 +13,7 @@ import { csvCellMinimal } from "@/lib/csv/cell";
 import { validPartnerQualityPeriod } from "@/lib/partnerQuality/metrics";
 import { reportPeriod } from "@/lib/reports/periodText";
 import type { PartnerQualityMetric } from "@/lib/partnerQuality/types";
+import { IntentLink } from "@/components/ui/nav-pending";
 
 // Pieces shared by the Partner quality list (/app/partner-quality) and a partner's own page
 // (/app/partner-quality/[partnerId]): formatting, the "prev" figure, the period inputs, the pager and
@@ -129,8 +130,8 @@ export function PartnerStepper({ previous, next }: { previous?: { href: string; 
   if (!previous && !next) return null;
   return (
     <span className="ml-auto flex shrink-0 items-center gap-1.5 self-center">
-      {previous && <Link href={previous.href} className={buttonVariants({ variant: "outline", size: "sm" })} title={`Previous partner: ${previous.label}`}><ChevronLeft aria-hidden="true" /><span className="max-w-24 truncate">{previous.label}</span></Link>}
-      {next && <Link href={next.href} className={buttonVariants({ variant: "outline", size: "sm" })} title={`Next partner: ${next.label}`}><span className="max-w-24 truncate">{next.label}</span><ChevronRight aria-hidden="true" /></Link>}
+      {previous && <IntentLink transitionTypes={["nav-back"]} href={previous.href} className={buttonVariants({ variant: "outline", size: "sm" })} title={`Previous partner: ${previous.label}`}><ChevronLeft aria-hidden="true" /><span className="max-w-24 truncate">{previous.label}</span></IntentLink>}
+      {next && <IntentLink transitionTypes={["nav-forward"]} href={next.href} className={buttonVariants({ variant: "outline", size: "sm" })} title={`Next partner: ${next.label}`}><span className="max-w-24 truncate">{next.label}</span><ChevronRight aria-hidden="true" /></IntentLink>}
     </span>
   );
 }

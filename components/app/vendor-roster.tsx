@@ -330,7 +330,7 @@ export function NewVendorPanel({ onClose, onCreated }: { onClose: () => void; on
       <LeaveGuard dirty={dirty} onDiscard={() => setDraft(EMPTY_DRAFT)} what="the new vendor" />
       <DialogFooter>
         <Button type="button" variant="outline" onClick={() => void closeUnlessKept(dirty, "the new vendor", onClose)}>Cancel</Button>
-        <Button type="button" disabled={!draft.name.trim() || saving} onClick={() => void createVendor()}>{saving ? "Saving…" : "Add vendor"}</Button>
+        <Button type="button" data-guide="vendor-create" disabled={!draft.name.trim() || saving} onClick={() => void createVendor()}>{saving ? "Saving…" : "Add vendor"}</Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>;

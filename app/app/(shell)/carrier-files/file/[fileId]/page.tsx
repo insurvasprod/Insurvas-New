@@ -14,7 +14,8 @@ import { fileCarrierChoices } from "@/lib/carriers/agency";
 import { fileHref, rowHref } from "@/lib/ingestion/trace";
 import { pdfBalanceReview } from "@/lib/ingestion/rawLayer";
 import { loadFileTrace } from "@/lib/ingestion/traceStore";
-import { FileFrame, fileTabsOf, type FileTab } from "@/components/app/book/files/file-frame";
+import { FileFrame, fileTabOf, type FileCounts } from "@/components/app/book/files/file-frame";
+import { StreamSection } from "@/components/ui/stream-section";
 import { FileRowsTable, type FileRowLine } from "@/components/app/book/files/file-rows";
 import { FileRuns } from "@/components/app/book/files/file-runs";
 import { FileWaiting, type WaitingPart } from "@/components/app/book/files/file-work";
@@ -70,14 +71,47 @@ export default async function CarrierFilePage({ params, searchParams }: { params
   const search = await searchParams;
   const tenantId = guard.context.tenantId;
   const readOnly = guard.entitlement.access === "read_only";
-  const [head, carriers] = await Promise.all([loadFileHead(tenantId, fileId), fileCarrierChoices(tenantId)]);
-  if (!head) notFound();
+  // Frame first (UI-CONSISTENCY §7a): the trail, the tabs and Download draw at once; the file's name waits behind its
+  // shape, and the tab streams in. The reads are today's, started before the frame returns: the head and the carriers
+  // together, as before; the rows and the runs too when the address already says the tab needs them (Rows and Changes
+  // read the rows on every file, Run history the runs).
+  const head = loadFileHead(tenantId, fileId);
+  const carriers = fileCarrierChoices(tenantId);
+  const rowsEarly = search.tab === "commissions" || search.tab === "history" ? null : loadFileRows(tenantId, fileId);
+  const runsEarly = search.tab === "history" ? listRuns(tenantId, 50, { fileId }) : null;
+  // A file not found never awaits these; their failure is the page's only when it does.
+  for (const early of [carriers, rowsEarly, runsEarly]) early?.catch(() => undefined);
+  const work = loadWork({ tenantId, head, search, rowsEarly, runsEarly });
+  const counts = work.then((w): FileCounts => (w ? { rows: w.head.rowCount, changes: w.head.status === "parsed" && w.head.fileType !== "commissions" ? w.changed : null, history: w.runs?.available ? w.runs.runs.length : null } : {}));
+
+  return (
+    <FileFrame
+      fileId={fileId}
+      head={head}
+      asked={search.tab}
+      tenantId={tenantId}
+      carriers={carriers}
+      more={(one, tab) => (tab === "rows" && one.rowCount !== null ? rowsMore(one, search) : [])}
+      counts={counts}
+      readOnly={readOnly}
+    >
+      <StreamSection shape={search.tab === "history" ? "table" : "strip+table"}>
+        <FileTabBody work={work} carriers={carriers} tenantId={tenantId} readOnly={readOnly} search={search} />
+      </StreamSection>
+    </FileFrame>
+  );
+}
+
+/** What the file's tab is worked out from: its head, which tab it is, its rows, its runs and what the file before it had. */
+async function loadWork({ tenantId, head: read, search, rowsEarly, runsEarly }: { tenantId: string; head: Promise<FileHead | null>; search: Search; rowsEarly: Promise<FileRows | null> | null; runsEarly: ReturnType<typeof listRuns> | null }) {
+  const head = await read;
+  if (!head) return null;
   // Only the tabs this file has: Changes on a policy file, Commissions on a commission file. Round 4: the
   // Overview is the Rows page (?tab=overview and ?tab=rows land on it).
-  const tab: FileTab = fileTabsOf(head).find((key) => key === search.tab) ?? "rows";
-  const rows = (tab === "commissions" && head.fileType === "commissions") || tab === "history" ? null : await loadFileRows(tenantId, fileId);
+  const tab = fileTabOf(head, search.tab);
+  const rows = (tab === "commissions" && head.fileType === "commissions") || tab === "history" ? null : await (rowsEarly ?? loadFileRows(tenantId, head.id));
   // Run history (owner 2026-11-02): the runs that took this file, each with its stages.
-  const runs = tab === "history" ? await listRuns(tenantId, 50, { fileId }) : null;
+  const runs = tab === "history" ? await (runsEarly ?? listRuns(tenantId, 50, { fileId: head.id })) : null;
   // The Changes tab holds what the previous file had and this one lacks, the field changes and the new
   // policies: its count is all three, so a tab with rows never says 0 (walk 2026-11-02).
   // A new-business file lists only the applications the carrier just took, so nothing is "missing" from it: it is
@@ -86,18 +120,18 @@ export default async function CarrierFilePage({ params, searchParams }: { params
   // The Changes tab's count is what this file changed: each field change and each new policy. "Not in this file"
   // is shown on the tab but watched, not changed, so it isn't counted (owner 2026-11-03).
   const changed = rows && notIn ? rows.rows.reduce((sum, row) => sum + row.changes.length + (row.outcome === "new" ? 1 : 0), 0) : null;
+  return { head, tab, rows, runs, notIn, changed };
+}
 
+async function FileTabBody({ work, carriers: carriersRead, tenantId, readOnly, search }: { work: ReturnType<typeof loadWork>; carriers: ReturnType<typeof fileCarrierChoices>; tenantId: string; readOnly: boolean; search: Search }) {
+  const w = await work;
+  if (!w) notFound();
+  const { head, tab, rows, runs, notIn } = w;
   // Round 4: the file's own runs, one row per step in the stage bar's words (the Files list keeps PipelineRuns).
-  const body = tab === "history" && runs ? <FileRuns runs={runs.runs} available={runs.available} fileId={head.id} fileType={head.fileType} />
-    : tab === "changes" && notIn ? ChangesTab({ head, rows, notIn, search })
-      : tab === "commissions" ? await CommissionsTab({ tenantId, head, search })
-        : await FileBody({ tenantId, head, rows, notIn, carriers, readOnly, search });
-
-  return (
-    <FileFrame head={head} tenantId={tenantId} tab={tab} more={tab === "rows" && head.rowCount !== null ? rowsMore(head, search) : []} counts={{ rows: head.rowCount, changes: head.status === "parsed" && head.fileType !== "commissions" ? changed : null, history: runs?.available ? runs.runs.length : null }} readOnly={readOnly}>
-      {body}
-    </FileFrame>
-  );
+  if (tab === "history" && runs) return <FileRuns runs={runs.runs} available={runs.available} fileId={head.id} fileType={head.fileType} />;
+  if (tab === "changes" && notIn) return ChangesTab({ head, rows, notIn, search });
+  if (tab === "commissions") return await CommissionsTab({ tenantId, head, search });
+  return await FileBody({ tenantId, head, rows, notIn, carriers: await carriersRead, readOnly, search });
 }
 
 // ─── Rows: the file's one page of work (round 4) ────────────────────────────────────────────────

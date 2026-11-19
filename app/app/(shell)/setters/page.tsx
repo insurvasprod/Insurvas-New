@@ -8,12 +8,14 @@ import { SetterRanking } from "@/components/app/setters/setter-ranking";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { Button } from "@/components/ui/button";
+import { Await } from "@/components/app/reports/await";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StreamSection } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { type AppointmentDetail, type DayRowKind } from "@/lib/setters/dayView";
-import { getSettersOverview } from "@/lib/setters/overview";
+import { getSettersOverview, type SettersOverview } from "@/lib/setters/overview";
 import { isSoloWorkspace } from "@/lib/tenantTeam/solo";
 
 /**
@@ -90,7 +92,15 @@ export default async function SettersPage({ searchParams }: { searchParams: Prom
   // The Calendar tab is gone (owner 2026-11-09); an old ?tab=calendar link opens the Calendar page.
   if (asked === "calendar") redirect("/app/calendar");
   const tab = parseSettersTab(asked);
-  const view = await getSettersOverview({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role });
+  // Frame first (§7a): the title and tabs draw at once; the overview streams in under them (read on either tab, as
+  // before, since a tab switch does not ask the server again).
+  const view = getSettersOverview({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role });
+  const overview = <StreamSection shape="strip+table"><Await read={view}>{(read) => <Overview view={read} />}</Await></StreamSection>;
+  return <SettersTabs key={tab} initial={tab} overview={overview} />;
+}
+
+/** The Overview tab: the setters' strip, the ranking and your hours today. */
+function Overview({ view }: { view: SettersOverview }) {
   const t = view.tiles;
   const showRate = t.closedThisMonth ? (t.showedThisMonth / t.closedThisMonth) * 100 : null;
   const booked = view.day.filter((row) => row.kind === "booked");
@@ -99,8 +109,8 @@ export default async function SettersPage({ searchParams }: { searchParams: Prom
   const teamRate = team.closed ? (team.showed / team.closed) * 100 : null;
 
   // On the dashboard's static stage backdrop, its cards frosted over it (owner ask 2026-10-26).
-  const overview = (
-    <>
+  return (
+    <div className="flex flex-col gap-6">
       {/* Setters A (Set4A): the setters' last 30 days as one strip — booked, showed, show rate against the target, sold. */}
       <StatStrip label="Setter totals, last 30 days">
         <StatTile label="Booked" value={team.booked} footnote="last 30 days" />
@@ -160,7 +170,6 @@ export default async function SettersPage({ searchParams }: { searchParams: Prom
           </div>
         )}
       </TableCard>
-    </>
+    </div>
   );
-  return <SettersTabs key={tab} initial={tab} overview={overview} />;
 }

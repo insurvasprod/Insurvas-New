@@ -1,6 +1,8 @@
 "use client";
 
 import { StatusChip } from "@/components/ui/status-chip";
+import { DoneStamp } from "@/components/ui/done-stamp";
+import { motionMs } from "@/components/ui/motion-tokens";
 import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
 import { MoreMenu } from "@/components/ui/more-menu";
@@ -30,7 +32,7 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
   // The lead the visit opened on: it does not slide in; every lead after it does.
   const [firstLead, setFirstLead] = useState<string | null>(null);
   const now = useNow();
-  const { needsDnc, checkingDnc, checkDnc, isSetter, searchMode, panel, attempt, working, dialled, serving, pendingCallback, setPendingCallback, callbackAt, setCallbackAt, pendingDnc, setPendingDnc, pendingReturn, setPendingReturn, checkOpen, setCheckOpen, dispositionError, callbackNote, setCallbackNote, dispositions, outcomeLabel, agentZone, serveNext, prepareAttempt, confirmRead, dial, choose, disposition, eligibility, outcomes, blockers, callReady, customerZone, callbackInstant, callbackWindow, callbackInWindow, callbackInFuture, callbackClash, stateName, quickOptions, phoneLabel, nextStep, confirmed, calendar, autoNext, setAutoNext } = dialer;
+  const { needsDnc, checkingDnc, checkDnc, isSetter, searchMode, panel, attempt, working, dialled, placing, recorded, serving, pendingCallback, setPendingCallback, callbackAt, setCallbackAt, pendingDnc, setPendingDnc, pendingReturn, setPendingReturn, checkOpen, setCheckOpen, dispositionError, callbackNote, setCallbackNote, dispositions, outcomeLabel, agentZone, serveNext, prepareAttempt, confirmRead, dial, choose, disposition, eligibility, outcomes, blockers, callReady, customerZone, callbackInstant, callbackWindow, callbackInWindow, callbackInFuture, callbackClash, stateName, quickOptions, phoneLabel, nextStep, confirmed, calendar, autoNext, setAutoNext } = dialer;
   const [bookOpen, setBookOpen] = useState(false);
   // The outcomes and the notes fold to a thin rail, each kept per browser (owner 2026-11-05).
   const [outcomesFolded, setOutcomesFolded] = useState(false);
@@ -43,9 +45,22 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
   };
   const canBook = !readOnly && Boolean(calendar && calendar.agents.length > 0);
 
-  // The Call button, on the right of the lead's facts (owner 2026-10-27).
+  // Where the call is (Wave C motion, 2026-11-18): placing it → on it → saving its outcome. Presentation only.
+  const callState: "idle" | "dialling" | "live" | "saving" = dialled ? (working ? "saving" : "live") : placing ? "dialling" : "idle";
+  // The outcome just recorded stamps Done on the card's edge for --t-highlight, while the next lead is served
+  // (auto-next is never held for it), and fades out after --t-saved (.m-stamp-leave).
+  const [stampGone, setStampGone] = useState(0);
+  useEffect(() => {
+    if (!recorded) return;
+    const timer = window.setTimeout(() => setStampGone(recorded.n), motionMs("--t-highlight", 1200));
+    return () => window.clearTimeout(timer);
+  }, [recorded]);
+  const stamp = recorded && stampGone !== recorded.n ? recorded : null;
+
+  // The Call button, on the right of the lead's facts (owner 2026-10-27). Its group settles in (m-content-in) when
+  // the call goes live and the button becomes "Call started".
   const callButton = panel ? (
-      <div className="flex flex-wrap items-center gap-2 @2xl:flex-col @2xl:items-stretch max-lg:hidden">
+      <div key={dialled ? "live" : "ready"} className="m-content-in flex flex-wrap items-center gap-2 @2xl:flex-col @2xl:items-stretch max-lg:hidden">
         {!attempt && needsDnc ? (
           // Owner 2026-10-29: check the number first; the Call button appears once it is clear.
           <Button type="button" onClick={() => void checkDnc()} disabled={readOnly || checkingDnc || !callReady} aria-describedby={!callReady ? "dialer-blockers" : undefined} aria-keyshortcuts={readOnly ? undefined : "C"}>
@@ -91,6 +106,7 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
             : !dialled ? (eligibility?.allowed ? "The server will repeat compliance checks immediately before dialing." : eligibility?.message || "Dialing is blocked until the server eligibility check passes.")
             : "Call in progress · choose the outcome."}
         </p>
+      {callState !== "idle" && <CallStatus state={callState} callId={attempt?.id ?? null} />}
       <BookAppointmentDialog d={dialer} open={bookOpen} onOpenChange={setBookOpen} />
       {!attempt && !readOnly && !callReady && blockers.length > 0 && (
         <ul id="dialer-blockers" className="m-0 list-none space-y-0.5 p-0">
@@ -117,7 +133,7 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
           </Button>
         </div>
         {/* The tiles share the column's full height (owner 2026-10-27), never shorter than a control. */}
-        <div className="grid flex-1 auto-rows-fr grid-cols-[minmax(0,1fr)] gap-2">
+        <div key={dialled ? "live" : "ready"} className="m-content-in grid flex-1 auto-rows-fr grid-cols-[minmax(0,1fr)] gap-2">
           {outcomes.map((item, index) => (
             <OutcomeButton key={item.key} icon={outcomeIcon(item.key)} label={outcomeButtonLabel(item)} hotkey={searchMode ? null : outcomeHotkey(index)} compact={outcomesFolded} tone={item.key === APPLICATION_OUTCOME ? "primary" : item.key === DNC_OUTCOME ? "danger" : "default"} pressed={(pendingCallback && item.key === CALLBACK_OUTCOME) || (pendingDnc && item.key === DNC_OUTCOME)} disabled={!dialled || working} onClick={() => choose(item.key)} />
           ))}
@@ -181,7 +197,7 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
       </ScheduleDialog>
 
       {pendingDnc && (
-        <div className="rounded-xl border border-[var(--border)] border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-4" role="alertdialog" aria-label="Confirm do not call">
+        <div className="m-content-in rounded-xl border border-[var(--border)] border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-4" role="alertdialog" aria-label="Confirm do not call">
           <p className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--error-ink)]">Add this number to the do-not-call list?</p>
           <p className={cn(body14, "mt-1")}>It goes on your agency&rsquo;s internal list permanently and this lead is closed.</p>
           <div className="mt-2 flex gap-2">
@@ -193,7 +209,7 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
       )}
 
       {pendingReturn && (
-        <div className="rounded-xl border border-[var(--border)] p-4" role="alertdialog" aria-label={`Confirm ${outcomeLabel(pendingReturn).toLowerCase()}`}>
+        <div className="m-content-in rounded-xl border border-[var(--border)] p-4" role="alertdialog" aria-label={`Confirm ${outcomeLabel(pendingReturn).toLowerCase()}`}>
           <p className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Record {outcomeLabel(pendingReturn).toLowerCase()}?</p>
           <p className={cn(body14, "mt-1")}>Closes this lead; it is not dialed again.</p>
           <p className={cn(small, "mt-1", panel.returnWindow?.claimable ? "text-[var(--success-ink)]" : undefined)}>{returnWindowLine(panel.returnWindow)}</p>
@@ -212,7 +228,9 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
   // moves on (§ Motion, Wave 2); the first lead of the visit is simply there.
   const leadKey = panel?.lead.id ?? "none";
   if (firstLead === null && panel) setFirstLead(leadKey);
-  const current = <div key={leadKey} data-enter={leadKey !== firstLead ? "forward" : undefined} className="bg-[var(--brand-50)]/40 shadow-[inset_3px_0_0_var(--primary)]"><DialerLeadColumn d={dialer} readOnly={readOnly} call={<>{callButton}{serveButton}</>}>{callArea}</DialerLeadColumn></div>;
+  // Only a lead slides (from .72, m-vt-from-right): the skeleton between two leads settles in place instead, so the
+  // move to the next lead is one slide forward, never two.
+  const current = <div key={leadKey} data-enter={panel && leadKey !== firstLead ? "forward" : undefined} data-settle={panel ? undefined : ""} className="bg-[var(--brand-50)]/40 shadow-[inset_3px_0_0_var(--primary)]"><DialerLeadColumn d={dialer} readOnly={readOnly} call={<>{callButton}{serveButton}</>}>{callArea}</DialerLeadColumn></div>;
 
   return (
     /* The list is the page (Dialer A round 2, owner 2026-10-27): one centred column. The lead you
@@ -234,9 +252,13 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
       {/* The middle column (owner 2026-10-29): the lead you are on, then the queue as a table that
           fills what is left of the column and pages the rest, so neither the page nor the card scrolls. */}
       <div className="flex min-w-0 flex-1 flex-col gap-4 max-lg:order-1 lg:h-full lg:min-h-0">
-        <section className={cn(card, "overflow-hidden lg:max-h-[60%] lg:shrink-0 lg:overflow-y-auto")} aria-label="Lead on your screen">
-          {current}
-        </section>
+        <div className="relative flex min-w-0 flex-col lg:max-h-[60%] lg:min-h-0 lg:shrink-0">
+          <section className={cn(card, "overflow-hidden lg:min-h-0 lg:overflow-y-auto")} aria-label="Lead on your screen">
+            {current}
+          </section>
+          {/* The outcome just recorded, stamped on the card's top edge (over the gap above it), so it covers nothing. */}
+          {stamp && <span key={stamp.n} role="status" className="m-stamp-leave pointer-events-none absolute -top-[11px] right-4 z-10"><DoneStamp label={stamp.label} /></span>}
+        </div>
         <DialerQueueTable d={dialer} readOnly={readOnly} extra={<MoreMenu row label="Dialer options" items={[
             canCheckNumber && { label: "Check a number", icon: ShieldCheck, onSelect: () => setCheckOpen(true) },
             !searchMode && !readOnly && { label: autoNext ? "Turn auto-next off" : "Turn auto-next on", icon: SkipForward, onSelect: () => setAutoNext(!autoNext) },
@@ -283,6 +305,40 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Where the call is, in one line (Wave C motion, 2026-11-18): a chip and, once the call has started, its clock. The
+ * line rises in once (m-swap) when a call is placed and stays for the call; the chip cross-fades its tone (StatusChip)
+ * and its words settle in (m-content-in) as the call moves on. Placing the call sends one ring out from the chip, and
+ * the call going live one soft confirm ring (data-call-pulse, once each, never a loop).
+ */
+function CallStatus({ state, callId }: { state: "dialling" | "live" | "saving"; callId: string | null }) {
+  const text = state === "dialling" ? "Calling…" : state === "live" ? "Call started" : "Saving the outcome";
+  return (
+    <div className="m-swap flex items-center gap-2.5">
+      <span className="relative inline-flex">
+        <StatusChip tone={state === "dialling" ? "info" : state === "live" ? "good" : "neutral"} dot><span key={text} className="m-content-in">{text}</span></StatusChip>
+        {state !== "saving" && <span key={state} data-call-pulse={state === "live" ? "connected" : "ringing"} aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-badge" />}
+      </span>
+      {state !== "dialling" && callId && <CallClock key={callId} />}
+    </div>
+  );
+}
+
+/** The time on the call, counting from when it started: a steady counter in tabular figures, a fixed width, no motion. */
+function CallClock() {
+  const [start] = useState(() => Date.now());
+  const now = useNow(1000);
+  const total = Math.max(0, Math.floor((now - start) / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = String(total % 60).padStart(2, "0");
+  return (
+    <span role="timer" aria-label="Time on the call" className="inline-block min-w-[7ch] text-sm leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--ink)] tabular-nums">
+      {h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`}
+    </span>
   );
 }
 

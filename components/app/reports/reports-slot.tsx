@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import { InfoTip } from "@/components/ui/info-tip";
+import { DocsGuideLink } from "@/components/app/docs/docs-guide-link";
 import { SectionLoading } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -37,7 +38,7 @@ export function InReportsSlot({ framed, slot, children }: { framed: boolean; slo
 type Own = { title: string | null; facts?: ReactNode; chip?: ReactNode };
 const TitleContext = createContext<((own: Own) => void) | null>(null);
 
-export function ReportsHeader({ title, info, chip, facts, switcher, children }: { title: string; info?: ReactNode; chip?: ReactNode; facts?: ReactNode; /** The "Table · Chart" switch (ReportsPage `show`), before the view's buttons. */ switcher?: ReactNode; children: ReactNode }) {
+export function ReportsHeader({ title, label, info, chip, facts, switcher, children }: { title: ReactNode; /** The title as text, for the (i)'s name, when `title` streams. */ label?: string; info?: ReactNode; chip?: ReactNode; facts?: ReactNode; /** The "Table · Chart" switch (ReportsPage `show`), before the view's buttons. */ switcher?: ReactNode; children: ReactNode }) {
   const [own, setOwn] = useState<Own>({ title: null });
   const shownTitle = own.title ?? title;
   const shownChip = own.chip ?? chip;
@@ -48,7 +49,7 @@ export function ReportsHeader({ title, info, chip, facts, switcher, children }: 
           level with the rail's top. */}
       <PageHeader
         title={shownTitle}
-        titleInfo={info || shownChip ? <>{info ? <InfoTip label={`About ${shownTitle}`} side="right">{info}</InfoTip> : null}{shownChip}</> : undefined}
+        titleInfo={info || shownChip ? <>{info ? <InfoTip label={`About ${own.title ?? label ?? (typeof title === "string" ? title : "this report")}`} side="right">{info}<DocsGuideLink /></InfoTip> : null}{shownChip}</> : undefined}
         // The facts never widen the title's column (it sizes to its content beside the tabs): they wrap in
         // it, at least 360px wide, so a long line cannot squeeze the tabs (the Accounting walk, 2026-11-03).
         meta={shownFacts ? <p className="mt-1 text-sm text-muted-foreground lg:min-w-[360px] lg:[contain:inline-size]">{shownFacts}</p> : undefined}

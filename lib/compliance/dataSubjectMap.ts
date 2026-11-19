@@ -166,6 +166,10 @@ export const NOT_CONSUMER = [
   "api_key", "webhook_subscription", "webhook_delivery", "webhook_attempt",
   // LA-8.8: the settings audit log — agency configuration and who changed it. Never purged, by anything.
   "settings_audit",
+  // Precounted figures (20261118100000): cached per-campaign and per-vendor aggregates (campaign_funnel,
+  // vendor_returns_summary, vendor_undialable_rates, vendor_scorecard_report). Counts and rates, no person;
+  // precount_compute refuses any other key, and a stale figure is recounted, never kept past a write.
+  "tenant_precount",
   "user_identity_mappings", "user_invitations", "tenant_connected_calendars", "tenant_carrier_commission_contacts", "assignment_rules",
   "carrier_layout_map_entry", "carrier_status_map", "carrier_servicing_guide", "unmapped_status_queue", "file_registry", "file_registry_skips",
   "payment_providers", "webhook_events", "tenant_users", "partner_users", "compliance_settings", "compliance_complaint_deadline",

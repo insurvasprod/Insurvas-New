@@ -46,7 +46,8 @@ const STATE_FILTERS: { value: StateFilter; label: string }[] = [
   { value: "inactive", label: "Deactivated" },
 ];
 
-type Pending = { admin: StaffRow; change: StaffChange };
+/** A role or state change (PATCH), or "Sign out everywhere" (POST …/sessions, security review M-2). */
+type Pending = { admin: StaffRow; change: StaffChange } | { admin: StaffRow; endSessions: true };
 
 const subscribeNothing = () => () => {};
 
@@ -209,6 +210,7 @@ export function AdminUsersTable({
                         currentAdminId={currentAdminId}
                         activeSuperAdmins={activeSuperAdmins}
                         onChoose={(change) => setPending({ admin, change })}
+                        onEndSessions={() => setPending({ admin, endSessions: true })}
                       />
                     </td>
                   </tr>
@@ -229,11 +231,13 @@ function RowMenu({
   currentAdminId,
   activeSuperAdmins,
   onChoose,
+  onEndSessions,
 }: {
   admin: StaffRow;
   currentAdminId: string;
   activeSuperAdmins: number;
   onChoose: (change: StaffChange) => void;
+  onEndSessions: () => void;
 }) {
   const isSelf = admin.id === currentAdminId;
   const refusalFor = (change: StaffChange) => staffChangeRefusal({ actorId: currentAdminId, target: admin, change, activeSuperAdmins });
@@ -276,13 +280,28 @@ function RowMenu({
         >
           {admin.is_active ? "Deactivate" : "Reactivate"}
         </DropdownMenuItem>
+        {/* A deactivated account has no live sessions to end. Your own: sign out instead. */}
+        <DropdownMenuItem disabled={isSelf || !admin.is_active} onSelect={onEndSessions}>
+          Sign out everywhere
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
 function describe(pending: Pending): { title: string; body: string; confirm: string; busy: string; destructive: boolean; done: string } {
-  const { admin, change } = pending;
+  const { admin } = pending;
+  if ("endSessions" in pending) {
+    return {
+      title: `Sign ${admin.name} out everywhere?`,
+      body: `Every browser where ${admin.email} is signed in to this console is signed out on its next request. The account stays active; they sign in again with their password and authenticator app. Use it for a lost device or a session that may have been copied. Recorded in the audit log.`,
+      confirm: "Sign out everywhere",
+      busy: "Signing out…",
+      destructive: true,
+      done: `${admin.email} signed out everywhere`,
+    };
+  }
+  const { change } = pending;
   if (change.is_active === false) {
     return {
       title: `Deactivate ${admin.name}?`,
@@ -333,11 +352,14 @@ function ConfirmChangeDialog({ pending, onClose, onDone }: { pending: Pending | 
     if (!pending || !copy) return;
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/admin/admins/${pending.admin.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(pending.change),
-    });
+    const res =
+      "endSessions" in pending
+        ? await fetch(`/api/admin/admins/${pending.admin.id}/sessions`, { method: "POST" })
+        : await fetch(`/api/admin/admins/${pending.admin.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(pending.change),
+          });
     const body = await res.json().catch(() => null);
     setBusy(false);
     if (!res.ok) {

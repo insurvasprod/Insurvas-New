@@ -1,110 +1,93 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import { LoginSheet } from "@/components/admin/monitoring/login-sheet";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { NavPending, setParamsInPlace } from "@/components/ui/nav-pending";
 import { EmptyState, ErrorState, NoMatches } from "@/components/ui/page-states";
+import { Pager } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
 // From ./constants and ./present, not ./queries — this is a client component, and queries.ts is
 // server-only.
 import { ACTIVITY_PAGE_SIZE, type LoginEventRow } from "@/lib/loginEvents/constants";
 import {
   ACTIVITY_SEARCH_MAX,
-  DEFAULT_ACTIVITY_FILTERS,
   OUTCOME_OPTIONS,
   RANGE_OPTIONS,
+  REPEATED_FAILURE_MIN,
   actorOptionsFor,
   countLine,
-  type ActivityActor,
   type ActivityFilters,
-  type ActivityOutcome,
-  type ActivityRange,
+  type ActivityLens,
 } from "@/lib/loginEvents/present";
 import { LoginActivityTable } from "./login-activity-table";
-import { Pager } from "@/components/ui/pager";
 
 type Loaded = { events: LoginEventRow[]; total: number; rangeTotal: number };
 
-function sameFilters(a: ActivityFilters, b: ActivityFilters) {
-  return a.outcome === b.outcome && a.actor === b.actor && a.range === b.range && a.q === b.q;
-}
-
 /**
- * The login-attempt table with its toolbar and footer. Page 1 with the default filters is rendered
- * on the server; every change after that reads /api/admin/activity. The rows on screen always
- * belong to the filters on screen: while a request is out the old rows are dimmed, and if it fails
- * they are replaced by the error — never left standing under a filter they do not match.
+ * The login-attempt table with its toolbar and footer (admin round 1, monitoring.html screen 2). Every filter, the
+ * lens and the page live in the address, and the server renders the rows for them: a filtered view can be shared,
+ * bookmarked or linked from the Monitoring workspace. A change navigates in a transition, so the old rows stay on
+ * screen, dimmed, until the new ones arrive — never left standing under a filter they do not match, and if the read
+ * fails the rows are replaced by the error. An attempt opens as a right sheet (`?attempt=<id>`) in place.
  */
-export function ActivityFeed({ initial, viewerRole }: { initial: Loaded; viewerRole: string }) {
-  // Staff sign-ins are super_admin only (the API enforces it); nobody else is offered the choice.
+export function ActivityFeed({
+  initial,
+  filters,
+  lens,
+  page,
+  failed,
+  viewerRole,
+}: {
+  initial: Loaded;
+  filters: ActivityFilters;
+  lens: ActivityLens;
+  page: number;
+  /** The server could not read the rows for these filters. */
+  failed: boolean;
+  viewerRole: string;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const [pending, start] = useTransition();
+  // Staff sign-ins are super_admin only (the server enforces it); nobody else is offered the choice.
   const actorOptions = actorOptionsFor(viewerRole);
-  const [data, setData] = useState<Loaded>(initial);
-  const [filters, setFilters] = useState<ActivityFilters>(DEFAULT_ACTIVITY_FILTERS);
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const [retry, setRetry] = useState(0);
-  const isFirstRun = useRef(true);
-  const requestId = useRef(0);
+  const [search, setSearch] = useState(filters.q);
+  const openId = params.get("attempt");
 
-  // The search box types freely; the query follows it after a pause, so each keystroke is not a
-  // request.
+  /** Patches the address and asks the server for the rows; page 1 unless the patch names a page. */
+  function go(patch: Record<string, string | null>) {
+    const next = new URLSearchParams(params.toString());
+    if (!("page" in patch)) next.delete("page");
+    next.delete("attempt");
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === null || value === "") next.delete(key);
+      else next.set(key, value);
+    }
+    const query = next.toString();
+    start(() => router.replace(`${pathname}${query ? `?${query}` : ""}`, { scroll: false }));
+  }
+
+  // The search box types freely; the address follows it after a pause, so each keystroke is not a request.
   useEffect(() => {
     const term = search.trim().slice(0, ACTIVITY_SEARCH_MAX);
     if (term === filters.q) return;
-    const timer = setTimeout(() => {
-      setFilters((current) => ({ ...current, q: term }));
-      setPage(1);
-    }, 300);
+    const timer = setTimeout(() => go({ q: term || null }), 300);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `go` reads the current address; re-running on it would loop.
   }, [search, filters.q]);
-
-  useEffect(() => {
-    // Page 1 with the default filters is already server-rendered.
-    if (isFirstRun.current) {
-      isFirstRun.current = false;
-      return;
-    }
-
-    const params = new URLSearchParams({ page: String(page), range: filters.range });
-    if (filters.outcome !== "all") params.set("outcome", filters.outcome);
-    if (filters.actor !== "all") params.set("actor", filters.actor);
-    if (filters.q) params.set("q", filters.q);
-
-    const id = ++requestId.current;
-    setBusy(true);
-    fetch(`/api/admin/activity?${params.toString()}`, { cache: "no-store" })
-      .then((res) => (res.ok ? (res.json() as Promise<Loaded>) : Promise.reject(new Error(String(res.status)))))
-      .then((body) => {
-        if (id !== requestId.current) return;
-        setData({ events: body.events, total: body.total, rangeTotal: body.rangeTotal });
-        setFailed(false);
-      })
-      .catch(() => {
-        if (id !== requestId.current) return;
-        setData({ events: [], total: 0, rangeTotal: 0 });
-        setFailed(true);
-      })
-      .finally(() => {
-        if (id === requestId.current) setBusy(false);
-      });
-  }, [filters, page, retry]);
-
-  function update(patch: Partial<ActivityFilters>) {
-    setFilters((current) => ({ ...current, ...patch }));
-    setPage(1);
-  }
 
   function clearAll() {
     setSearch("");
-    setFilters(DEFAULT_ACTIVITY_FILTERS);
-    setPage(1);
+    go({ q: null, outcome: null, actor: null, range: null, lens: null });
   }
 
-  const narrowed = filters.outcome !== "all" || filters.actor !== "all" || filters.q !== "";
-  const atDefaults = sameFilters(filters, DEFAULT_ACTIVITY_FILTERS) && search.trim() === "";
+  const narrowed = filters.outcome !== "all" || filters.actor !== "all" || filters.q !== "" || lens === "repeated";
+  const atDefaults = !narrowed && filters.range === "today";
   const rangePhrase = RANGE_OPTIONS.find((option) => option.value === filters.range)?.phrase ?? "";
 
   let empty: React.ReactNode;
@@ -114,96 +97,120 @@ export function ActivityFeed({ initial, viewerRole }: { initial: Loaded; viewerR
         title="Login activity did not load"
         detail="The attempts for these filters could not be read. Nothing has been hidden; try again."
         action={
-          <Button type="button" variant="outline" onClick={() => setRetry((n) => n + 1)}>
+          <Button type="button" variant="outline" onClick={() => start(() => router.refresh())}>
             Try again
           </Button>
         }
       />
     );
+  } else if (lens === "repeated" && filters.q === "" && filters.outcome === "all" && filters.actor === "all") {
+    empty = (
+      <EmptyState
+        title={`No repeated failures ${rangePhrase}`}
+        hint={`An address shows here once it fails ${REPEATED_FAILURE_MIN} times or more in the range.`}
+      />
+    );
   } else if (narrowed) {
     empty = <NoMatches noun="attempts" onClear={clearAll} />;
   } else if (filters.range === "all") {
-    empty = (
-      <EmptyState
-        title="No login attempts recorded yet"
-        hint="Sign-ins and failed attempts appear here as they happen."
-      />
-    );
+    empty = <EmptyState title="No login attempts recorded yet" hint="Sign-ins and failed attempts appear here as they happen." />;
   } else {
-    empty = (
-      <EmptyState
-        title={`No sign-in attempts ${rangePhrase}`}
-        hint="Choose a wider range to see earlier attempts."
-      />
-    );
+    empty = <EmptyState title={`No sign-in attempts ${rangePhrase}`} hint="Choose a wider range to see earlier attempts." />;
   }
 
+  const open = openId ? initial.events.find((event) => event.id === openId) ?? null : null;
+
   return (
-    <TableCard
-      footer={<Pager page={page} pageSize={ACTIVITY_PAGE_SIZE} total={data.total} noun={data.total === 1 ? "attempt" : "attempts"} suffix="newest first" onPage={setPage} disabled={busy} />}
-      toolbar={
-        <DataToolbar
-          actions={
-            <>
-              {!atDefaults && (
-                <Button type="button" variant="ghost" onClick={clearAll}>
-                  Clear filters
-                </Button>
-              )}
-              <RefreshButton onClick={() => setRetry((n) => n + 1)} refreshing={busy} />
-            </>
-          }
-        >
-          <ToolbarSearch value={search} onChange={setSearch} placeholder="Search actor, IP" label="Search by email address or IP" />
-          <select
-            aria-label="Outcome"
-            className={toolbarControl}
-            value={filters.outcome}
-            onChange={(event) => update({ outcome: event.target.value as ActivityOutcome })}
+    <>
+      <NavPending pending={pending} />
+      <TableCard
+        footer={
+          <Pager
+            page={page}
+            pageSize={ACTIVITY_PAGE_SIZE}
+            total={initial.total}
+            noun={initial.total === 1 ? "attempt" : "attempts"}
+            suffix="newest first"
+            onPage={(next) => go({ page: next > 1 ? String(next) : null })}
+            disabled={pending}
+          />
+        }
+        toolbar={
+          <DataToolbar
+            actions={
+              <>
+                {!atDefaults && (
+                  <Button type="button" variant="ghost" onClick={clearAll}>
+                    Clear filters
+                  </Button>
+                )}
+                <RefreshButton onClick={() => start(() => router.refresh())} refreshing={pending} />
+              </>
+            }
           >
-            {OUTCOME_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Actor"
-            className={toolbarControl}
-            value={filters.actor}
-            onChange={(event) => update({ actor: event.target.value as ActivityActor })}
-          >
-            {actorOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Range"
-            className={toolbarControl}
-            value={filters.range}
-            onChange={(event) => update({ range: event.target.value as ActivityRange })}
-          >
-            {RANGE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <span className="text-xs text-muted-foreground tabular-nums" aria-live="polite">
-            {failed ? "Count unavailable" : countLine(data.total, data.rangeTotal, filters.range)}
-          </span>
-        </DataToolbar>
-      }
-    >
-      <LoginActivityTable
-        layout="board"
-        framed={false}
-        events={data.events}
-        busy={busy}
-        empty={empty}
-      />
-    </TableCard>
+            <ToolbarSearch value={search} onChange={setSearch} placeholder="Search actor, IP" label="Search by email address or IP" />
+            <select
+              aria-label="Outcome"
+              className={toolbarControl}
+              value={filters.outcome}
+              onChange={(event) => go({ outcome: event.target.value === "all" ? null : event.target.value })}
+            >
+              {OUTCOME_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Actor"
+              className={toolbarControl}
+              value={filters.actor}
+              onChange={(event) => go({ actor: event.target.value === "all" ? null : event.target.value })}
+            >
+              {actorOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Range"
+              className={toolbarControl}
+              value={filters.range}
+              onChange={(event) => go({ range: event.target.value === "today" ? null : event.target.value })}
+            >
+              {RANGE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs text-muted-foreground tabular-nums" aria-live="polite">
+              {failed ? "Count unavailable" : countLine(initial.total, initial.rangeTotal, filters.range)}
+            </span>
+          </DataToolbar>
+        }
+      >
+        <LoginActivityTable
+          layout="board"
+          framed={false}
+          events={initial.events}
+          busy={pending}
+          empty={empty}
+          selectedId={openId}
+          onOpen={(id) => setParamsInPlace({ attempt: id })}
+        />
+      </TableCard>
+
+      {openId && (
+        <LoginSheet
+          key={openId}
+          id={openId}
+          row={open}
+          viewerRole={viewerRole}
+          onClose={() => setParamsInPlace({ attempt: null })}
+        />
+      )}
+    </>
   );
 }

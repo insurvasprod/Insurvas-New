@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { after as afterResponse } from "next/server";
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 
 import { resolveTenantContext } from "@/lib/tenantAuth/requireTenant";
 import { getEntitlement } from "@/lib/entitlements/get";
@@ -23,10 +23,14 @@ import { getDashboardMoney, type DashboardMoney } from "@/lib/dashboard/money";
 import { pendingSummary } from "@/lib/applications/pending";
 import { loadSalesSnapshot } from "@/lib/dashboard/views/sales";
 import { listDueCallbacks } from "@/lib/callbacks/service";
+import { heldRoles, menuGate, seesMoney } from "@/lib/dashboard/access";
+import { HOME_GOAL, HOME_PAGES, HOME_READS, homeKind, type HomePageKey } from "@/lib/dashboard/homeKinds";
+import { maySetGoal } from "@/lib/dashboard/goalRules";
+import { readGoal } from "@/lib/dashboard/goals";
+import { readBalances } from "@/lib/agency/ledgerStore";
 import { SetupCelebration } from "@/components/app/setup/setup-celebration";
 import { NextCallback } from "@/components/app/dashboard-today";
-import { HomeSetup } from "@/components/app/home/home-extras";
-import { OverviewView } from "@/components/app/home/views/overview-view";
+import { HomeView } from "@/components/app/home/views/overview-view";
 import { LeadsView } from "@/components/app/home/views/leads-view";
 import { RetentionView } from "@/components/app/home/views/retention-view";
 import { BookView } from "@/components/app/home/views/book-view";
@@ -76,17 +80,22 @@ export default async function AgentDashboardPage({ searchParams }: { searchParam
   const checklist = setupChecklistForState(onboardingState, setupProgress, { features: available, profile: setupProfile, seats: entitlement.limits.max_seats, marks: setupGuide, solo });
   // LA-0.3: the first render that finds every step done stamps it, after the response.
   if (checklist.complete && !setupProgress.finished) afterResponse(() => recordSetupFinished(context.tenantId));
-  const home = resolveRoleHome(available, context.role, { code: entitlement.plan_code, features: entitlement.features, disabled: entitlement.disabled_features }, { solo });
+  // Roles r1: the menu's own narrowing (the agency's screens for a narrowed session, extra roles, hidden pages), so
+  // the dashboard never offers a view, card or action the sidebar does not.
+  const gate = menuGate(context, scope);
+  const home = resolveRoleHome(available, context.role, { code: entitlement.plan_code, features: entitlement.features, disabled: entitlement.disabled_features }, { solo, gate });
   // A profile with too few tiles skips the dashboard for the plan's primary working screen.
   if (home.landing) redirect(home.landing);
 
-  const views = dashboardViews(available, context.role, solo);
+  const views = dashboardViews(available, context.role, solo, gate);
   const view: DashboardViewKey = pickDashboardView(asked, views);
   const shown = new Set(home.sections);
-  const open = (keys: readonly string[]) => firstOpenable(keys, available, context.role, solo);
+  const open = (keys: readonly string[]) => firstOpenable(keys, available, context.role, solo, gate);
   const role = homeRole(context.role, context.memberRole);
-  // A manager leads a team and sees no money (owner, 2026-10-25: "they will not see all the money").
-  const noMoney = role === "manager";
+  const kind = homeKind(role, solo);
+  // Money from the permission, never the role name (roles r1): a manager, setter, assistant or retention rep sees
+  // counts only (owner, 2026-10-25: "they will not see all the money").
+  const noMoney = !seesMoney(heldRoles(context));
   // eslint-disable-next-line react-hooks/purity -- a server render: "today" is as of this request.
   const serverNow = Date.now();
   const zone = workspaceZone ?? "America/New_York";
@@ -95,7 +104,10 @@ export default async function AgentDashboardPage({ searchParams }: { searchParam
   const name = firstName ? `, ${firstName}` : "";
 
   // One "today" read: the header's next callback and the Overview share it.
-  const today: Promise<DashboardToday | null> = getDashboardToday({ tenantId: context.tenantId, userId: context.userId, role: context.role, available: [...available], now: serverNow, reads: home.reads, scope }).catch(() => null);
+  // The role layout's reads, plus what this role's compact Home draws (the setter's week, the producer's close-out,
+  // the assistant's inbound by hour); only the Home asks for those.
+  const reads = view === "overview" ? { ...home.reads, ...HOME_READS[kind] } : home.reads;
+  const today: Promise<DashboardToday | null> = getDashboardToday({ tenantId: context.tenantId, userId: context.userId, role: context.role, available: [...available], now: serverNow, reads, scope }).catch(() => null);
 
   const header = (
     <PageHeader
@@ -118,10 +130,12 @@ export default async function AgentDashboardPage({ searchParams }: { searchParam
     />
   );
 
-  const viewProps: DashViewProps = { context, available: [...available], scope, solo, zone, now: serverNow, noMoney };
+  const viewProps: DashViewProps = { context, available: [...available], scope, solo, zone, now: serverNow, noMoney, gate };
+  // Every view, the Home too (roles r1, owner 2026-11-18), fits the screen from lg up: no page scroll.
+  const frame = (children: ReactNode) => <div className="portal-dashboard flex w-full min-w-0 flex-col gap-3 lg:h-[calc(100dvh-var(--top-bar-h)-56px)] lg:overflow-hidden">{children}</div>;
   if (view !== "overview") {
-    return (
-      <div className="portal-dashboard flex w-full min-w-0 flex-col gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-56px)] lg:overflow-hidden">
+    return frame(
+      <>
         {header}
         <Suspense key={view} fallback={<PageLoading />}>
           {view === "leads" && <LeadsView {...viewProps} />}
@@ -130,11 +144,11 @@ export default async function AgentDashboardPage({ searchParams }: { searchParam
           {view === "accounting" && <AccountingView {...viewProps} />}
           {view === "compliance" && <ComplianceView {...viewProps} />}
         </Suspense>
-      </div>
+      </>,
     );
   }
 
-  // ── Overview: the reads the home already made, under the same rules ─────────────────────────────
+  // ── Home: the reads the home already made, under the same rules ─────────────────────────────────
   const wanted: Array<{ key: HomeMoneyKey; href: string }> = noMoney ? [] : [...home.money];
   // Sixteen #15's one upgrade line rides on the money read: only when the agency's own data makes the case.
   const upgrade = shown.has("upgrade") ? home.upgrade : null;
@@ -151,22 +165,31 @@ export default async function AgentDashboardPage({ searchParams }: { searchParam
   // when the reader may open applications.
   const salesHref = open(["sell.applications"]);
   const sales = salesHref ? { href: salesHref, pending: pendingSummary(context.tenantId, scope).catch(() => null), snapshot: loadSalesSnapshot(context.tenantId, scope).catch(() => null) } : null;
+  // LA-0.3: the setup checklist stays on Home until done, folded into Needs you as one tile opening Get set up.
   const setupOpen = shown.has("setup") && !checklist.complete && setupGuide.hiddenAt === null;
   const nothing = available.length === 0;
+  // The role's daily pages (the audit: never surfaced), each only when this reader can open it.
+  const pages = Object.fromEntries((Object.keys(HOME_PAGES) as HomePageKey[]).map((key) => [key, open(HOME_PAGES[key])])) as Record<HomePageKey, string | null>;
+  // The goal ring's stored goal (migration 20261118610000); before it is applied the read answers "missing".
+  const goalSpec = HOME_GOAL[kind];
+  const goal = goalSpec ? { read: readGoal(context.tenantId, goalSpec.whose === "agency" ? null : context.userId, goalSpec.kind), canSet: maySetGoal(context.memberRole ?? context.role, goalSpec.kind, goalSpec.whose) } : null;
+  // A producer's own balance on the pay ledger (My pay's figure), read only (My pay itself syncs the ledger).
+  const myPay = kind === "producer" && pages.myPay && !noMoney
+    ? readBalances(context).then((balances) => ({ owedCents: balances.rows.filter((row) => row.producerUserId === context.userId).reduce((sum, row) => sum + row.balanceCents, 0) })).catch(() => null)
+    : null;
 
-  // The Overview may scroll a little (owner 2026-11-06, second pass); the module views still fit the screen.
-  return (
-    <div className="portal-dashboard flex w-full min-w-0 flex-col gap-4">
+  return frame(
+    <>
       {/* The finish moment, when the last step was done somewhere other than the guide bar: this render stamps it. */}
       {shown.has("setup") && checklist.total > 0 && checklist.complete && !setupProgress.finished ? <SetupCelebration steps={checklist.total} done={checklist.completed} audience="owner" /> : null}
       {header}
-      {setupOpen && <HomeSetup checklist={checklist} />}
       {nothing ? (
         // A plan granting nothing is the owner's to fix.
         <Card><EmptyState title="No workspace feature is active yet" hint="Ask your account owner to activate one." /></Card>
       ) : (
         <Suspense fallback={<PageLoading />}>
-          <OverviewView
+          <HomeView
+            kind={kind}
             today={today}
             money={money}
             callbacks={callbacks}
@@ -179,14 +202,18 @@ export default async function AgentDashboardPage({ searchParams }: { searchParam
             dialerHref={dialerHref}
             leadHref={(leadId) => (leadsHref ? `/app/leads/${leadId}` : null)}
             upgrade={upgrade}
+            setup={setupOpen ? { left: Math.max(0, checklist.total - checklist.completed), href: "/app/setup" } : null}
             zone={zone}
             views={views.map((item) => item.key)}
             viewProps={viewProps}
             sales={sales}
+            pages={pages}
+            goal={goal}
+            myPay={myPay}
           />
         </Suspense>
       )}
-    </div>
+    </>,
   );
 }
 

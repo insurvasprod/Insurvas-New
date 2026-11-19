@@ -1,7 +1,10 @@
+import { Suspense } from "react";
+
 import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { DoneForNow, ReviewWorkspace, type ReviewItem } from "@/components/app/book/needs-you/review-workspace";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
+import { StreamSection } from "@/components/ui/stream-section";
 import { scopeFor } from "@/lib/agency/visibility";
 import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { DISCREPANCY_LABELS, type DiscrepancyType } from "@/lib/ingestion/discrepancyEngine";
@@ -33,12 +36,35 @@ export default async function NeedsYouReviewPage({ searchParams }: { searchParam
   const search = await searchParams;
   const scope = await needsYouScope(guard);
   const fileId = search.file && isRecordUuid(search.file) ? search.file : null;
-  const [list, file] = await Promise.all([loadNeedsYou(scope), fileId ? loadFileFilter(scope.tenantId, fileId) : null]);
+  // Frame first (UI-CONSISTENCY §7a): the title (it is the queue's kind, from the address) and Done for now draw at once;
+  // the queue streams in under them.
+  const reads = Promise.all([loadNeedsYou(scope), fileId ? loadFileFilter(scope.tenantId, fileId) : null]);
   const kind = search.kind && isNeedsYouKind(search.kind) ? search.kind : null;
+  const title = kind ? TITLES[kind] ?? KIND_META[kind].label : "Review";
+  const fromHref = search.from && search.from.startsWith("/app/") ? search.from : null;
+  const backOf = (file: { fileId: string } | null) => fromHref ?? (file ? fileHref(file.fileId) : "/app/needs-you");
+
+  return (
+    <DataInPage step="needs-you" title={title} actions={<Suspense fallback={<DoneForNow href={backOf(fileId ? { fileId } : null)} />}><Done read={reads} backOf={backOf} /></Suspense>}>
+      <StreamSection shape="form">
+        <Queue read={reads} search={search} kind={kind} fileId={fileId} me={{ userId: scope.userId, keeper: scope.keeper }} backOf={backOf} readOnly={guard.entitlement.access === "read_only"} />
+      </StreamSection>
+    </DataInPage>
+  );
+}
+
+type Reads = Promise<[Awaited<ReturnType<typeof loadNeedsYou>>, Awaited<ReturnType<typeof loadFileFilter>> | null]>;
+
+async function Done({ read, backOf }: { read: Reads; backOf: (file: { fileId: string } | null) => string }) {
+  const [, file] = await read;
+  return <DoneForNow href={backOf(file)} />;
+}
+
+async function Queue({ read, search, kind, fileId, me, backOf, readOnly }: { read: Reads; search: Search; kind: NeedsYouKind | null; fileId: string | null; me: { userId: string; keeper: boolean }; backOf: (file: { fileId: string } | null) => string; readOnly: boolean }) {
+  const [list, file] = await read;
   const typeLabel = search.type ? DISCREPANCY_LABELS[search.type as DiscrepancyType]?.label ?? null : null;
-  const me = { userId: scope.userId, keeper: scope.keeper };
   // Status words wait on Insurvas: nothing to decide, so they never join a queue.
-  const all = viewItems(list.open, scope.keeper ? "agency" : "mine", me).filter((item) => !waitsOnInsurvas(item));
+  const all = viewItems(list.open, me.keeper ? "agency" : "mine", me).filter((item) => !waitsOnInsurvas(item));
   const queue = all.filter((item) => (!kind || item.kind === kind)
     && (!file || fromFile(item, file))
     && (!search.carrier || item.ref?.carrierId === search.carrier)
@@ -48,21 +74,17 @@ export default async function NeedsYouReviewPage({ searchParams }: { searchParam
   // `search`: what the queue's search box finds an item by — the list's own rule (policy, client, agent code, file).
   const items: ReviewItem[] = queue.map((item) => ({ kind: item.kind, id: item.id, about: item.about, why: item.why, who: item.who, ageDays: item.ageDays, href: item.href, search: searchText(item) }));
   const startAt = search.id ? Math.max(0, items.findIndex((item) => item.id === search.id)) : 0;
-  const backHref = search.from && search.from.startsWith("/app/") ? search.from : file ? fileHref(file.fileId) : "/app/needs-you";
-  const title = kind ? TITLES[kind] ?? KIND_META[kind].label : "Review";
   const source = [file?.name, typeLabel].filter(Boolean).join(" · ");
 
   return (
-    <DataInPage step="needs-you" title={title} actions={<DoneForNow href={backHref} />}>
-      <ReviewWorkspace
-        key={`${kind ?? ""}:${fileId ?? ""}:${search.carrier ?? ""}:${search.date ?? ""}:${search.type ?? ""}`}
-        items={items}
-        startAt={startAt}
-        source={source}
-        backHref={backHref}
-        readOnly={guard.entitlement.access === "read_only"}
-        initialQuery={searchParam(search.q) ?? ""}
-      />
-    </DataInPage>
+    <ReviewWorkspace
+      key={`${kind ?? ""}:${fileId ?? ""}:${search.carrier ?? ""}:${search.date ?? ""}:${search.type ?? ""}`}
+      items={items}
+      startAt={startAt}
+      source={source}
+      backHref={backOf(file)}
+      readOnly={readOnly}
+      initialQuery={searchParam(search.q) ?? ""}
+    />
   );
 }

@@ -1,9 +1,13 @@
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
+import { Suspense } from "react";
+
+import { Await, FactsShape } from "@/components/app/reports/await";
 import { ReportsPage } from "@/components/app/reports/reports-page";
 import { ScorecardRecord, ScorecardsBoard } from "@/components/app/agency/scorecards-board";
 import { EmptyState } from "@/components/ui/page-states";
+import { StreamSection } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
 import { producerScores } from "@/lib/agency/scorecardStore";
 import { scopeFor } from "@/lib/agency/visibility";
@@ -28,24 +32,33 @@ export default async function ProducerScorecardsPage({ searchParams }: { searchP
   const query = await searchParams;
   const period = sharedPeriod(query) ?? defaultPeriod();
   const show = showOf(query, "chart");
-  const data = await producerScores(guard.context, period, undefined, { scope: scopeFor(guard.context), series: !scoped });
+  // Frame first (§7a): the scores are started here; the title, rail and switch draw at once and the view streams in.
+  const data = producerScores(guard.context, period, undefined, { scope: scopeFor(guard.context), series: !scoped });
 
   if (scoped) {
     // "My scorecard" (5·4): only his own row, which is all the scoped read returns.
-    const mine = asShown(data.rows).find((r) => r.producerUserId === guard.context.userId);
+    const mine = data.then((read) => ({ available: read.available, row: asShown(read.rows).find((r) => r.producerUserId === guard.context.userId) ?? null }));
     return (
       <ReportsPage view="producers" title="My scorecard" info={MINE_INFO} show="chart"
-        facts={mine ? `${dayMonth(period.from)} – ${dayMonth(period.to)} · ${mine.submitted} submitted through Insurvas · ${mine.issued} issued in the carriers' files` : undefined}>
-        {mine && data.available
-          ? <ScorecardRecord row={mine} team={null} period={period} show={show} mine />
-          : <TableCard><EmptyState title={data.available ? "No scorecard yet" : "No carrier files yet"} hint={data.available ? "Your scorecard appears once you are an active producer." : "Scorecards are built from your agency's carrier policy files."} /></TableCard>}
+        facts={<Suspense fallback={<FactsShape />}><Await read={mine}>{({ row }) => (row ? `${dayMonth(period.from)} – ${dayMonth(period.to)} · ${row.submitted} submitted through Insurvas · ${row.issued} issued in the carriers' files` : null)}</Await></Suspense>}>
+        <StreamSection shape="strip+table">
+          <Await read={mine}>
+            {({ row, available }) => (row && available
+              ? <ScorecardRecord row={row} team={null} period={period} show={show} mine />
+              : <TableCard><EmptyState title={available ? "No scorecard yet" : "No carrier files yet"} hint={available ? "Your scorecard appears once you are an active producer." : "Scorecards are built from your agency's carrier policy files."} /></TableCard>)}
+          </Await>
+        </StreamSection>
       </ReportsPage>
     );
   }
 
   return (
     <ReportsPage view="producers" info={TEAM_INFO} show="chart">
-      <ScorecardsBoard available={data.available} rows={asShown(data.rows)} minSample={data.minSample} series={data.series} period={period} show={show} filter={scoreFilterOf(query.has)} />
+      <StreamSection shape="strip+table">
+        <Await read={data}>
+          {(read) => <ScorecardsBoard available={read.available} rows={asShown(read.rows)} minSample={read.minSample} series={read.series} period={period} show={show} filter={scoreFilterOf(query.has)} />}
+        </Await>
+      </StreamSection>
     </ReportsPage>
   );
 }

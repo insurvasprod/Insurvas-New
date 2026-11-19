@@ -5,6 +5,7 @@ import Link from "next/link";
 import { NotificationSoundSettings } from "@/components/app/notification-sound-settings";
 import type { AgentAlertSettings } from "@/lib/agentAlerts/presentation";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * An agent's notification preferences, drawn inside the top bar's preferences panel.
  *
@@ -44,12 +45,12 @@ export function AgentAlertPreferences({ feed }: { feed: AgentAlertPreferencesFee
       <div className="portal-top-settings-group">
         <label className="portal-top-settings-row">
           <span>Do not disturb</span>
-          <input type="checkbox" checked={settings.do_not_disturb} disabled={feed.saving}
+          <CheckBox checked={settings.do_not_disturb} disabled={feed.saving}
             onChange={() => void feed.save({ ...settings, do_not_disturb: !settings.do_not_disturb })} />
         </label>
         <label className="portal-top-settings-row">
           <span>Mute sound</span>
-          <input type="checkbox" checked={settings.sound_muted} disabled={feed.saving}
+          <CheckBox checked={settings.sound_muted} disabled={feed.saving}
             onChange={() => void feed.save({ ...settings, sound_muted: !settings.sound_muted })} />
         </label>
         <label className="portal-top-settings-range">

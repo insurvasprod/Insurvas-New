@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
@@ -42,7 +43,9 @@ export function HomePanel({
 }) {
   return (
     <section aria-label={title} data-size="panel" className={cn("m-glass flex min-w-0 flex-col rounded-lg border border-border", className)}>
-      <header className="flex min-h-12 items-center gap-2 px-4 pt-3">
+      {/* On a phone the badge (a chart's legend, a chip) takes its own line under the title, so the title is
+          never squeezed to "Premium ·…" between the badge and the button (QA pass 2026-11). */}
+      <header className="flex min-h-12 flex-wrap items-center gap-2 px-4 pt-3">
         {icon}
         <div className="flex min-w-0 flex-1 flex-col">
           <h2 className="m-0 min-w-0 truncate font-[family-name:var(--font-display)] text-[0.9375rem] font-semibold leading-snug tracking-[-0.01em] text-foreground">
@@ -51,7 +54,7 @@ export function HomePanel({
           </h2>
           {sub && <span className="line-clamp-2 text-xs text-muted-foreground">{sub}</span>}
         </div>
-        {badge}
+        {badge && <div data-panel-badge="" className="flex min-w-0 items-center max-sm:order-last max-sm:basis-full">{badge}</div>}
         {link && (roundLink ? <PanelRoundLink href={link.href} label={link.label} /> : <PanelLink href={link.href}>{link.label}</PanelLink>)}
       </header>
       <div className={cn("flex min-h-0 flex-1 flex-col px-4 pb-4 pt-2", bodyClassName)}>{children}</div>
@@ -64,31 +67,24 @@ export function HomePanel({
   );
 }
 
-/** The small "View all ›" link in a panel header. */
+/**
+ * The way to the full page from a panel header: a labelled outline button ("Activity ›"), so a salesperson
+ * sees where it goes (QA pass 2026-11: a bare grey link or a lone "›" read as decoration).
+ */
 export function PanelLink({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <Link
-      href={href}
-      className="-mr-1.5 inline-flex h-8 shrink-0 items-center gap-0.5 rounded-md px-1.5 text-[0.8125rem] font-medium text-muted-foreground no-underline transition-colors hover:bg-[var(--hover-wash)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-    >
-      {children}
-      <ChevronRight className="size-3.5" aria-hidden="true" />
-    </Link>
+    <Button asChild variant="outline" size="sm" className="shrink-0">
+      <Link href={href} className="no-underline">
+        {children}
+        <ChevronRight aria-hidden="true" />
+      </Link>
+    </Button>
   );
 }
 
-/** The round "›" link in a panel header; its label is what a screen reader hears. */
+/** Kept for callers that asked for the round "›": it is the same labelled button now, never an icon alone. */
 export function PanelRoundLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      aria-label={label}
-      title={label}
-      className="grid size-8 shrink-0 place-items-center rounded-full border border-border text-muted-foreground no-underline transition-colors hover:bg-[var(--hover-wash)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-    >
-      <ChevronRight className="size-4" aria-hidden="true" />
-    </Link>
-  );
+  return <PanelLink href={href}>{label}</PanelLink>;
 }
 
 /** One footer fact: "Contact rate 38%". */

@@ -8,7 +8,7 @@ import { Check, Loader2 } from "lucide-react";
 import { Callout, KeyValues } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
-import { PageLoading } from "@/components/ui/page-loading";
+import { StreamFallback } from "@/components/ui/stream-section";
 import type { DispositionOption } from "@/lib/dispositions/types";
 import { US_CUSTOMER_TIMEZONES } from "@/lib/callbacks/timezone";
 import { cn } from "@/lib/utils";
@@ -289,7 +289,16 @@ export function DispositionWizard({ workItemId, readOnly, stepBar, embedded = fa
     </div>
   );
 
-  if (loading && !wizard) return <PageLoading strip={false} rows={6} />;
+  // Frame first (UI-CONSISTENCY §7a): the title (its fixed fallback until the caller's name comes) and the step bar
+  // draw at once; the outcome form loads as one block where it will be.
+  if (loading && !wizard) {
+    return (
+      <div className="m-stagger flex w-full min-w-0 flex-col gap-4">
+        {header}
+        <StreamFallback shape="form" rows={4} />
+      </div>
+    );
+  }
   if (!wizard || !view) return <><div className="flex w-full min-w-0 flex-col gap-6">{header}<Callout tone="error" title={<span className="flex flex-wrap items-center gap-3">{error || "The call outcome wizard is unavailable."}<Button type="button" variant="outline" onClick={() => void walk.load()}>Try again</Button></span>} /></div></>;
 
   const { node, multi, selected, completed, chosen, isCallback, orderedSteps, firstSequence, nodesById, walking, customerZone } = view;

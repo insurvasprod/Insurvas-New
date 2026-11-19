@@ -5,6 +5,7 @@ import { Banknote, Calendar, CornerDownLeft, DollarSign, FileText, Hash, Landmar
 
 import { cn } from "@/lib/utils";
 import { inputControl } from "@/components/ui/field";
+import { useDragLift } from "@/components/ui/use-drag-lift";
 import type { TemplateField, TemplateFieldType } from "@/lib/templates/constants";
 
 /** What a drag from the library carries (read by the canvas). */
@@ -23,9 +24,12 @@ export const TYPE_SHORT: Record<TemplateFieldType, string> = {
 const ORDER: TemplateFieldType[] = ["text", "long_text", "number", "currency", "date", "phone", "email", "boolean", "single_select", "multi_select", "ssn", "bank_routing", "bank_account"];
 
 function Tile({ icon: Icon, label, note, payload, onAdd, disabled }: { icon: LucideIcon; label: string; note?: ReactNode; payload: LibraryItem; onAdd: () => void; disabled?: boolean }) {
+  // Wave C: the tile picked up lifts and follows the pointer onto the page (no browser ghost).
+  const { lift } = useDragLift();
   const start = (event: DragEvent<HTMLButtonElement>) => {
     event.dataTransfer.setData(LIBRARY_DRAG, JSON.stringify(payload));
     event.dataTransfer.effectAllowed = "copy";
+    lift(event);
   };
   return (
     <button

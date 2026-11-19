@@ -8,7 +8,9 @@
  */
 
 import { StatusChip } from "@/components/ui/status-chip";
-import { useEffect, useRef, useState, type DragEvent, type HTMLAttributes, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type DragEvent, type HTMLAttributes, type ReactNode, type RefObject } from "react";
+import { useFlip } from "@/components/ui/use-flip";
+import { useDragLift } from "@/components/ui/use-drag-lift";
 import { Sheet } from "@/components/ui/sheet";
 import { ArrowDown, ArrowLeft, ArrowUp, GripVertical, Plus, Trash2 } from "lucide-react";
 
@@ -164,6 +166,11 @@ export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSele
   }, [bank]);
   const [overKey, setOverKey] = useState<string | null>(null);
   const endDrag = () => { setDragKey(null); setOverKey(null); };
+  // Wave C (plan item 12): a question picked up lifts and follows the pointer, a gap opens where it will land and the
+  // questions under it slide aside, and on drop it glides from where it was let go (useFlip); ↑ ↓ moves glide too.
+  const listRef = useRef<HTMLDivElement>(null);
+  const flip = useFlip(listRef);
+  const { lift, rect: liftedAt } = useDragLift();
   const moveBlock = (from: string, before: string | null, section: string) => {
     const block = new Set([from, ...descendantKeys(from, qs)]);
     if (before && block.has(before)) return;
@@ -182,7 +189,7 @@ export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSele
   };
   const dropProps = (before: string | null, section: string, marker: string) => readOnly ? {} : {
     onDragOver: (e: DragEvent) => { if (dragKey && dragKey !== before) { e.preventDefault(); e.stopPropagation(); setOverKey(marker); } },
-    onDrop: (e: DragEvent) => { e.preventDefault(); e.stopPropagation(); if (dragKey) moveBlock(dragKey, before, section); endDrag(); },
+    onDrop: (e: DragEvent) => { e.preventDefault(); e.stopPropagation(); if (dragKey) { const at = liftedAt(); if (at) flip.place(dragKey, at); moveBlock(dragKey, before, section); } endDrag(); },
   };
 
   const numberOf = new Map(qs.map((q, i) => [q.key, i + 1]));
@@ -194,7 +201,7 @@ export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSele
     >
       <div className="flex flex-col gap-5">
       {children}
-      <div className="min-w-0">
+      <div ref={listRef} className="min-w-0">
         {ordered.sections.map((s, si) => {
           const inSection = qs.filter((q) => q.section === s.key);
           return (
@@ -235,16 +242,17 @@ export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSele
                     const hasChildren = qs.some((x) => x.showWhen?.key === q.key);
                     const on = q.key === selectedKey;
                     return (
+                      <Fragment key={q.key}>
+                      {overKey === q.key && dragKey !== q.key && <li aria-hidden="true" className={cn("m-drop-gap h-9 rounded-[8px]", q.showWhen && "ml-4")} {...dropProps(q.key, s.key, q.key)} />}
                       <li
-                        key={q.key}
+                        data-flip-key={q.key}
                         draggable={!readOnly}
-                        onDragStart={(e) => { setDragKey(q.key); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", q.key); }}
+                        onDragStart={(e) => { setDragKey(q.key); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", q.key); lift(e); }}
                         onDragEnd={endDrag}
                         {...dropProps(q.key, s.key, q.key)}
                         className={cn(
                           "flex items-start gap-2 rounded-[8px] px-2 py-1.5 transition-[box-shadow,opacity] duration-150",
                           on && "bg-[var(--brand-50)]", q.showWhen && "ml-4",
-                          overKey === q.key && dragKey !== q.key && "shadow-[inset_0_2px_0_var(--primary)]",
                           dragKey === q.key && "opacity-50",
                         )}
                       >
@@ -288,6 +296,7 @@ export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSele
                           </span>
                         )}
                       </li>
+                      </Fragment>
                     );
                   })}
                 </ol>
@@ -328,6 +337,8 @@ export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSele
         dragKey={dragKey}
         overKey={overKey}
         setDragKey={setDragKey}
+        flipRef={listRef}
+        lift={lift}
         endDrag={endDrag}
         dropProps={dropProps}
         addQuestion={addQuestion}
@@ -629,6 +640,8 @@ type SheetLayoutProps = {
   dragKey: string | null;
   overKey: string | null;
   setDragKey: (key: string | null) => void;
+  flipRef: RefObject<HTMLDivElement | null>;
+  lift: (event: DragEvent<Element>) => void;
   endDrag: () => void;
   dropProps: (before: string | null, section: string, marker: string) => HTMLAttributes<HTMLElement>;
   addQuestion: (section: string) => void;
@@ -649,7 +662,7 @@ function outcomeOf(q: UwQuestion): { tone: "danger" | "good" | "neutral"; label:
 }
 
 function SheetLayout(props: SheetLayoutProps) {
-  const { draft, qs, ordered, readOnly, selectedKey, onSelect, onChange, numberOf, dragKey, overKey, setDragKey, endDrag, dropProps, addQuestion, addSection, renameSection, removeSection, remove, move, editor, knockoutFor } = props;
+  const { draft, qs, ordered, readOnly, selectedKey, onSelect, onChange, numberOf, dragKey, overKey, setDragKey, flipRef, lift, endDrag, dropProps, addQuestion, addSection, renameSection, removeSection, remove, move, editor, knockoutFor } = props;
   const selected = qs.find((q) => q.key === selectedKey) ?? null;
   // Cancel puts the draft back as it was when the sheet opened.
   const [opened, setOpened] = useState<{ key: string; draft: UwDraft } | null>(null);
@@ -662,7 +675,7 @@ function SheetLayout(props: SheetLayoutProps) {
   const hasChildren = selected ? qs.some((x) => x.showWhen?.key === selected.key) : false;
 
   return (
-    <div className="flex flex-col">
+    <div ref={flipRef} className="flex flex-col">
       {!readOnly && (
         <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] px-4 py-2">
           <Button type="button" variant="outline" size="sm" disabled={!lastSection} onClick={() => { setOpened({ key: "", draft }); addQuestion(lastSection); }}><Plus aria-hidden="true" />New question</Button>
@@ -694,17 +707,18 @@ function SheetLayout(props: SheetLayoutProps) {
                 const outcome = outcomeOf(q);
                 const sub = [isYnu(q) ? "Yes / No / Unsure" : TYPE_SHORT[q.type], q.required ? "required" : null, q.showWhen ? `when “${parent?.label ?? q.showWhen.key}” is ${answerText(parent, q.showWhen.equals)}` : null, q.knockout?.note ? q.knockout.note : null].filter(Boolean).join(" · ");
                 return (
+                  <Fragment key={q.key}>
+                  {overKey === q.key && dragKey !== q.key && <li aria-hidden="true" className="m-drop-gap h-9" {...dropProps(q.key, s.key, q.key)} />}
                   <li
-                    key={q.key}
+                    data-flip-key={q.key}
                     draggable={!readOnly}
-                    onDragStart={(e) => { setDragKey(q.key); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", q.key); }}
+                    onDragStart={(e) => { setDragKey(q.key); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", q.key); lift(e); }}
                     onDragEnd={endDrag}
                     {...dropProps(q.key, s.key, q.key)}
                     className={cn(
                       "group flex items-center gap-2 border-b border-[var(--border)] px-3 py-2 transition-[box-shadow,opacity,background-color] duration-150",
                       on ? "bg-[var(--primary-soft)]" : "hover:bg-[var(--surface-alt)]",
                       q.showWhen && "pl-8",
-                      overKey === q.key && dragKey !== q.key && "shadow-[inset_0_2px_0_var(--primary)]",
                       dragKey === q.key && "opacity-50",
                     )}
                   >
@@ -722,6 +736,7 @@ function SheetLayout(props: SheetLayoutProps) {
                     )}
                     <StatusChip dot={false} tone={outcome.tone}>{outcome.label}</StatusChip>
                   </li>
+                  </Fragment>
                 );
               })}
             </ol>

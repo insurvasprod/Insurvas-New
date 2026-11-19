@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
 import { canAccessConfigurationSection } from "@/lib/configuration/sections";
-import { AdminPageHeader } from "@/components/admin/page-header";
+import { PlatformPage } from "@/components/admin/platform/platform-page";
 import { SettingsForm } from "@/components/admin/settings-form";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { getAllSettings } from "@/lib/settings/queries";
@@ -24,29 +24,27 @@ export default async function AdvancedPage() {
   const lastWrite = shown.reduce<string | null>((latest, setting) => (setting.updatedAt && (!latest || setting.updatedAt > latest) ? setting.updatedAt : latest), null);
 
   return (
-    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      {/* "Within 30 seconds", not "immediately": the settings cache on every other instance lives
-          that long after a write (lib/settings/queries.ts CACHE_TTL_MS). */}
-      <AdminPageHeader
-        title="Advanced"
-        subtitle="Changes apply within 30 seconds, with no staging step."
-      />
-      <StatStrip label="Setting totals">
-        <StatTile label="Settings" value={shown.length.toLocaleString("en-US")} footnote={`${groups.toLocaleString("en-US")} groups`} />
-        <StatTile label="Overridden" value={overridden.toLocaleString("en-US")} valueTone={overridden > 0 ? "info" : undefined} footnote="changed from the default" />
-        <StatTile label="At default" value={(shown.length - overridden).toLocaleString("en-US")} reserveFootnote />
-        <StatTile label="Last saved" valueSize="text" value={lastWrite ? new Date(lastWrite).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Never"} reserveFootnote />
-      </StatStrip>
-      <SettingsForm
-        initial={shown
-          .map((setting) => ({
-            key: setting.def.key,
-            value: setting.value,
-            isOverridden: setting.isOverridden,
-            updatedAt: setting.updatedAt,
-          }))}
-        canManageLoginProtection={LOGIN_PROTECTION_ROLES.includes(admin.role)}
-      />
-    </div>
+    // "Within 30 seconds", not "immediately": the settings cache on every other instance lives that long after a write
+    // (lib/settings/queries.ts CACHE_TTL_MS). Inside the Platform frame (admin round 1, 2026-11-18).
+    <PlatformPage step="advanced" info="Platform-wide settings. Changes apply within 30 seconds, with no staging step.">
+      <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+        <StatStrip label="Setting totals">
+          <StatTile label="Settings" value={shown.length.toLocaleString("en-US")} footnote={`${groups.toLocaleString("en-US")} groups`} />
+          <StatTile label="Overridden" value={overridden.toLocaleString("en-US")} valueTone={overridden > 0 ? "info" : undefined} footnote="changed from the default" />
+          <StatTile label="At default" value={(shown.length - overridden).toLocaleString("en-US")} reserveFootnote />
+          <StatTile label="Last saved" valueSize="text" value={lastWrite ? new Date(lastWrite).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Never"} reserveFootnote />
+        </StatStrip>
+        <SettingsForm
+          initial={shown
+            .map((setting) => ({
+              key: setting.def.key,
+              value: setting.value,
+              isOverridden: setting.isOverridden,
+              updatedAt: setting.updatedAt,
+            }))}
+          canManageLoginProtection={LOGIN_PROTECTION_ROLES.includes(admin.role)}
+        />
+      </div>
+    </PlatformPage>
   );
 }

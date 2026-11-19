@@ -176,7 +176,7 @@ export async function recordMemberSetupFinished(tenantId: string, userId: string
 }
 
 async function loadBaseProgress(tenantId: string): Promise<SetupProgress> {
-  const [contractAdded, carrierSwitchedOn, statementImported, appointmentsConfirmed, leadSourcesAdded, campaignAdded, phoneAdded, bookImported, finished] = await Promise.all([
+  const [contractAdded, carrierSwitchedOn, statementImported, appointmentsConfirmed, leadSourcesAdded, campaignAdded, phoneAdded, bookImported, finished, productsChosen] = await Promise.all([
     proves(db().from("tenant_carriers").select("id").eq("tenant_id", tenantId).eq("is_active", true).limit(1), readFoundRow),
     // Adding a carrier writes its "contracted" switch; the contract (level + writing number) is
     // optional since 2026-10-28, so either one proves "Add your carriers".
@@ -197,8 +197,10 @@ async function loadBaseProgress(tenantId: string): Promise<SetupProgress> {
     proves(db().from("tenants").select("setup_checklist_completed_at").eq("id", tenantId).maybeSingle(), (read) =>
       readFoundRow(read) && (read?.data as { setup_checklist_completed_at?: unknown }).setup_checklist_completed_at != null,
     ),
+    // A product the agency sells (Settings › Products): import, campaigns and quotes offer nothing without one.
+    proves(db().from("tenant_products").select("product_code").eq("tenant_id", tenantId).eq("is_enabled", true).limit(1), readFoundRow),
   ]);
-  return { carriersAdded: contractAdded || carrierSwitchedOn, statementImported, appointmentsConfirmed, leadSourcesAdded, campaignAdded, phoneAdded, bookImported, finished };
+  return { carriersAdded: contractAdded || carrierSwitchedOn, statementImported, appointmentsConfirmed, leadSourcesAdded, productsChosen, campaignAdded, phoneAdded, bookImported, finished };
 }
 
 /**

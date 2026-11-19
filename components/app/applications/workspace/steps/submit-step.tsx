@@ -120,7 +120,7 @@ function SubmitBody() {
           ) : (
             <div className="flex flex-col gap-4" onPaste={ready ? shot.onPaste : undefined}>
               {!ready && (
-                <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-[var(--border)] border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">
+                <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-[var(--border)] px-3 py-2 text-sm font-medium text-[var(--warning-ink)]">
                   <span>Mark the application ready on the Review step first.</span>
                   <Button type="button" variant="outline" onClick={() => goTo("review")}>Go to Review</Button>
                 </div>

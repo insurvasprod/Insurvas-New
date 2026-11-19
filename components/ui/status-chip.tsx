@@ -58,10 +58,12 @@ export function StatusChip({
   return (
     <span
       title={title}
-      className={`inline-flex h-[22px] w-fit items-center gap-1.5 whitespace-nowrap rounded-badge px-2 text-xs leading-none font-medium tracking-[-0.01em] ${TONE[tone].chip}${className ? ` ${className}` : ""}`}
+      // m-chip-fade (Tier 1 motion, every chip since Wave A 2026-11-17): a change of tone (Open → Settled) cross-fades
+      // its ground, ink and dot over --t-panel instead of cutting. Colour only; nothing moves.
+      className={`m-chip-fade inline-flex h-[22px] w-fit items-center gap-1.5 whitespace-nowrap rounded-badge px-2 text-xs leading-none font-medium tracking-[-0.01em] ${TONE[tone].chip}${className ? ` ${className}` : ""}`}
     >
       {showDot && (
-        <span className={`size-1.5 shrink-0 rounded-full ${TONE[tone].dot}`} aria-hidden="true" />
+        <span data-chip-dot="" className={`size-1.5 shrink-0 rounded-full ${TONE[tone].dot}`} aria-hidden="true" />
       )}
       {children}
     </span>

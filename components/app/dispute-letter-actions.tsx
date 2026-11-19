@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { ToolbarCheckbox } from "@/components/ui/data-toolbar";
+import { useSavedFlash } from "@/components/ui/use-saved-flash";
 
 export function DisputeLetterRecipient({ carrierId, carrierName, savedAddress, canSave }: {
   carrierId: string;
@@ -34,6 +35,8 @@ export function DisputeLetterRecipient({ carrierId, carrierName, savedAddress, c
   const [value, setValue] = useState(savedAddress ?? fallback);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "good" | "error"; text: string } | null>(null);
+  // The "To ·" line glows once when the address saves (Wave B, 2026-11-18; the textarea's own ground would hide it).
+  const glow = useSavedFlash();
   const changed = value.trim() !== (saved ?? "").trim() && value.trim().length > 0;
 
   async function save() {
@@ -43,6 +46,7 @@ export function DisputeLetterRecipient({ carrierId, carrierName, savedAddress, c
       const data = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "The address was not saved.");
       setSaved(value.trim());
+      glow.flash("address");
       setMessage({ tone: "good", text: `Saved: every letter to ${carrierName} starts with this address.` });
     } catch (reason) {
       setMessage({ tone: "error", text: reason instanceof Error ? reason.message : "The address was not saved." });
@@ -54,7 +58,7 @@ export function DisputeLetterRecipient({ carrierId, carrierName, savedAddress, c
   return (
     <>
       <div className="flex flex-col gap-1 print:hidden">
-        <label htmlFor="letter-recipient" className="text-xs font-semibold text-muted-foreground">
+        <label htmlFor="letter-recipient" className="w-fit rounded-[4px] text-xs font-semibold text-muted-foreground" {...glow.props("address")}>
           To · {saved ? `${carrierName}'s saved commissions address` : `no address saved for ${carrierName} yet`}
         </label>
         <textarea

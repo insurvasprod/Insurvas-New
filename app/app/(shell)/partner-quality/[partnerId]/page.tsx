@@ -17,7 +17,10 @@ export default async function PartnerQualityDetailPage({ params, searchParams }:
   if (!actAsPage(guard, ["owner", "producer", "bookkeeper"])) return <RoleGateNotice featureLabel="Partner quality" detail="Owners, producers, and bookkeepers can review partner lead quality." />;
   // AG-0.5: inside an agency this is the agency's business, not a producer's work — its API refuses a narrow session too.
   if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Partner quality" detail="In an agency, the owner and admins review partner quality." />;
-  const [{ partnerId }, query, records] = await Promise.all([params, searchParams, guardPage("publisher_records")]);
+  // The address and the second gate only (frame first, §7a): the partner's figures are the workspace's own read.
+  const { partnerId } = await params;
+  const query = await searchParams;
+  const records = await guardPage("publisher_records");
   if (!UUID.test(partnerId)) notFound();
   // ⋯ › Open the partner's record (/app/publishers/[id]) for someone who may open partner records.
   const recordLinks = records.entitled && actAsPage(records, ["owner", "bookkeeper"]);

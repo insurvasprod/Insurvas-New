@@ -37,6 +37,7 @@ import {
 } from "@/lib/system/adminFormat";
 
 
+import { CheckBox } from "@/components/ui/check-box";
 const STATE_PILL: Record<AnnouncementState, { tone: PillTone; label: string }> = {
   live: { tone: "success", label: "Live" },
   scheduled: { tone: "info", label: "Scheduled" },
@@ -351,9 +352,8 @@ export function SystemAnnouncements({
               </Field>
             </div>
             <label htmlFor="announcement-dismissible" className="flex items-center gap-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
-              <input
+              <CheckBox
                 id="announcement-dismissible"
-                type="checkbox"
                 checked={draft.isDismissible}
                 onChange={(event) => setDraft({ ...draft, isDismissible: event.target.checked })}
               />

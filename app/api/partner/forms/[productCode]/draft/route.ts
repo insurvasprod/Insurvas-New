@@ -11,7 +11,7 @@ import {
   savePartnerFormDraftSlot,
 } from "@/lib/agentTemplates/service";
 import { partnerProductHttpError } from "@/lib/partnerProducts/http";
-import { requirePartner } from "@/lib/partnerAuth/requirePartner";
+import { partnerMayOpen, partnerPageRefused, requirePartner } from "@/lib/partnerAuth/requirePartner";
 import { assertPartnerProductApproved } from "@/lib/partnerProducts/service";
 import { assertPartnerStateAccess } from "@/lib/partnerMarkets/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
@@ -43,6 +43,8 @@ export async function GET(
 ) {
   const auth = await requirePartner();
   if (auth instanceof NextResponse) return auth;
+  // Partner type (lib/partnerAuth/portalAccess.ts): refused on the server, not only hidden from the menu.
+  if (!(await partnerMayOpen(auth.context, "submit"))) return partnerPageRefused();
   try {
     const productCode = (await params).productCode;
     await assertPartnerProductApproved(
@@ -115,6 +117,8 @@ export async function PUT(
 ) {
   const auth = await requirePartner();
   if (auth instanceof NextResponse) return auth;
+  // Partner type (lib/partnerAuth/portalAccess.ts): refused on the server, not only hidden from the menu.
+  if (!(await partnerMayOpen(auth.context, "submit"))) return partnerPageRefused();
   if (auth.context.partnerStatus !== "active")
     return NextResponse.json(
       { error: "This partner is paused and cannot save new lead drafts" },

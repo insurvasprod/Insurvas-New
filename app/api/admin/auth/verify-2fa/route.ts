@@ -6,6 +6,7 @@ import { verify2faSchema } from "@/lib/adminAuth/schemas";
 import { verifyTotpStep } from "@/lib/adminAuth/totp";
 import { openAdminTotpSecret, sealAdminTotpSecret } from "@/lib/adminAuth/totpSecret";
 import { claimTotpStep, type TotpStepClient } from "@/lib/adminAuth/totpReplay";
+import { currentAdminSessionVersion, type SessionVersionClient } from "@/lib/adminAuth/sessionVersion";
 import { isAdminRole } from "@/lib/adminAuth/roles";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import {
@@ -174,6 +175,15 @@ export async function POST(request: NextRequest) {
     console.warn("[verify-2fa] admin_users.last_totp_step is missing; replay check skipped until 20260924364000 is applied");
   }
 
+  // The session carries the admin's current session_version, so raising it later ends this session
+  // (security review 2026-11, M-2). 0 until 20261117200000 is applied. Fail closed on a read error:
+  // a token at a guessed version would be refused on its first request anyway.
+  const sessionVersion = await currentAdminSessionVersion(supabase as unknown as SessionVersionClient, admin.id);
+  if (sessionVersion === "error") {
+    console.error("[verify-2fa] could not read admin_users.session_version; refusing the sign-in");
+    return NextResponse.json(GENERIC_ERROR, { status: 401 });
+  }
+
   // Only a correct, unused code clears the second-factor count. A correct password does not
   // (it clears the password bucket only), so re-entering it cannot reset the guesses.
   await clearLoginFailures("admin", admin.email, request, "totp");
@@ -199,7 +209,7 @@ export async function POST(request: NextRequest) {
     request,
   });
 
-  const sessionToken = await signAdminSessionToken(admin.id, admin.role);
+  const sessionToken = await signAdminSessionToken(admin.id, admin.role, sessionVersion);
   const response = NextResponse.json({ ok: true });
   response.cookies.set(ADMIN_SESSION_COOKIE, sessionToken, sessionCookieOptions);
   response.cookies.set(ADMIN_PENDING_2FA_COOKIE, "", clearedAdminCookieOptions);

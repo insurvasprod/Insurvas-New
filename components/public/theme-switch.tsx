@@ -4,10 +4,7 @@ import { useId } from "react";
 
 import { useTheme } from "@/components/theme-provider";
 import styles from "@/components/public/site-header.module.css";
-
-type ViewTransitionDocument = Document & {
-  startViewTransition?: (update: () => void) => { ready: Promise<void>; finished: Promise<void> };
-};
+import { revealTheme } from "@/components/theme-reveal";
 
 /**
  * The landing nav's light/dark switch. One click flips the theme the page is actually showing (a
@@ -26,45 +23,9 @@ export function ThemeSwitch({ compact = false }: { compact?: boolean }) {
   const maskId = `${useId()}-moon`;
 
   const toggle = (event: React.MouseEvent<HTMLButtonElement>) => {
-    const root = document.documentElement;
-    const next = root.classList.contains("dark") ? "light" : "dark";
-    const apply = () => setTheme(next);
-
-    const doc = document as ViewTransitionDocument;
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!doc.startViewTransition || reduced) {
-      apply();
-      void root.offsetHeight; // commit the new colours before transitions come back
-      requestAnimationFrame(() => root.classList.remove("theme-switching"));
-      return;
-    }
-
-    const box = event.currentTarget.getBoundingClientRect();
-    const x = box.left + box.width / 2;
-    const y = box.top + box.height / 2;
-    const radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
-    root.classList.add("theme-reveal");
-    const transition = doc.startViewTransition(apply);
-    let circle: Animation | null = null;
-    transition.ready
-      .then(() => {
-        // `fill: both` holds the circle shut before it starts and open after it ends, for as long as the
-        // transition's pictures live.
-        circle = root.animate(
-          { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
-          { duration: 650, easing: "cubic-bezier(.16, 1, .3, 1)", fill: "both", pseudoElement: "::view-transition-new(root)" },
-        );
-      })
-      .catch(() => undefined);
-    // Only once the transition itself is over. Dropped when the circle's animation ended, the transition's
-    // last frame fell back to the default 380ms cross-fade of the old and new pictures — a dark-then-white
-    // blink as the reveal finished (owner 2026-11-03: "it flashes").
-    transition.finished
-      .catch(() => undefined)
-      .finally(() => {
-        circle?.cancel(); // its picture is gone; `fill: both` would otherwise keep it listed
-        root.classList.remove("theme-reveal", "theme-switching");
-      });
+    const next = document.documentElement.classList.contains("dark") ? "light" : "dark";
+    // The circle reveal, shared with ThemeToggle (components/theme-reveal.ts).
+    revealTheme(event.currentTarget, () => setTheme(next));
   };
 
   return (

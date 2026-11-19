@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import {
   ArrowRightLeft, Bell, BellOff, Check, ChevronDown, KeyboardIcon, LogOut, Search, SlidersHorizontal,
   TriangleAlert, UserRound,
@@ -12,20 +13,30 @@ import {
 import { useAgentAlertFeed, type AgentAlert } from "@/lib/agentAlerts/useAgentAlertFeed";
 import { WORKSPACE_ALERT_EVENTS } from "@/lib/agentAlerts/presentation";
 import { bellToneOf } from "@/lib/agentAlerts/bell";
-import { AgentAlertPreferences } from "@/components/app/agent-alert-preferences";
-import { NotificationCentrePanel, useBellCentre } from "@/components/app/agent-notification-centre";
+import { useBellCentre } from "@/components/app/agent-notification-centre";
 import { ThemeSwitch } from "@/components/public/theme-switch";
-import { KeyboardShortcutsDialog } from "@/components/app/keyboard-shortcuts-dialog";
 import { allMenuItems } from "@/lib/menu/definition";
 import { OPEN_ALERT_SETTINGS_EVENT } from "@/lib/agentAlerts/openAlertSettings";
 import { KBD_ITEM_ATTRIBUTE, KBD_LIST_ATTRIBUTE, isTypingTarget, listKeyDirection, nextListIndex } from "@/lib/keyboard/listNavigation";
 import { notify } from "@/lib/notify";
 import { OPEN_WORKSPACES_EVENT } from "@/lib/menu/navEvents";
 import { ViewTabs } from "@/components/ui/view-tabs";
+import { CountBadge } from "@/components/ui/count-badge";
+import { useGlidePill } from "@/components/ui/tab-track";
 import { usePageNotices } from "@/components/ui/page-notices";
 import type { MenuSection } from "@/lib/menu/definition";
 import { TopBarNew } from "@/components/app/nav/top-bar-nav";
 import { clearResources } from "@/lib/client/resource-cache";
+
+// The preferences panel (and its sound settings) draws only when someone opens it, so it is not part of the shell
+// every page downloads (speed pass 2026-11-12). It is fetched on idle after the bar mounts, so opening it never waits.
+const loadPreferences = () => import("@/components/app/agent-alert-preferences").then((m) => m.AgentAlertPreferences);
+const AgentAlertPreferences = dynamic(loadPreferences, { ssr: false });
+// The bell's panel and the shortcuts list, the same way: drawn only once opened, fetched on idle.
+const loadBellPanel = () => import("@/components/app/agent-notification-panel").then((m) => m.NotificationCentrePanel);
+const NotificationCentrePanel = dynamic(loadBellPanel, { ssr: false });
+const loadShortcuts = () => import("@/components/app/keyboard-shortcuts-dialog").then((m) => m.KeyboardShortcutsDialog);
+const KeyboardShortcutsDialog = dynamic(loadShortcuts, { ssr: false });
 
 /**
  * The top bar.
@@ -221,6 +232,29 @@ function moveFocusInList(direction: "next" | "previous"): boolean {
 }
 
 /**
+ * The ⌘K results' scroll area (Wave D, plan item 17): the highlighted row is one tint that glides from row to row as
+ * the arrows or the pointer move (useGlidePill, the tabs' and rails' pill), and a new set of results settles in once
+ * (m-rows-settle). Its own component, so the glide measures a list that is on screen. The rows sit over the tint.
+ */
+function SearchGlide({ settleKey, children }: { settleKey: string; children: ReactNode }) {
+  const track = useRef<HTMLDivElement>(null);
+  const pill = useGlidePill(track, { items: '[role="option"]', chosen: "[data-active]", watch: "data-active" });
+  return (
+    <div ref={track} className="portal-top-panel-scroll" data-glide-track="">
+      {pill && (
+        <span
+          aria-hidden="true"
+          data-tab-pill={pill.glide ? "glide" : ""}
+          data-tab-indicator="hit"
+          style={{ transform: `translate(${pill.left}px, ${pill.top}px)`, width: pill.width, height: pill.height }}
+        />
+      )}
+      <div key={settleKey} className="m-rows-settle">{children}</div>
+    </div>
+  );
+}
+
+/**
  * The bar itself: presentational, and the same in every shell. The caller decides what the search
  * looks in, who the person is, and what the feed holds.
  */
@@ -305,6 +339,7 @@ export function TopBarShell({
   const [searchError, setSearchError] = useState<string | null>(null);
   const [cursor, setCursor] = useState(0);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [shortcutsSeen, setShortcutsSeen] = useState(false);
   const [workspaces, setWorkspaces] = useState<TopBarWorkspace[]>([]);
   const [choosingWorkspace, setChoosingWorkspace] = useState(false);
   const [switchingTo, setSwitchingTo] = useState<string | null>(null);
@@ -550,6 +585,8 @@ export function TopBarShell({
     }
     return order.map((group) => ({ group, rows: byGroup.get(group)! }));
   }, [shown]);
+  // A new set of results settles in once (m-rows-settle); the same set re-rendered stays put.
+  const settleKey = useMemo(() => shown.map((hit) => `${hit.href}-${hit.title}`).join("\n"), [shown]);
 
   const currentWorkspaceIndex = workspaces.findIndex((workspace) => workspace.current);
   const canSwitch = workspaces.length > 1 && currentWorkspaceIndex >= 0 && Boolean(switchWorkspaceEndpoint);
@@ -618,7 +655,7 @@ export function TopBarShell({
 
         {searchOpen && (
           <div className="portal-top-panel portal-top-panel-search m-swap" role="listbox" aria-label="Search results" {...{ [KBD_LIST_ATTRIBUTE]: "" }}>
-            <div className="portal-top-panel-scroll">
+            <SearchGlide settleKey={settleKey}>
               {grouped.map(({ group, rows }) => (
                 <div key={group}>
                   <div className="portal-top-group">{group}</div>
@@ -667,7 +704,7 @@ export function TopBarShell({
                   <p className="portal-top-empty-body">Nothing has changed. Try the same search again in a moment.</p>
                 </div>
               )}
-            </div>
+            </SearchGlide>
             <div className="portal-top-panel-foot">
               <span>
                 {!trimmed
@@ -704,7 +741,8 @@ export function TopBarShell({
           data-alert={alertCount > 0 || undefined}
         >
           {feed.doNotDisturb ? <BellOff className="size-4 text-[var(--warning-ink)]" aria-hidden="true" /> : <Bell className="size-4" aria-hidden="true" />}
-          {inboxCount > 0 && <span className="portal-top-badge">{inboxCount > 99 ? "99+" : inboxCount}</span>}
+          {/* The counts roll when they change, pop in when they appear and shrink away at 0 (CountBadge, Wave A). */}
+          <CountBadge value={inboxCount} max={99} tone="bare" className="portal-top-badge" />
         </button>}
         {inbox && <ThemeSwitch compact />}
         {feed && !inbox && <button
@@ -716,7 +754,7 @@ export function TopBarShell({
           className="portal-top-icon"
         >
           {feed.doNotDisturb ? <BellOff className="size-4 text-[var(--warning-ink)]" aria-hidden="true" /> : <Bell className="size-4" aria-hidden="true" />}
-          {notifications.length > 0 && <span className="portal-top-badge">{notifications.length}</span>}
+          <CountBadge value={notifications.length} tone="bare" className="portal-top-badge" />
         </button>}
 
         {feed && !inbox && <button
@@ -728,7 +766,7 @@ export function TopBarShell({
           className="portal-top-icon portal-top-icon-alert"
         >
           <TriangleAlert className="size-4" aria-hidden="true" />
-          {alertCount > 0 && <span className="portal-top-badge is-alert">{alertCount}</span>}
+          <CountBadge value={alertCount} tone="bare" className="portal-top-badge is-alert" />
         </button>}
 
         {feed && <span className="portal-top-divider" aria-hidden="true" />}
@@ -950,7 +988,7 @@ export function TopBarShell({
                     <span><span>Notification preferences</span><span>{feed.preferencesHint}</span></span>
                   </button>
                 )}
-                <button type="button" onClick={() => { close(); setShortcutsOpen(true); }} {...{ [KBD_ITEM_ATTRIBUTE]: "" }} className="portal-top-menu-row m-row">
+                <button type="button" onClick={() => { close(); setShortcutsSeen(true); setShortcutsOpen(true); }} {...{ [KBD_ITEM_ATTRIBUTE]: "" }} className="portal-top-menu-row m-row">
                   <KeyboardIcon className="size-3.5" aria-hidden="true" />
                   <span><span>Keyboard shortcuts</span><span>Slash to search, J and K to move</span></span>
                 </button>
@@ -972,7 +1010,8 @@ export function TopBarShell({
         )}
       </div>
 
-      <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      {/* Mounted from the first open on, so it closes with its own motion afterwards. */}
+      {shortcutsSeen && <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
     </div>
   );
 }
@@ -1078,6 +1117,13 @@ export function AppTopBar({ user, userId, plan, menu, urgent }: {
   urgent?: TopBarUrgent[];
 }) {
   const source = useAgentAlertFeed();
+  // Fetch the preferences panel's code once the page is idle, so the first open draws at once.
+  useEffect(() => {
+    const idle = window.requestIdleCallback ?? ((run: () => void) => window.setTimeout(run, 2000));
+    const cancel = window.cancelIdleCallback ?? window.clearTimeout;
+    const handle = idle(() => void Promise.all([loadPreferences(), loadBellPanel(), loadShortcuts()]).catch(() => undefined));
+    return () => cancel(handle);
+  }, []);
   const lists = useMemo(() => agentFeedLists(source.alerts), [source.alerts]);
   // The notification centre (2026-10-09): the same feed, grouped, filtered and snoozable. Snoozed
   // notifications leave the badge until their time.

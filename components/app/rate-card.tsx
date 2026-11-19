@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { checkboxControl } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/ui/page-states";
@@ -18,6 +17,7 @@ import type { RateCardCarrier } from "@/lib/ingestion/expectedCommissionStore";
 import { fileDay } from "@/lib/ingestion/constants";
 import { notify } from "@/lib/notify";
 
+import { CheckBox } from "@/components/ui/check-box";
 const whole = (cents: number) => `$${Math.round(cents / 100).toLocaleString("en-US")}`;
 
 /**
@@ -214,7 +214,7 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                     <div className="grid gap-1"><Label htmlFor="rc-from">From</Label><Input id="rc-from" type="date" value={field("from", today)} onChange={(e) => set("from", e.target.value)} /></div>
                   </div>
                   <label htmlFor="rc-onward" className="inline-flex items-center gap-2 text-sm text-foreground">
-                    <input id="rc-onward" type="checkbox" className={checkboxControl} checked={field("onward") === "yes"} onChange={(e) => set("onward", e.target.checked ? "yes" : "")} />
+                    <CheckBox id="rc-onward" checked={field("onward") === "yes"} onChange={(e) => set("onward", e.target.checked ? "yes" : "")} />
                     Also every later year without its own rate (year {field("year", "1") || "N"}+)
                   </label>
                   <p className="m-0 text-xs text-muted-foreground">A rate applies from its date onward; figures already worked out never change.</p>

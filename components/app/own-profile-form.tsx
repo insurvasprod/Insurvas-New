@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronDown, Upload } from "lucide-react";
 
-import { Field, checkboxControl, control } from "@/components/app/settings/primitives";
-import { Button } from "@/components/ui/button";
+import { Field, control } from "@/components/app/settings/primitives";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { WORKSPACE_TIMEZONES } from "@/lib/agencyProfile/types";
@@ -14,6 +14,7 @@ import { LANGUAGE_CODES, languageKey, languageName } from "@/lib/transferInbox/c
 import { AVATAR_TYPES, avatarFileProblem } from "@/lib/users/avatarRules";
 import { LICENCE_NUMBER_MAX, OWN_NAME_MAX, OWN_PHONE_MAX, type OwnProfile } from "@/lib/users/ownProfile";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * Settings › My profile › Profile. One draft for the section — name, phone, time zone, languages, NPN,
  * licence numbers and (settings round 8, board A) the photo — saved by the page's ONE save bar. The
@@ -238,7 +239,7 @@ function LanguagePicker({ picked, options, disabled, onToggle, onAdd }: {
         <div role="group" aria-label="Languages you speak" className="flex max-h-64 flex-col overflow-y-auto">
           {options.map((key) => (
             <label key={key} className="flex min-h-9 cursor-pointer items-center gap-2.5 rounded-[8px] px-2 text-sm hover:bg-[var(--surface-alt)]">
-              <input type="checkbox" className={checkboxControl} checked={picked.includes(key)} onChange={() => onToggle(key)} />
+              <CheckBox checked={picked.includes(key)} onChange={() => onToggle(key)} />
               <span className="min-w-0 flex-1 truncate">{languageName(key)}</span>
             </label>
           ))}
@@ -347,7 +348,7 @@ export function OwnProfileFields({ form, saving, recordHref }: { form: OwnProfil
               ? states.map((state) => <span key={state} className="inline-flex h-[22px] items-center rounded-badge border border-[var(--border)] bg-[var(--surface)] px-2 text-xs font-medium text-[var(--body)]">{state}</span>)
               : <span className="text-sm text-[var(--muted)]">{profile.licensedStates === null ? "Cannot be read yet" : "None yet"}</span>}
             {recordHref
-              ? <Link href={recordHref} className="text-xs font-medium text-[var(--accent-ink)] underline-offset-2 hover:underline">Change on your producer record ›</Link>
+              ? <Link href={recordHref} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Change on Your Producer Record</Link>
               : null}
           </div>
           <span className="mt-1.5 block text-xs leading-[1.5] text-[var(--muted)]">

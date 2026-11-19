@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, cardInset } from "@/components/ui/card";
 import { EmptyState, ErrorState } from "@/components/ui/page-states";
 import { Meter } from "@/components/ui/stat";
@@ -21,7 +21,7 @@ export function shortDay(iso: string | null) {
   return Number.isNaN(date.getTime()) ? null : `${date.getDate()} ${MONTHS[date.getMonth()]}`;
 }
 const n = (value: number) => value.toLocaleString("en-US");
-const fixLink = "text-xs font-semibold whitespace-nowrap text-[var(--accent-ink)] hover:underline";
+const fixLink = `${buttonVariants({ variant: "outline", size: "xs" })} no-underline`;
 
 /** A list's one health word and the one next step, each problem a link to where it is fixed. */
 function health(campaignId: string, list: CampaignListRow): { chip: ReactNode; next: ReactNode } {

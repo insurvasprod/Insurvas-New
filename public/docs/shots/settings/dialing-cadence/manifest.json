@@ -1,0 +1,128 @@
+[
+  {
+    "src": "/docs/shots/settings/dialing-cadence/1.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Pick a call result, starting with No answer",
+    "focus": {
+      "x": 109,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/dialing-cadence/2.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Choose a Preset",
+    "focus": {
+      "x": 416,
+      "y": 20,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/dialing-cadence/3.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set Max calls",
+    "focus": {
+      "x": 720,
+      "y": 64,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/dialing-cadence/4.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Copy it and edit to make your own",
+    "focus": {
+      "x": 424,
+      "y": 221,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/dialing-cadence/5.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Read the timeline",
+    "focus": {
+      "x": 307,
+      "y": 268,
+      "w": 802,
+      "h": 501
+    }
+  },
+  {
+    "src": "/docs/shots/settings/dialing-cadence/6.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click a call to change it",
+    "focus": {
+      "x": 250,
+      "y": 307,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/dialing-cadence/7.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set Wait after call 1",
+    "focus": {
+      "x": 338,
+      "y": 220,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/dialing-cadence/8.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Done",
+    "focus": {
+      "x": 546,
+      "y": 450,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/dialing-cadence/9.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check What happens"
+  },
+  {
+    "src": "/docs/shots/settings/dialing-cadence/10.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Save cadence to put it in force",
+    "focus": {
+      "x": 708,
+      "y": 450,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/dialing-cadence/11.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open History to see past versions",
+    "focus": {
+      "x": 720,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  }
+]

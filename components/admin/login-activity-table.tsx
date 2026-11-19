@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { pillTone } from "@/lib/ui/pillTone";
 import { loginFailureLabel, type LoginEventRow } from "@/lib/loginEvents/constants";
-import { loginEventTime, loginOutcomeLabel, summariseUserAgent } from "@/lib/loginEvents/present";
+import { deviceLabel, loginEventTime, loginOutcomeLabel } from "@/lib/loginEvents/present";
 import { cn } from "@/lib/utils";
 import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
 import { EmptyState } from "@/components/admin/empty-state";
@@ -22,8 +22,8 @@ import { DashboardUtcTime } from "./dashboard-utc-time";
  *
  *  - "default" (users/[id] and anything else that passes nothing): unchanged — shadcn table,
  *    When / Account / Result / IP / Device.
- *  - "board": the p-adm-activity board — When / Actor / Outcome / IP / User agent, fixed column
- *    widths, UTC times with local time on hover, a parsed user agent (raw on hover), "Success ·
+ *  - "board": the p-adm-activity board — When / Actor / Outcome / IP / Device, fixed column
+ *    widths, UTC times with local time on hover, the device read from the user agent (raw on hover), "Success ·
  *    admin" in the pill, and a 3px error edge on failed rows. The caller supplies the empty state,
  *    because only it knows whether "nothing" means no data, no matches, or a failed load.
  */
@@ -37,6 +37,8 @@ export function LoginActivityTable({
   hideActor = false,
   minWidth = 980,
   framed = true,
+  onOpen,
+  selectedId = null,
 }: {
   events: LoginEventRow[];
   showActor?: boolean;
@@ -53,11 +55,15 @@ export function LoginActivityTable({
   minWidth?: number;
   /** Board layout only: false when a TableCard already draws the card around the table. */
   framed?: boolean;
+  /** Board layout only: a row opens this attempt (Login activity's sheet); the row then reads as a link. */
+  onOpen?: (id: string) => void;
+  /** Board layout only: the attempt whose sheet is open. */
+  selectedId?: string | null;
 }) {
   // Ten rows a page (owner rule, 2026-10-13). A caller that pages on the server passes ten at most,
   // so its own footer stays; a longer list gets the shared Pager in the footer instead.
   const pagedFooter = events.length > PAGE_SIZE ? <PagedFooter total={events.length} /> : footer;
-  if (layout === "board") return <PagedProvider><BoardLoginTable events={events} footer={pagedFooter} empty={empty} busy={busy} hideActor={hideActor} minWidth={minWidth} framed={framed} /></PagedProvider>;
+  if (layout === "board") return <PagedProvider><BoardLoginTable events={events} footer={pagedFooter} empty={empty} busy={busy} hideActor={hideActor} minWidth={minWidth} framed={framed} onOpen={onOpen} selectedId={selectedId} /></PagedProvider>;
 
   return (
     <PagedProvider>
@@ -141,6 +147,8 @@ function BoardLoginTable({
   hideActor,
   minWidth,
   framed,
+  onOpen,
+  selectedId,
 }: {
   events: LoginEventRow[];
   footer?: React.ReactNode;
@@ -149,7 +157,10 @@ function BoardLoginTable({
   hideActor: boolean;
   minWidth: number;
   framed: boolean;
+  onOpen?: (id: string) => void;
+  selectedId?: string | null;
 }) {
+  const columns = (hideActor ? 4 : 5) + (onOpen ? 1 : 0);
   return (
     <Shell framed={framed}>
       <div className="min-w-0 overflow-x-auto">
@@ -160,13 +171,15 @@ function BoardLoginTable({
               {!hideActor && <th scope="col" className={TH}>Actor</th>}
               <th scope="col" className={cn(TH, "w-[210px]")}>Outcome</th>
               <th scope="col" className={cn(TH, "w-[170px]")}>IP</th>
-              <th scope="col" className={cn(TH, !hideActor && "w-[240px]")}>User agent</th>
+              {/* The user agent, read as a browser and system (monitoring.html screen 2); the raw string is on hover. */}
+              <th scope="col" className={cn(TH, !hideActor && "w-[240px]")} title="Read from the user agent; hover a row for the full string">Device</th>
+              {onOpen && <th scope="col" className={cn(TH, "w-10")}><span className="sr-only">Open</span></th>}
             </tr>
           </thead>
           <tbody>
             {events.length === 0 && (
               <tr>
-                <td colSpan={hideActor ? 4 : 5} className="border-t border-[var(--border)] p-0">
+                <td colSpan={columns} className="border-t border-[var(--border)] p-0">
                   {empty}
                 </td>
               </tr>
@@ -174,9 +187,15 @@ function BoardLoginTable({
           </tbody>
           <PagedBody className="m-seq">
             {events.map((event) => {
-              const agent = summariseUserAgent(event.user_agent);
+              const agent = deviceLabel(event.user_agent);
+              const open = onOpen ? () => onOpen(event.id) : undefined;
               return (
-                <tr key={event.id} className="m-row hover:bg-[var(--brand-50)]">
+                <tr
+                  key={event.id}
+                  className={cn("m-row hover:bg-[var(--brand-50)]", open && "cursor-pointer", selectedId === event.id && "bg-[var(--brand-50)]")}
+                  onClick={open}
+                  aria-selected={open ? selectedId === event.id : undefined}
+                >
                   {/* Failed rows are marked at the edge, not filled: a wall of red is unreadable
                       during exactly the incident this page is opened for. */}
                   <td className={cn(TD, "whitespace-nowrap tabular-nums", !event.success && "shadow-[inset_3px_0_0_var(--error)]")}>
@@ -196,6 +215,21 @@ function BoardLoginTable({
                   <td className={cn(TD, "truncate")} title={event.user_agent ?? undefined}>
                     {agent ?? "—"}
                   </td>
+                  {open && (
+                    <td className={cn(TD, "text-right text-muted-foreground")}>
+                      <button
+                        type="button"
+                        className="rounded-md px-1 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-label={`Open the attempt by ${event.email} at ${loginEventTime(event.ts)}`}
+                        onClick={(clicked) => {
+                          clicked.stopPropagation();
+                          open();
+                        }}
+                      >
+                        ›
+                      </button>
+                    </td>
+                  )}
                 </tr>
               );
             })}

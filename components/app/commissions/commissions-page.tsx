@@ -6,6 +6,7 @@ import { StepFrame } from "@/components/app/step-frame/step-frame";
 import type { RailStep } from "@/components/app/step-frame/step-rail";
 import type { Crumb } from "@/components/ui/breadcrumbs";
 import { InfoTip } from "@/components/ui/info-tip";
+import { DocsGuideLink } from "@/components/app/docs/docs-guide-link";
 import { COMMISSIONS_RAIL_COOKIE, COMMISSIONS_STEPS, COMMISSIONS_WAITING, MY_PAY, commissionsStepLabel, type CommissionsStep } from "@/lib/commissions/steps";
 
 /**
@@ -38,7 +39,8 @@ async function openSteps(): Promise<RailStep[]> {
 export async function CommissionsPage({ step, pathname, title, info, titleInfo, breadcrumbs, tabs, actions, children }: {
   step: CommissionsStep;
   pathname?: string;
-  title?: string;
+  /** Text, or a record's name streamed in: `<Suspense fallback={<TitleShape />}>…</Suspense>` (frame first, §7a). */
+  title?: ReactNode;
   /** The (i) beside the title: one or two sentences. */
   info?: ReactNode;
   titleInfo?: ReactNode;
@@ -55,10 +57,11 @@ export async function CommissionsPage({ step, pathname, title, info, titleInfo, 
     steps.splice(at, 0, step === "reconciliation" && pathname === MY_PAY.href ? { ...own, ...MY_PAY, group: undefined } : own);
   }
   const heading = title ?? commissionsStepLabel(step, pathname);
+  const named = typeof heading === "string" ? heading : commissionsStepLabel(step, pathname);
   return (
     <StepFrame
       title={heading}
-      titleInfo={info ? <InfoTip label={`About ${heading}`} side="right">{info}</InfoTip> : titleInfo}
+      titleInfo={info ? <InfoTip label={`About ${named}`} side="right">{info}<DocsGuideLink /></InfoTip> : titleInfo}
       breadcrumbs={breadcrumbs}
       tabs={tabs}
       actions={actions}

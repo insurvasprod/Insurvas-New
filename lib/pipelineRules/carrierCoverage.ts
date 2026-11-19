@@ -47,9 +47,14 @@ const day = (stamp: unknown) => (typeof stamp === "string" ? stamp.slice(0, 10) 
 const quiet = (read: Loose) => (read?.error ? [] : (read?.data ?? [])) as Loose[];
 
 /** Every carrier the agency works with (Settings › Carriers, plus any still holding in-force policies), sorted by policies affected. */
-export const loadCarrierCoverage = cache(async (tenantId: string): Promise<{ available: boolean; asOf: string; carriers: CarrierCoverage[]; authors: Record<string, { createdBy: string | null; verifiedBy: string | null }> }> => {
+/**
+ * `lean` (speed pass 2026-11-12): only what the rail's "windows not set" count needs, the carriers and their rules.
+ * The layouts (two reads in a row), the commissions desk, the portal settings and Insurvas's guidance are left empty.
+ */
+export const loadCarrierCoverage = cache(async (tenantId: string, lean = false): Promise<{ available: boolean; asOf: string; carriers: CarrierCoverage[]; authors: Record<string, { createdBy: string | null; verifiedBy: string | null }> }> => {
   // Perf pass 2026-11-09: today and the layout maps are read beside the rest (the maps as soon as the layouts are back).
-  const assignmentsRead: Promise<Loose> = Promise.resolve(db().from("carrier_layout_assignment").select("tenant_id, carrier_id, file_type, layout_key").or(`tenant_id.eq.${tenantId},tenant_id.is.null`));
+  const none = Promise.resolve({ data: [], error: null } as Loose);
+  const assignmentsRead: Promise<Loose> = lean ? none : Promise.resolve(db().from("carrier_layout_assignment").select("tenant_id, carrier_id, file_type, layout_key").or(`tenant_id.eq.${tenantId},tenant_id.is.null`));
   const mapsRead: Promise<Loose[]> = assignmentsRead.then(async (assignments) => {
     const keys = [...new Set(quiet(assignments).map((row) => row.layout_key as string))];
     return keys.length ? quiet(await db().from("carrier_layout_map").select("tenant_id, layout_key, name, version, status").in("layout_key", keys).eq("status", "published").or(`tenant_id.eq.${tenantId},tenant_id.is.null`)) : [];
@@ -61,10 +66,10 @@ export const loadCarrierCoverage = cache(async (tenantId: string): Promise<{ ava
     db().from("carrier_operating_settings").select("*").or(`tenant_id.eq.${tenantId},tenant_id.is.null`).limit(2000),
     db().rpc("in_force_policy_counts", { p_tenant_id: tenantId }),
     carrierIdsOn(tenantId),
-    db().from("tenant_carrier_commission_contacts").select("carrier_id, address, email, updated_at").eq("tenant_id", tenantId),
+    lean ? none : db().from("tenant_carrier_commission_contacts").select("carrier_id, address, email, updated_at").eq("tenant_id", tenantId),
     assignmentsRead,
-    db().from("tenant_carrier_settings").select("carrier_id, portal_origin, reference_pattern, updated_at").eq("tenant_id", tenantId),
-    db().from("carrier_portal_guidance").select("carrier_id, where_in_portal, report_name, format_hint"),
+    lean ? none : db().from("tenant_carrier_settings").select("carrier_id, portal_origin, reference_pattern, updated_at").eq("tenant_id", tenantId),
+    lean ? none : db().from("carrier_portal_guidance").select("carrier_id, where_in_portal, report_name, format_hint"),
     mapsRead,
   ]);
   for (const read of [rules, settings]) {

@@ -3,7 +3,6 @@
 import { addTransitionType, startTransition, useState, ViewTransition } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -18,6 +17,9 @@ import { Table, TableCell, TableHead, TableHeader, TableRow } from "@/components
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { notify } from "@/lib/notify";
 
+import { LabGroup, Section } from "./lab-section";
+import { TierOne, TierTwo } from "./change-moments";
+
 /**
  * Motion lab (premium motion foundation, 2026-11-09): every pattern of docs/design/UI-CONSISTENCY.md § Motion on
  * the real kit parts, side by side, for the owner's sign-off before the rollout. Nothing here is a page of its own.
@@ -25,18 +27,6 @@ import { notify } from "@/lib/notify";
 
 const STEPS = ["Carrier files", "Policies", "Commission ledger"] as const;
 const STEP_MOTION = { "nav-forward": "page-forward", "nav-back": "page-back", default: "page-area" } as const;
-
-function Section({ title, note, children }: { title: string; note: string; children: React.ReactNode }) {
-  return (
-    <Card className="flex flex-col gap-3 p-5">
-      <div>
-        <h2 className="text-base font-semibold text-[var(--ink)]">{title}</h2>
-        <p className="text-sm text-[var(--body)]">{note}</p>
-      </div>
-      {children}
-    </Card>
-  );
-}
 
 /** page-forward / page-back: a step further down slides in from the right, one back up from the left. */
 function PageMotion() {
@@ -189,12 +179,17 @@ function Controls() {
 export function MotionLab() {
   return (
     <div className="m-stagger flex flex-col gap-4">
+      <LabGroup title="In the product now" note="Live on every page." />
       <PageMotion />
       <TabsAndFigures />
       <Paging />
       <Overlays />
       <Controls />
       <Charts />
+      <LabGroup title="Tier 1 · When something changes" note="Waiting for your sign-off. Not on any page yet." />
+      <TierOne />
+      <LabGroup title="Tier 2 · Feedback" note="Waiting for your sign-off. Not on any page yet." />
+      <TierTwo />
     </div>
   );
 }

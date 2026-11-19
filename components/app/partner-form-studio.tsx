@@ -41,7 +41,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { checkboxControl } from "@/components/ui/field";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
@@ -56,6 +55,7 @@ import {
 } from "@/lib/templates/constants";
 import { cn } from "@/lib/utils";
 
+import { CheckBox } from "@/components/ui/check-box";
 type Choice = { field_key: string; is_required: boolean; sort_order: number };
 type Product = {
   code?: string;
@@ -1176,9 +1176,7 @@ function FieldEditorFields({
         />
       </div>
       <label className="flex items-center gap-2 text-sm sm:col-span-2">
-        <input
-          type="checkbox"
-          className={checkboxControl}
+        <CheckBox
           checked={draft.is_required}
           onChange={(event) => update({ is_required: event.target.checked })}
         />
@@ -1234,10 +1232,8 @@ function FieldList({
               className={cn(cardInset, "flex min-h-12 min-w-0 items-center gap-2 px-2.5 py-1.5")}
             >
               {choice && (
-                <input
+                <CheckBox
                   aria-label={`Include ${field.label} in ${title}`}
-                  type="checkbox"
-                  className={checkboxControl}
                   checked
                   disabled={disabled || isLocked}
                   onChange={(event) => onChange(field.field_key, event.target.checked)}
@@ -1256,10 +1252,8 @@ function FieldList({
               {choice ? (
                 <>
                   <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-                    <input
+                    <CheckBox
                       aria-label={`Require ${field.label} in ${title}`}
-                      type="checkbox"
-                      className={checkboxControl}
                       checked={choice.is_required}
                       disabled={disabled || isLocked}
                       onChange={(event) =>
@@ -1512,9 +1506,7 @@ function PreviewControl({
       >
         {options.length ? options.map((option) => (
           <label key={option} className="flex items-center gap-2 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              className={checkboxControl}
+            <CheckBox
               checked={selected.includes(option)}
               onChange={(event) => onChange(
                 event.target.checked

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
 import { canAccessConfigurationSection } from "@/lib/configuration/sections";
-import { PageHeader } from "@/components/ui/page-header";
+import { PlatformPage } from "@/components/admin/platform/platform-page";
 import { SystemSettingsPanel } from "@/components/admin/system-settings-panel";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { announcementState, canChangeMaintenance } from "@/lib/system/adminFormat";
@@ -28,17 +28,18 @@ export default async function SystemPage() {
   const unread = view.announcementsError ? "Could not load" : null;
 
   return (
-    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      {/* "Maintenance" to match the sidebar — it is what the screen is for, where "System" said
-          nothing. The route stays /admin/system so existing links keep working. */}
-      <PageHeader title="Maintenance" />
-      <StatStrip label="Maintenance at a glance">
-        <StatTile label="Maintenance" valueSize="text" value={level === "off" ? "Off" : MAINTENANCE_LEVEL_LABELS[level]} valueTone={level === "off" ? undefined : level === "banner_only" ? "warning" : "danger"} footnote={pending ? `${pending} scheduled` : level === "off" ? "customers unaffected" : "in force now"} />
-        <StatTile label="Announcements live" value={unread ? "—" : live.toLocaleString("en-US")} valueTone={!unread && live > 0 ? "info" : undefined} footnote={unread ?? "shown to customers now"} />
-        <StatTile label="Scheduled" value={unread ? "—" : scheduled.toLocaleString("en-US")} footnote={unread ?? "start later"} />
-        <StatTile label="Ended" value={unread ? "—" : expired.toLocaleString("en-US")} footnote={unread ?? "past their end date"} />
-      </StatStrip>
-      <SystemSettingsPanel view={view} canChangeMaintenance={canChangeMaintenance(admin.role)} />
-    </div>
+    // "Maintenance" to match the menu — it is what the screen is for, where "System" said nothing. Inside the Platform
+    // frame (admin round 1, 2026-11-18); the route stays /admin/system so existing links keep working.
+    <PlatformPage step="maintenance" info="Maintenance mode and the announcements customers see across the app. Turning maintenance on is super admin only.">
+      <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+        <StatStrip label="Maintenance at a glance">
+          <StatTile label="Maintenance" valueSize="text" value={level === "off" ? "Off" : MAINTENANCE_LEVEL_LABELS[level]} valueTone={level === "off" ? undefined : level === "banner_only" ? "warning" : "danger"} footnote={pending ? `${pending} scheduled` : level === "off" ? "customers unaffected" : "in force now"} />
+          <StatTile label="Announcements live" value={unread ? "—" : live.toLocaleString("en-US")} valueTone={!unread && live > 0 ? "info" : undefined} footnote={unread ?? "shown to customers now"} />
+          <StatTile label="Scheduled" value={unread ? "—" : scheduled.toLocaleString("en-US")} footnote={unread ?? "start later"} />
+          <StatTile label="Ended" value={unread ? "—" : expired.toLocaleString("en-US")} footnote={unread ?? "past their end date"} />
+        </StatStrip>
+        <SystemSettingsPanel view={view} canChangeMaintenance={canChangeMaintenance(admin.role)} />
+      </div>
+    </PlatformPage>
   );
 }

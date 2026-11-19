@@ -1,0 +1,212 @@
+[
+  {
+    "src": "/docs/shots/settings/sales-process/1.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Start on the Overview tab",
+    "focus": {
+      "x": 96,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/sales-process/2.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Read the Needs you list"
+  },
+  {
+    "src": "/docs/shots/settings/sales-process/3.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Health questions tab",
+    "focus": {
+      "x": 182,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/sales-process/4.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Pick a question set"
+  },
+  {
+    "src": "/docs/shots/settings/sales-process/5.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Quote inputs tab",
+    "focus": {
+      "x": 319,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/sales-process/6.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check your default for every carrier",
+    "focus": {
+      "x": 264,
+      "y": 0,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/sales-process/7.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Carrier application tab",
+    "focus": {
+      "x": 427,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/sales-process/8.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Pick a carrier"
+  },
+  {
+    "src": "/docs/shots/settings/sales-process/9.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Quote & case checks tab",
+    "focus": {
+      "x": 574,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/sales-process/10.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set the quote band per $1,000",
+    "focus": {
+      "x": 157,
+      "y": 188,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/sales-process/11.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Give term products their own band",
+    "focus": {
+      "x": 254,
+      "y": 337,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/sales-process/12.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Choose Block or Warn when not appointed",
+    "focus": {
+      "x": 720,
+      "y": 88,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/sales-process/13.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set the Draft-date buffer",
+    "focus": {
+      "x": 720,
+      "y": 200,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/sales-process/14.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set Flag open requirements after",
+    "focus": {
+      "x": 720,
+      "y": 324,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/sales-process/15.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Choose Send or Hold for the Welcome pack",
+    "focus": {
+      "x": 720,
+      "y": 413,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/sales-process/16.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Disclosures tab",
+    "focus": {
+      "x": 720,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/sales-process/17.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check each document is live",
+    "focus": {
+      "x": 143,
+      "y": 22,
+      "w": 1297,
+      "h": 811
+    }
+  },
+  {
+    "src": "/docs/shots/settings/sales-process/18.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Stage moves tab",
+    "focus": {
+      "x": 697,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/sales-process/19.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Pick a pipeline and where each card goes",
+    "focus": {
+      "x": 511,
+      "y": 36,
+      "w": 720,
+      "h": 450
+    }
+  }
+]

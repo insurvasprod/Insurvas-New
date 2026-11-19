@@ -5,7 +5,6 @@ import { guardCase } from "@/lib/agency/guards";
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { SampleDataNotice } from "@/components/app/applications/parts";
 import { SetupPending } from "@/components/app/applications/setup-pending";
 import { ClientQuoteSheet } from "@/components/app/applications/quotes/client-quote-sheet";
 import { PRODUCT_LABEL } from "@/lib/applications/constants";
@@ -98,7 +97,7 @@ export default async function ClientQuotesPrintPage({ params, searchParams }: {
       quotes={printQuotes}
       draftDay={attempt.payment?.draftDay ?? null}
       agent={context.agent}
-      notice={sample ? <SampleDataNotice /> : undefined}
+      notice={sample ? <p className="m-0 text-xs text-muted-foreground">Sample data: a design preview, nothing on it is saved.</p> : undefined}
     />
   );
 }

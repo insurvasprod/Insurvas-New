@@ -8,6 +8,9 @@ import { toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { UploadProgress } from "@/components/ui/upload-progress";
+import { sendWithProgress } from "@/components/ui/upload-request";
+import { afterStamp } from "@/components/ui/use-done-stamps";
 import { CARRIER_FILE_ACCEPT, FILE_TYPE_LABELS, MAX_UPLOAD_BYTES, carrierFileKind, fileDay, type CarrierFileType } from "@/lib/ingestion/constants";
 import { prefillFromFilename, type CarrierChoice } from "@/lib/ingestion/path";
 import { fileHref } from "@/lib/ingestion/trace";
@@ -72,8 +75,11 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false, label = "U
   const [done, setDone] = useState<Outcome | null>(null);
   // QA 2026-11-03: the day's file this upload would replace, asked about before anything is stored.
   const [clash, setClash] = useState<Clash | null>(null);
+  // How far the file has gone up (Tier 2 motion, 2026-11-18): a real bar while it uploads, then its check.
+  const [progress, setProgress] = useState<number | null>(null);
 
   function reset() {
+    setProgress(null);
     setFile(null); setCarrierId(preset?.carrierId ?? ""); setFileType(preset?.fileType ?? ""); setFileDate(preset?.fileDate ?? ""); setAgency(preset?.agency ?? ""); setProblem(null); setDone(null); setClash(null);
   }
 
@@ -111,7 +117,7 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false, label = "U
       if (replace || preset?.fileDate) form.set("replace", "yes");
       // A different commission statement from the same day: kept beside it (20261103300000).
       else if (mode === "separate") form.set("replace", "no");
-      const response = await fetch("/api/app/carrier-files", { method: "POST", body: form });
+      const response = await sendWithProgress("/api/app/carrier-files", form, setProgress);
       const data = (await response.json().catch(() => ({}))) as Outcome & { error?: string; code?: string; existing?: Clash };
       if (response.status === 409 && data.code === "would_replace" && data.existing) throw new ClashError(data.existing);
       if (!response.ok) throw new Error(data.error ?? "The file could not be uploaded.");
@@ -130,10 +136,14 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false, label = "U
       });
       // No "Received…" panel (owner 2026-11-05: "I don't want it to be shown"): the toast says it arrived, the
       // dialog closes, and the Files list shows it reading and says when it is read (carrier-files-table.tsx).
+      // The bar fills and its check draws first, then the dialog closes.
+      setProgress(1);
+      await new Promise<void>((done) => afterStamp(done));
       setOpen(false);
       reset();
       router.refresh();
     } catch (reason) {
+      setProgress(null);
       if (reason instanceof ClashError) setClash(reason.existing);
       else setProblem(reason instanceof Error ? reason.message : "The file could not be uploaded.");
     } finally {
@@ -176,6 +186,7 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false, label = "U
               <div className="grid gap-1.5">
                 <Label htmlFor="carrier-file">File</Label>
                 <Input id="carrier-file" type="file" accept={CARRIER_FILE_ACCEPT} onChange={(event) => choose(event.target.files?.[0])} />
+                {file && progress !== null ? <UploadProgress name={file.name} value={progress} className="mt-1" /> : null}
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="carrier-file-carrier">Carrier</Label>

@@ -11,7 +11,7 @@ import { ActiveFilters, DataToolbar, RefreshButton, ToolbarSearch, toolbarContro
 import { EmptyState, ErrorState, NoMatches } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { StatusChip } from "@/components/ui/status-chip";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { MoreMenu } from "@/components/ui/more-menu";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { useShow } from "@/components/ui/view-switch";
@@ -29,7 +29,8 @@ import { ChangeManagerDialog } from "./hierarchy-manager-dialog";
 export type HierarchyTrendPoint = HierarchyMonth & { overrideCents: number; missing: number; negative: number; producers: number };
 
 const n = (value: number) => value.toLocaleString("en-US");
-const LINK = "whitespace-nowrap text-sm text-foreground underline-offset-2 hover:underline";
+// A way to the full page reads as a button (QA pass 2026-11), never a bare text link.
+const LINK = `${buttonVariants({ variant: "outline", size: "sm" })} no-underline`;
 const RATE_CARD = "/app/rate-card";
 
 /**

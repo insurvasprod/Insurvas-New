@@ -4,7 +4,7 @@ import { useState, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, control } from "@/components/ui/field";
 import { TableCard } from "@/components/ui/table-card";
@@ -182,7 +182,7 @@ export function CarrierFacts({ view, carrierId, carrierName, settings, files, de
       valueTitle: "Phone: not kept yet",
       whose: desk ? `yours, from ${fileDay(desk.since)}` : null,
       usedBy: "Dispute letters",
-      action: <Link href={DISPUTE_LETTERS} className={link} title="Set from a dispute letter">Open ›</Link>,
+      action: <Link href={DISPUTE_LETTERS} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")} title="Set from a dispute letter">Open</Link>,
     },
   ] : [
     setting("statementFormat", files.layouts.length ? <span className="whitespace-nowrap">{files.layouts.map((layout, i) => <span key={layout.fileType}>{i > 0 && " · "}<Link href={FIELD_MAPS} className={link}>{layoutWords(layout)}</Link></span>)}</span> : <span className="text-muted-foreground" title="No layout yet">—</span>),
@@ -193,7 +193,7 @@ export function CarrierFacts({ view, carrierId, carrierName, settings, files, de
       value: files.portal.value ?? notSet,
       valueTitle: where || files.guidance?.formatHint ? `${[where, files.guidance?.formatHint].filter(Boolean).join(" · ")} · Insurvas's guidance` : undefined,
       whose: whoseValue(files.portal),
-      action: <Link href={SETTINGS_CARRIERS} className={link} title="Kept in Settings › Carriers">Open ›</Link>,
+      action: <Link href={SETTINGS_CARRIERS} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")} title="Kept in Settings › Carriers">Open</Link>,
     },
     {
       key: "pattern",

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit/log";
 import { getEntitlement } from "@/lib/entitlements/get";
-import { requirePartner } from "@/lib/partnerAuth/requirePartner";
+import { partnerMayOpen, partnerPageRefused, requirePartner } from "@/lib/partnerAuth/requirePartner";
 import { partnerAdminUserInviteSchema } from "@/lib/partnerAuth/schemas";
 import { buildExistingPartnerInviteUrl, buildPartnerInviteUrl, generateInviteToken, hashInviteToken, inviteExpiryFromNow } from "@/lib/users/invitations";
 import { sendPartnerInvitationEmail } from "@/lib/email/sendInvitationEmail";
@@ -12,6 +12,8 @@ import { countAgencyPartnerSeats, invitePartnerUser, listPartnerUsers } from "@/
 export async function GET() {
   const auth = await requirePartner(["partner_admin"]);
   if (auth instanceof NextResponse) return auth;
+  // Partner type (lib/partnerAuth/portalAccess.ts): refused on the server, not only hidden from the menu.
+  if (!(await partnerMayOpen(auth.context, "team"))) return partnerPageRefused();
   // seatLimit is the agency's plan limit on partner users across ALL its partners (LA-1.19), and
   // seatsUsed the agency-wide count the invite and reactivate paths enforce against it — so the
   // footnote shows the real ceiling, not this partner's share of it.
@@ -25,6 +27,8 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const auth = await requirePartner(["partner_admin"]);
   if (auth instanceof NextResponse) return auth;
+  // Partner type (lib/partnerAuth/portalAccess.ts): refused on the server, not only hidden from the menu.
+  if (!(await partnerMayOpen(auth.context, "team"))) return partnerPageRefused();
   const parsed = partnerAdminUserInviteSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Enter valid user details" }, { status: 400 });
   const token = generateInviteToken();

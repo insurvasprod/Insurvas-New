@@ -1,0 +1,1367 @@
+{
+  "base": "http://localhost:3110",
+  "runs": 2,
+  "at": "2026-11-12T12:49:49.345Z",
+  "results": [
+    {
+      "member": "owner",
+      "page": "accounting",
+      "status": 200,
+      "frame": 212,
+      "ownTitle": 697,
+      "html": 698
+    },
+    {
+      "member": "owner",
+      "page": "accounting-settings",
+      "status": 200,
+      "frame": 230,
+      "ownTitle": 548,
+      "html": 553
+    },
+    {
+      "member": "owner",
+      "page": "activity",
+      "status": 200,
+      "frame": 247,
+      "ownTitle": 250,
+      "html": 252
+    },
+    {
+      "member": "owner",
+      "page": "agency",
+      "status": 200,
+      "frame": 210,
+      "ownTitle": 386,
+      "html": 2906
+    },
+    {
+      "member": "owner",
+      "page": "alerts",
+      "status": 200,
+      "frame": 235,
+      "ownTitle": 377,
+      "html": 378
+    },
+    {
+      "member": "owner",
+      "page": "application-review",
+      "status": 200,
+      "frame": 279,
+      "ownTitle": 283,
+      "html": 283
+    },
+    {
+      "member": "owner",
+      "page": "applications",
+      "status": 200,
+      "frame": 205,
+      "ownTitle": 865,
+      "html": 869
+    },
+    {
+      "member": "owner",
+      "page": "appointments",
+      "status": 200,
+      "frame": 221,
+      "ownTitle": 353,
+      "html": 354
+    },
+    {
+      "member": "owner",
+      "page": "assignments",
+      "status": 200,
+      "frame": 230,
+      "ownTitle": 232,
+      "html": 234
+    },
+    {
+      "member": "owner",
+      "page": "attribution",
+      "status": 200,
+      "frame": 227,
+      "ownTitle": 850,
+      "html": 852
+    },
+    {
+      "member": "owner",
+      "page": "bank",
+      "status": 200,
+      "frame": 246,
+      "ownTitle": 709,
+      "html": 711
+    },
+    {
+      "member": "owner",
+      "page": "book-import",
+      "status": 200,
+      "frame": 215,
+      "ownTitle": 921,
+      "html": 926
+    },
+    {
+      "member": "owner",
+      "page": "book-scorecards",
+      "status": 200,
+      "frame": 247,
+      "ownTitle": 1301,
+      "html": 1304
+    },
+    {
+      "member": "owner",
+      "page": "book-setup",
+      "status": 200,
+      "frame": 206,
+      "ownTitle": 1253,
+      "html": 1254
+    },
+    {
+      "member": "owner",
+      "page": "calendar",
+      "status": 200,
+      "frame": 229,
+      "ownTitle": 229,
+      "html": 230
+    },
+    {
+      "member": "owner",
+      "page": "callbacks",
+      "status": 200,
+      "frame": 250,
+      "ownTitle": 250,
+      "html": 251
+    },
+    {
+      "member": "owner",
+      "page": "campaigns",
+      "status": 200,
+      "frame": 232,
+      "ownTitle": 236,
+      "html": 237
+    },
+    {
+      "member": "owner",
+      "page": "carrier-files",
+      "status": 200,
+      "frame": 228,
+      "ownTitle": 1430,
+      "html": 1448
+    },
+    {
+      "member": "owner",
+      "page": "commission-splits",
+      "status": 200,
+      "frame": 245,
+      "ownTitle": 670,
+      "html": 671
+    },
+    {
+      "member": "owner",
+      "page": "complaints",
+      "status": 200,
+      "frame": 239,
+      "ownTitle": 686,
+      "html": 688
+    },
+    {
+      "member": "owner",
+      "page": "compliance",
+      "status": 200,
+      "frame": 242,
+      "ownTitle": 1279,
+      "html": 1281
+    },
+    {
+      "member": "owner",
+      "page": "consent",
+      "status": 200,
+      "frame": 250,
+      "ownTitle": 361,
+      "html": 361
+    },
+    {
+      "member": "owner",
+      "page": "dashboard",
+      "status": 200,
+      "frame": 218,
+      "ownTitle": 498,
+      "html": 2814
+    },
+    {
+      "member": "owner",
+      "page": "deal-flow",
+      "status": 200,
+      "frame": 226,
+      "ownTitle": 226,
+      "html": 226
+    },
+    {
+      "member": "owner",
+      "page": "deletion-requests",
+      "status": 200,
+      "frame": 238,
+      "ownTitle": 527,
+      "html": 528
+    },
+    {
+      "member": "owner",
+      "page": "dialer",
+      "status": 200,
+      "frame": 249,
+      "ownTitle": 252,
+      "html": 252
+    },
+    {
+      "member": "owner",
+      "page": "discrepancies",
+      "status": 200,
+      "frame": 243,
+      "ownTitle": 1494,
+      "html": 1497
+    },
+    {
+      "member": "owner",
+      "page": "draft-dates",
+      "status": 200,
+      "frame": 249,
+      "ownTitle": 249,
+      "html": 250
+    },
+    {
+      "member": "owner",
+      "page": "duplicates",
+      "status": 200,
+      "frame": 266,
+      "ownTitle": 268,
+      "html": 269
+    },
+    {
+      "member": "owner",
+      "page": "evidence-report",
+      "status": 200,
+      "frame": 263,
+      "ownTitle": 2678,
+      "html": 2681
+    },
+    {
+      "member": "owner",
+      "page": "exceptions",
+      "status": 200,
+      "frame": 275,
+      "ownTitle": 280,
+      "html": 2527
+    },
+    {
+      "member": "owner",
+      "page": "expenses",
+      "status": 200,
+      "frame": 261,
+      "ownTitle": 1013,
+      "html": 1013
+    },
+    {
+      "member": "owner",
+      "page": "floor",
+      "status": 200,
+      "frame": 254,
+      "ownTitle": 254,
+      "html": 254
+    },
+    {
+      "member": "owner",
+      "page": "hierarchy",
+      "status": 200,
+      "frame": 291,
+      "ownTitle": 294,
+      "html": 504
+    },
+    {
+      "member": "owner",
+      "page": "import",
+      "status": 200,
+      "frame": 249,
+      "ownTitle": 253,
+      "html": 253
+    },
+    {
+      "member": "owner",
+      "page": "inbound",
+      "status": 200,
+      "frame": 256,
+      "ownTitle": 256,
+      "html": 257
+    },
+    {
+      "member": "owner",
+      "page": "invoices",
+      "status": 200,
+      "frame": 248,
+      "ownTitle": 674,
+      "html": 675
+    },
+    {
+      "member": "owner",
+      "page": "lapse-risk",
+      "status": 200,
+      "frame": 250,
+      "ownTitle": 250,
+      "html": 365
+    },
+    {
+      "member": "owner",
+      "page": "lead-lists",
+      "status": 200,
+      "frame": 237,
+      "ownTitle": 237,
+      "html": 238
+    },
+    {
+      "member": "owner",
+      "page": "lead-routing",
+      "status": 200,
+      "frame": 249,
+      "ownTitle": 254,
+      "html": 254
+    },
+    {
+      "member": "owner",
+      "page": "lead-sources",
+      "status": 200,
+      "frame": 257,
+      "ownTitle": 257,
+      "html": 258
+    },
+    {
+      "member": "owner",
+      "page": "leads",
+      "status": 200,
+      "frame": 249,
+      "ownTitle": 249,
+      "html": 249
+    },
+    {
+      "member": "owner",
+      "page": "ledger",
+      "status": 200,
+      "frame": 223,
+      "ownTitle": 1309,
+      "html": 1313
+    },
+    {
+      "member": "owner",
+      "page": "motion-lab",
+      "status": 200,
+      "frame": 256,
+      "ownTitle": 259,
+      "html": 259
+    },
+    {
+      "member": "owner",
+      "page": "my-balance",
+      "status": 200,
+      "frame": 234,
+      "ownTitle": 540,
+      "html": 540
+    },
+    {
+      "member": "owner",
+      "page": "my-pay",
+      "status": 200,
+      "frame": 244,
+      "ownTitle": 533,
+      "html": 533
+    },
+    {
+      "member": "owner",
+      "page": "needs-you",
+      "status": 200,
+      "frame": 244,
+      "ownTitle": 248,
+      "html": 4309
+    },
+    {
+      "member": "owner",
+      "page": "nurture",
+      "status": 200,
+      "frame": 234,
+      "ownTitle": 237,
+      "html": 238
+    },
+    {
+      "member": "owner",
+      "page": "partner-chat",
+      "status": 200,
+      "frame": 235,
+      "ownTitle": 237,
+      "html": 237
+    },
+    {
+      "member": "owner",
+      "page": "partner-quality",
+      "status": 200,
+      "frame": 243,
+      "ownTitle": 246,
+      "html": 247
+    },
+    {
+      "member": "owner",
+      "page": "payouts",
+      "status": 200,
+      "frame": 236,
+      "ownTitle": 936,
+      "html": 939
+    },
+    {
+      "member": "owner",
+      "page": "pending",
+      "status": 200,
+      "frame": 245,
+      "ownTitle": 1096,
+      "html": 1098
+    },
+    {
+      "member": "owner",
+      "page": "persistency",
+      "status": 200,
+      "frame": 241,
+      "ownTitle": 241,
+      "html": 241
+    },
+    {
+      "member": "owner",
+      "page": "pnl",
+      "status": 200,
+      "frame": 248,
+      "ownTitle": 1165,
+      "html": 1166
+    },
+    {
+      "member": "owner",
+      "page": "policies",
+      "status": 200,
+      "frame": 228,
+      "ownTitle": 399,
+      "html": 2485
+    },
+    {
+      "member": "owner",
+      "page": "policy-matching",
+      "status": 200,
+      "frame": 209,
+      "ownTitle": 762,
+      "html": 772
+    },
+    {
+      "member": "owner",
+      "page": "producer-payouts",
+      "status": 200,
+      "frame": 248,
+      "ownTitle": 693,
+      "html": 695
+    },
+    {
+      "member": "owner",
+      "page": "producer-reconciliation",
+      "status": 200,
+      "frame": 244,
+      "ownTitle": 803,
+      "html": 805
+    },
+    {
+      "member": "owner",
+      "page": "producer-scorecards",
+      "status": 200,
+      "frame": 216,
+      "ownTitle": 1375,
+      "html": 1380
+    },
+    {
+      "member": "owner",
+      "page": "producer-splits",
+      "status": 200,
+      "frame": 242,
+      "ownTitle": 246,
+      "html": 246
+    },
+    {
+      "member": "owner",
+      "page": "producers",
+      "status": 200,
+      "frame": 237,
+      "ownTitle": 386,
+      "html": 387
+    },
+    {
+      "member": "owner",
+      "page": "profile",
+      "status": 200,
+      "frame": 248,
+      "ownTitle": 248,
+      "html": 249
+    },
+    {
+      "member": "owner",
+      "page": "publishers",
+      "status": 200,
+      "frame": 229,
+      "ownTitle": 229,
+      "html": 229
+    },
+    {
+      "member": "owner",
+      "page": "quoting",
+      "status": 200,
+      "frame": 236,
+      "ownTitle": 240,
+      "html": 241
+    },
+    {
+      "member": "owner",
+      "page": "rate-card",
+      "status": 200,
+      "frame": 240,
+      "ownTitle": 240,
+      "html": 241
+    },
+    {
+      "member": "owner",
+      "page": "reinstatement",
+      "status": 200,
+      "frame": 241,
+      "ownTitle": 946,
+      "html": 947
+    },
+    {
+      "member": "owner",
+      "page": "retention",
+      "status": 200,
+      "frame": 209,
+      "ownTitle": 1981,
+      "html": 1985
+    },
+    {
+      "member": "owner",
+      "page": "retention-results",
+      "status": 200,
+      "frame": 252,
+      "ownTitle": 1340,
+      "html": 1342
+    },
+    {
+      "member": "owner",
+      "page": "retention-scorecard",
+      "status": 200,
+      "frame": 247,
+      "ownTitle": 1497,
+      "html": 1500
+    },
+    {
+      "member": "owner",
+      "page": "retention-settings",
+      "status": 200,
+      "frame": 227,
+      "ownTitle": 582,
+      "html": 2129
+    },
+    {
+      "member": "owner",
+      "page": "sales-performance",
+      "status": 200,
+      "frame": 267,
+      "ownTitle": 980,
+      "html": 984
+    },
+    {
+      "member": "owner",
+      "page": "save-queue",
+      "status": 200,
+      "frame": 219,
+      "ownTitle": 1779,
+      "html": 1780
+    },
+    {
+      "member": "owner",
+      "page": "scorecard",
+      "status": 307,
+      "frame": null,
+      "ownTitle": null,
+      "html": 2
+    },
+    {
+      "member": "owner",
+      "page": "scoring",
+      "status": 200,
+      "frame": 249,
+      "ownTitle": 251,
+      "html": 252
+    },
+    {
+      "member": "owner",
+      "page": "servicing",
+      "status": 200,
+      "frame": 207,
+      "ownTitle": 909,
+      "html": 911
+    },
+    {
+      "member": "owner",
+      "page": "setters",
+      "status": 200,
+      "frame": 262,
+      "ownTitle": 1203,
+      "html": 1207
+    },
+    {
+      "member": "owner",
+      "page": "settings",
+      "status": 200,
+      "frame": 250,
+      "ownTitle": 250,
+      "html": 602
+    },
+    {
+      "member": "owner",
+      "page": "setup",
+      "status": 200,
+      "frame": 258,
+      "ownTitle": 431,
+      "html": 433
+    },
+    {
+      "member": "owner",
+      "page": "statements",
+      "status": 200,
+      "frame": 239,
+      "ownTitle": 857,
+      "html": 860
+    },
+    {
+      "member": "owner",
+      "page": "tax",
+      "status": 200,
+      "frame": 226,
+      "ownTitle": 550,
+      "html": 551
+    },
+    {
+      "member": "owner",
+      "page": "tcpa",
+      "status": 200,
+      "frame": 244,
+      "ownTitle": 359,
+      "html": 360
+    },
+    {
+      "member": "owner",
+      "page": "true-cpa",
+      "status": 200,
+      "frame": 246,
+      "ownTitle": 1074,
+      "html": 1077
+    },
+    {
+      "member": "owner",
+      "page": "vendor-bills",
+      "status": 200,
+      "frame": 234,
+      "ownTitle": 545,
+      "html": 548
+    },
+    {
+      "member": "owner",
+      "page": "vendor-returns",
+      "status": 200,
+      "frame": 236,
+      "ownTitle": 367,
+      "html": 368
+    },
+    {
+      "member": "owner",
+      "page": "vendors",
+      "status": 307,
+      "frame": null,
+      "ownTitle": null,
+      "html": 1
+    },
+    {
+      "member": "producer",
+      "page": "accounting",
+      "status": 200,
+      "frame": 241,
+      "ownTitle": 523,
+      "html": 523
+    },
+    {
+      "member": "producer",
+      "page": "accounting-settings",
+      "status": 200,
+      "frame": 253,
+      "ownTitle": 517,
+      "html": 517
+    },
+    {
+      "member": "producer",
+      "page": "activity",
+      "status": 200,
+      "frame": 234,
+      "ownTitle": 238,
+      "html": 238
+    },
+    {
+      "member": "producer",
+      "page": "agency",
+      "status": 200,
+      "frame": 206,
+      "ownTitle": 374,
+      "html": 1592
+    },
+    {
+      "member": "producer",
+      "page": "alerts",
+      "status": 200,
+      "frame": 238,
+      "ownTitle": 367,
+      "html": 368
+    },
+    {
+      "member": "producer",
+      "page": "application-review",
+      "status": 200,
+      "frame": 237,
+      "ownTitle": 239,
+      "html": 240
+    },
+    {
+      "member": "producer",
+      "page": "applications",
+      "status": 200,
+      "frame": 242,
+      "ownTitle": 754,
+      "html": 755
+    },
+    {
+      "member": "producer",
+      "page": "appointments",
+      "status": 200,
+      "frame": 242,
+      "ownTitle": 358,
+      "html": 359
+    },
+    {
+      "member": "producer",
+      "page": "assignments",
+      "status": 200,
+      "frame": 249,
+      "ownTitle": 513,
+      "html": 514
+    },
+    {
+      "member": "producer",
+      "page": "attribution",
+      "status": 200,
+      "frame": 242,
+      "ownTitle": 518,
+      "html": 518
+    },
+    {
+      "member": "producer",
+      "page": "bank",
+      "status": 200,
+      "frame": 261,
+      "ownTitle": 515,
+      "html": 515
+    },
+    {
+      "member": "producer",
+      "page": "book-import",
+      "status": 200,
+      "frame": 244,
+      "ownTitle": 509,
+      "html": 510
+    },
+    {
+      "member": "producer",
+      "page": "book-scorecards",
+      "status": 200,
+      "frame": 233,
+      "ownTitle": 998,
+      "html": 999
+    },
+    {
+      "member": "producer",
+      "page": "book-setup",
+      "status": 200,
+      "frame": 244,
+      "ownTitle": 517,
+      "html": 518
+    },
+    {
+      "member": "producer",
+      "page": "calendar",
+      "status": 200,
+      "frame": 243,
+      "ownTitle": 243,
+      "html": 244
+    },
+    {
+      "member": "producer",
+      "page": "callbacks",
+      "status": 200,
+      "frame": 258,
+      "ownTitle": 258,
+      "html": 258
+    },
+    {
+      "member": "producer",
+      "page": "campaigns",
+      "status": 200,
+      "frame": 250,
+      "ownTitle": 522,
+      "html": 523
+    },
+    {
+      "member": "producer",
+      "page": "carrier-files",
+      "status": 200,
+      "frame": 230,
+      "ownTitle": 506,
+      "html": 507
+    },
+    {
+      "member": "producer",
+      "page": "commission-splits",
+      "status": 200,
+      "frame": 246,
+      "ownTitle": 509,
+      "html": 510
+    },
+    {
+      "member": "producer",
+      "page": "complaints",
+      "status": 200,
+      "frame": 234,
+      "ownTitle": 513,
+      "html": 514
+    },
+    {
+      "member": "producer",
+      "page": "compliance",
+      "status": 200,
+      "frame": 236,
+      "ownTitle": 505,
+      "html": 506
+    },
+    {
+      "member": "producer",
+      "page": "consent",
+      "status": 200,
+      "frame": 240,
+      "ownTitle": 524,
+      "html": 524
+    },
+    {
+      "member": "producer",
+      "page": "dashboard",
+      "status": 200,
+      "frame": 221,
+      "ownTitle": 527,
+      "html": 2335
+    },
+    {
+      "member": "producer",
+      "page": "deal-flow",
+      "status": 200,
+      "frame": 260,
+      "ownTitle": 260,
+      "html": 260
+    },
+    {
+      "member": "producer",
+      "page": "deletion-requests",
+      "status": 200,
+      "frame": 230,
+      "ownTitle": 522,
+      "html": 522
+    },
+    {
+      "member": "producer",
+      "page": "dialer",
+      "status": 200,
+      "frame": 242,
+      "ownTitle": 244,
+      "html": 245
+    },
+    {
+      "member": "producer",
+      "page": "discrepancies",
+      "status": 200,
+      "frame": 251,
+      "ownTitle": 528,
+      "html": 529
+    },
+    {
+      "member": "producer",
+      "page": "draft-dates",
+      "status": 200,
+      "frame": 255,
+      "ownTitle": 255,
+      "html": 255
+    },
+    {
+      "member": "producer",
+      "page": "duplicates",
+      "status": 200,
+      "frame": 237,
+      "ownTitle": 517,
+      "html": 519
+    },
+    {
+      "member": "producer",
+      "page": "evidence-report",
+      "status": 200,
+      "frame": 238,
+      "ownTitle": 502,
+      "html": 502
+    },
+    {
+      "member": "producer",
+      "page": "exceptions",
+      "status": 200,
+      "frame": 236,
+      "ownTitle": 517,
+      "html": 518
+    },
+    {
+      "member": "producer",
+      "page": "expenses",
+      "status": 200,
+      "frame": 244,
+      "ownTitle": 501,
+      "html": 502
+    },
+    {
+      "member": "producer",
+      "page": "floor",
+      "status": 200,
+      "frame": 251,
+      "ownTitle": 251,
+      "html": 252
+    },
+    {
+      "member": "producer",
+      "page": "hierarchy",
+      "status": 200,
+      "frame": 243,
+      "ownTitle": 247,
+      "html": 365
+    },
+    {
+      "member": "producer",
+      "page": "import",
+      "status": 200,
+      "frame": 246,
+      "ownTitle": 498,
+      "html": 498
+    },
+    {
+      "member": "producer",
+      "page": "inbound",
+      "status": 200,
+      "frame": 239,
+      "ownTitle": 239,
+      "html": 240
+    },
+    {
+      "member": "producer",
+      "page": "invoices",
+      "status": 200,
+      "frame": 234,
+      "ownTitle": 506,
+      "html": 507
+    },
+    {
+      "member": "producer",
+      "page": "lapse-risk",
+      "status": 200,
+      "frame": 242,
+      "ownTitle": 242,
+      "html": 352
+    },
+    {
+      "member": "producer",
+      "page": "lead-lists",
+      "status": 200,
+      "frame": 242,
+      "ownTitle": 242,
+      "html": 242
+    },
+    {
+      "member": "producer",
+      "page": "lead-routing",
+      "status": 200,
+      "frame": 248,
+      "ownTitle": 510,
+      "html": 511
+    },
+    {
+      "member": "producer",
+      "page": "lead-sources",
+      "status": 200,
+      "frame": 233,
+      "ownTitle": 501,
+      "html": 502
+    },
+    {
+      "member": "producer",
+      "page": "leads",
+      "status": 200,
+      "frame": 246,
+      "ownTitle": 246,
+      "html": 246
+    },
+    {
+      "member": "producer",
+      "page": "ledger",
+      "status": 200,
+      "frame": 247,
+      "ownTitle": 1117,
+      "html": 1120
+    },
+    {
+      "member": "producer",
+      "page": "motion-lab",
+      "status": 200,
+      "frame": 242,
+      "ownTitle": 244,
+      "html": 247
+    },
+    {
+      "member": "producer",
+      "page": "my-balance",
+      "status": 200,
+      "frame": 239,
+      "ownTitle": 241,
+      "html": 242
+    },
+    {
+      "member": "producer",
+      "page": "my-pay",
+      "status": 200,
+      "frame": 233,
+      "ownTitle": 955,
+      "html": 957
+    },
+    {
+      "member": "producer",
+      "page": "needs-you",
+      "status": 200,
+      "frame": 236,
+      "ownTitle": 521,
+      "html": 522
+    },
+    {
+      "member": "producer",
+      "page": "nurture",
+      "status": 200,
+      "frame": 230,
+      "ownTitle": 500,
+      "html": 501
+    },
+    {
+      "member": "producer",
+      "page": "partner-chat",
+      "status": 200,
+      "frame": 232,
+      "ownTitle": 234,
+      "html": 235
+    },
+    {
+      "member": "producer",
+      "page": "partner-quality",
+      "status": 200,
+      "frame": 254,
+      "ownTitle": 508,
+      "html": 508
+    },
+    {
+      "member": "producer",
+      "page": "payouts",
+      "status": 200,
+      "frame": 255,
+      "ownTitle": 506,
+      "html": 507
+    },
+    {
+      "member": "producer",
+      "page": "pending",
+      "status": 200,
+      "frame": 231,
+      "ownTitle": 883,
+      "html": 885
+    },
+    {
+      "member": "producer",
+      "page": "persistency",
+      "status": 200,
+      "frame": 244,
+      "ownTitle": 244,
+      "html": 245
+    },
+    {
+      "member": "producer",
+      "page": "pnl",
+      "status": 200,
+      "frame": 247,
+      "ownTitle": 516,
+      "html": 517
+    },
+    {
+      "member": "producer",
+      "page": "policies",
+      "status": 200,
+      "frame": 206,
+      "ownTitle": 366,
+      "html": 1537
+    },
+    {
+      "member": "producer",
+      "page": "policy-matching",
+      "status": 200,
+      "frame": 241,
+      "ownTitle": 529,
+      "html": 529
+    },
+    {
+      "member": "producer",
+      "page": "producer-payouts",
+      "status": 200,
+      "frame": 244,
+      "ownTitle": 508,
+      "html": 509
+    },
+    {
+      "member": "producer",
+      "page": "producer-reconciliation",
+      "status": 200,
+      "frame": 248,
+      "ownTitle": 503,
+      "html": 503
+    },
+    {
+      "member": "producer",
+      "page": "producer-scorecards",
+      "status": 200,
+      "frame": 238,
+      "ownTitle": 1399,
+      "html": 1402
+    },
+    {
+      "member": "producer",
+      "page": "producer-splits",
+      "status": 200,
+      "frame": 237,
+      "ownTitle": 510,
+      "html": 510
+    },
+    {
+      "member": "producer",
+      "page": "producers",
+      "status": 200,
+      "frame": 269,
+      "ownTitle": 272,
+      "html": 274
+    },
+    {
+      "member": "producer",
+      "page": "profile",
+      "status": 200,
+      "frame": 250,
+      "ownTitle": 250,
+      "html": 250
+    },
+    {
+      "member": "producer",
+      "page": "publishers",
+      "status": 200,
+      "frame": 238,
+      "ownTitle": 516,
+      "html": 516
+    },
+    {
+      "member": "producer",
+      "page": "quoting",
+      "status": 200,
+      "frame": 244,
+      "ownTitle": 247,
+      "html": 248
+    },
+    {
+      "member": "producer",
+      "page": "rate-card",
+      "status": 200,
+      "frame": 246,
+      "ownTitle": 246,
+      "html": 247
+    },
+    {
+      "member": "producer",
+      "page": "reinstatement",
+      "status": 200,
+      "frame": 240,
+      "ownTitle": 954,
+      "html": 955
+    },
+    {
+      "member": "producer",
+      "page": "retention",
+      "status": 200,
+      "frame": 255,
+      "ownTitle": 1945,
+      "html": 1951
+    },
+    {
+      "member": "producer",
+      "page": "retention-results",
+      "status": 200,
+      "frame": 290,
+      "ownTitle": 526,
+      "html": 527
+    },
+    {
+      "member": "producer",
+      "page": "retention-scorecard",
+      "status": 200,
+      "frame": 252,
+      "ownTitle": 1539,
+      "html": 1540
+    },
+    {
+      "member": "producer",
+      "page": "retention-settings",
+      "status": 200,
+      "frame": 247,
+      "ownTitle": 522,
+      "html": 523
+    },
+    {
+      "member": "producer",
+      "page": "sales-performance",
+      "status": 200,
+      "frame": 256,
+      "ownTitle": 855,
+      "html": 856
+    },
+    {
+      "member": "producer",
+      "page": "save-queue",
+      "status": 200,
+      "frame": 205,
+      "ownTitle": 1808,
+      "html": 1810
+    },
+    {
+      "member": "producer",
+      "page": "scorecard",
+      "status": 307,
+      "frame": null,
+      "ownTitle": null,
+      "html": 2
+    },
+    {
+      "member": "producer",
+      "page": "scoring",
+      "status": 200,
+      "frame": 238,
+      "ownTitle": 502,
+      "html": 503
+    },
+    {
+      "member": "producer",
+      "page": "servicing",
+      "status": 200,
+      "frame": 221,
+      "ownTitle": 1057,
+      "html": 1058
+    },
+    {
+      "member": "producer",
+      "page": "setters",
+      "status": 200,
+      "frame": 255,
+      "ownTitle": 1301,
+      "html": 1303
+    },
+    {
+      "member": "producer",
+      "page": "settings",
+      "status": 200,
+      "frame": 248,
+      "ownTitle": 248,
+      "html": 249
+    },
+    {
+      "member": "producer",
+      "page": "setup",
+      "status": 200,
+      "frame": 237,
+      "ownTitle": 396,
+      "html": 398
+    },
+    {
+      "member": "producer",
+      "page": "statements",
+      "status": 200,
+      "frame": 236,
+      "ownTitle": 510,
+      "html": 510
+    },
+    {
+      "member": "producer",
+      "page": "tax",
+      "status": 200,
+      "frame": 260,
+      "ownTitle": 507,
+      "html": 508
+    },
+    {
+      "member": "producer",
+      "page": "tcpa",
+      "status": 200,
+      "frame": 235,
+      "ownTitle": 506,
+      "html": 507
+    },
+    {
+      "member": "producer",
+      "page": "true-cpa",
+      "status": 200,
+      "frame": 236,
+      "ownTitle": 503,
+      "html": 504
+    },
+    {
+      "member": "producer",
+      "page": "vendor-bills",
+      "status": 200,
+      "frame": 249,
+      "ownTitle": 518,
+      "html": 519
+    },
+    {
+      "member": "producer",
+      "page": "vendor-returns",
+      "status": 200,
+      "frame": 240,
+      "ownTitle": 508,
+      "html": 509
+    },
+    {
+      "member": "producer",
+      "page": "vendors",
+      "status": 307,
+      "frame": null,
+      "ownTitle": null,
+      "html": 2
+    }
+  ]
+}

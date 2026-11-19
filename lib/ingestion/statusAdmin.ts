@@ -40,6 +40,8 @@ function fail(error: { message: string; code?: string }, fallback: string): neve
 export type QueueEntry = {
   carrierId: string;
   carrierName: string;
+  /** The carrier's code, for `?carrier=<code>` and the link to its record (admin round 1). */
+  carrierCode: string;
   fileType: CarrierFileType;
   raw: string;
   rows: number;
@@ -52,6 +54,7 @@ export type MappingRow = {
   id: string;
   carrierId: string;
   carrierName: string;
+  carrierCode: string;
   fileType: CarrierFileType;
   raw: string;
   status: NormalizedStatus;
@@ -60,22 +63,22 @@ export type MappingRow = {
   notes: string | null;
 };
 
-export async function listStatusQueue(): Promise<{ queue: QueueEntry[]; mappings: MappingRow[]; carriers: Array<{ id: string; name: string }> }> {
+export async function listStatusQueue(): Promise<{ queue: QueueEntry[]; mappings: MappingRow[]; carriers: Array<{ id: string; name: string; code: string }> }> {
   const [queue, mappings, carriers] = await Promise.all([
-    db().from("unmapped_status_queue").select("carrier_id, file_type, carrier_status_raw, row_count, tenant_id, first_seen_at, carriers(name)").is("resolved_at", null).limit(5000),
-    db().from("carrier_status_map").select("id, carrier_id, file_type, carrier_status_raw, status_normalized, approved_at, mapped_at, notes, carriers(name)").order("mapped_at", { ascending: false }).limit(2000),
-    db().from("carriers").select("id, name").eq("is_active", true).order("name"),
+    db().from("unmapped_status_queue").select("carrier_id, file_type, carrier_status_raw, row_count, tenant_id, first_seen_at, carriers(name, code)").is("resolved_at", null).limit(5000),
+    db().from("carrier_status_map").select("id, carrier_id, file_type, carrier_status_raw, status_normalized, approved_at, mapped_at, notes, carriers(name, code)").order("mapped_at", { ascending: false }).limit(2000),
+    db().from("carriers").select("id, name, code").eq("is_active", true).order("name"),
   ]);
   if (queue.error) fail(queue.error, "Could not load the status queue");
   if (mappings.error) fail(mappings.error, "Could not load the status map");
   if (carriers.error) fail(carriers.error, "Could not load carriers");
-  const mapRows: MappingRow[] = (mappings.data ?? []).map((row: Loose) => ({ id: row.id, carrierId: row.carrier_id, carrierName: row.carriers?.name ?? "", fileType: row.file_type, raw: row.carrier_status_raw, status: row.status_normalized, approvedAt: row.approved_at, mappedAt: row.mapped_at, notes: row.notes }));
+  const mapRows: MappingRow[] = (mappings.data ?? []).map((row: Loose) => ({ id: row.id, carrierId: row.carrier_id, carrierName: row.carriers?.name ?? "", carrierCode: row.carriers?.code ?? "", fileType: row.file_type, raw: row.carrier_status_raw, status: row.status_normalized, approvedAt: row.approved_at, mappedAt: row.mapped_at, notes: row.notes }));
   // One line per carrier word, gathered across agencies (a word means the same everywhere).
   const grouped = new Map<string, QueueEntry & { tenants: Set<string> }>();
   for (const row of (queue.data ?? []) as Loose[]) {
     if (!row.row_count) continue;
     const key = `${row.carrier_id}\u0000${row.file_type}\u0000${row.carrier_status_raw}`;
-    const entry = grouped.get(key) ?? { carrierId: row.carrier_id, carrierName: row.carriers?.name ?? "", fileType: row.file_type, raw: row.carrier_status_raw, rows: 0, agencies: 0, firstSeenAt: row.first_seen_at, proposal: null, tenants: new Set<string>() };
+    const entry = grouped.get(key) ?? { carrierId: row.carrier_id, carrierName: row.carriers?.name ?? "", carrierCode: row.carriers?.code ?? "", fileType: row.file_type, raw: row.carrier_status_raw, rows: 0, agencies: 0, firstSeenAt: row.first_seen_at, proposal: null, tenants: new Set<string>() };
     entry.rows += row.row_count;
     entry.tenants.add(row.tenant_id);
     if (row.first_seen_at < entry.firstSeenAt) entry.firstSeenAt = row.first_seen_at;

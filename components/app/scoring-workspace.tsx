@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { notify } from "@/lib/notify";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ChartHeading, LineSeries, ShareBar, type LinePoint } from "@/components/ui/chart";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -29,6 +29,7 @@ import { load as loadResource, peek, readResource, seed } from "@/lib/client/res
 
 import { ChangeWeightsDialog, type WeightRow, type WeightsDraft } from "@/components/app/scoring/change-weights-dialog";
 import { QueueNextUp } from "@/components/app/scoring/next-up";
+import { cn } from "@/lib/utils";
 
 type Cohort = { cohort: string; served: number; contacted: number; contactRatePct: number | null; averageScore: number | null; since: string | null };
 type VendorRate = { vendorId: string; name: string; attempts: number; contacts: number; ratePct: number };
@@ -166,7 +167,13 @@ export function ScoringWorkspace({ readOnly = false, framed = false }: { readOnl
       <TableCard><ErrorState title="Queue scoring did not load" detail={loadError} action={<Button variant="outline" onClick={() => void load(holdoutWindow, true)}>Try again</Button>} /></TableCard>
     </div>
   );
-  if (!data) return framed ? <FramedLoading /> : <PageLoading />;
+  // Frame first (UI-CONSISTENCY §7a): standalone, the title and its buttons draw at once and the report loads under them.
+  if (!data) return framed ? <FramedLoading /> : (
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      <PageHeader title="Queue scoring" description="How the dialer picks the next lead" />
+      <PageLoading header={false} />
+    </div>
+  );
   const verdict = VERDICT_CHIP[comparison.verdict];
   const periodSupported = data.periodSupported === true;
   const shownPeriod: Period = data.period ?? "all";
@@ -236,7 +243,7 @@ export function ScoringWorkspace({ readOnly = false, framed = false }: { readOnl
         <ChartHeading
           title="How the score is divided"
           period={`${atDefault} of ${weightList.length} signals at default · ${pointsFigure(total)} points a lead can score · ${data.holdoutPct}% of serves go in plain order`}
-          action={<Link href={showHref(base, "table")} className="whitespace-nowrap text-sm text-foreground underline-offset-2 hover:underline">Open as a table ›</Link>}
+          action={<Link href={showHref(base, "table")} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "no-underline whitespace-nowrap")}>Open as a Table</Link>}
         />
         {total > 0 ? (
           <ShareBar

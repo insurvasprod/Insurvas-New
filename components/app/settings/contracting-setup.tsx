@@ -31,6 +31,8 @@ import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { InfoTip } from "@/components/ui/info-tip";
 import { Pager } from "@/components/ui/pager";
+import { SaveStatus } from "@/components/ui/save-status";
+import { useSavedFlash } from "@/components/ui/use-saved-flash";
 
 /** Carriers on one page of step 1 on a phone (manager review 29 Oct, 06:09: pages, not one long scroll). */
 const CARRIERS_PER_PAGE = 10;
@@ -114,6 +116,8 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
   const queue = useRef<Promise<void>>(Promise.resolve());
   const [pending, setPending] = useState(0);
   const [failed, setFailed] = useState<string | null>(null);
+  // Something was sent this visit: once the queue empties, "✓ Saved" shows for 2s and goes (SaveStatus).
+  const [sentAny, setSentAny] = useState(false);
   // Every tick counts; a read that started before the latest tick is dropped so it never undoes it.
   const edits = useRef(0);
   // The count lives in a ref too: the read-back must start once, outside a state updater, which
@@ -123,6 +127,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
     edits.current += 1;
     left.current += 1;
     setPending(left.current);
+    setSentAny(true);
     queue.current = queue.current.then(async () => {
       const ok = await work().catch(() => false);
       if (!ok) setFailed("Something didn't save. The list has been read again, so it shows what is saved.");
@@ -263,10 +268,11 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
   /* ── layout ────────────────────────────────────────────────────────────────────────────────── */
 
   const saving = pending > 0;
-  // Said only while it is true (owner, 29 Oct: no standing "Saved as you go" line).
+  // Said only while it is true (owner, 29 Oct: no standing "Saved as you go" line): Saving…, then ✓ Saved that
+  // fades after 2s (the kit's SaveStatus, Wave B 2026-11-18).
   const status = failed
     ? <span role="alert" className="text-xs text-[var(--error-ink)]">{failed}</span>
-    : <span role="status" aria-live="polite" className="text-xs text-[var(--muted)] empty:hidden">{saving ? "Saving…" : ""}</span>;
+    : <SaveStatus state={saving ? "saving" : sentAny ? "saved" : "idle"} />;
 
   const steps = (
     <ol aria-label="Set-up steps" className="m-0 grid list-none grid-cols-2 gap-3 p-0">
@@ -334,7 +340,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
               with Next, one bar of controls, rather than loose under the list. */}
           {/* One bar, as under the States cards: the count on the left, the pages and Next on the right. */}
           <footer ref={footerRef} className={cn(STEP_FOOTER, "-mt-4")}>
-            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 text-sm text-[var(--muted)]">
+            <div data-guide="carriers-setup-pager" className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 text-sm text-[var(--muted)]">
               <Pager page={shownPage} total={library.length} noun="carriers" pageSize={perPage} onPage={setLibraryPage} />
             </div>
             <span className="flex items-center gap-3">
@@ -406,7 +412,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
                   })}
                 </ul>
                 {/* The card is exactly the tiles' length; only a very long carrier list scrolls, inside it. */}
-                <div className="flex flex-col rounded-[12px] border border-[var(--border)] bg-[var(--surface-alt)] p-3 @3xl:h-0 @3xl:min-h-full">
+                <div data-guide="states-setup-carriers" className="flex flex-col rounded-[12px] border border-[var(--border)] bg-[var(--surface-alt)] p-3 @3xl:h-0 @3xl:min-h-full">
                   {(() => {
                     const focus = open ? US_STATES.find(([code]) => code === open) : null;
                     if (!focus) return <p className="m-0 py-8 text-center text-sm text-[var(--muted)]">Pick a state to see its carriers here.</p>;
@@ -476,18 +482,24 @@ function CarrierRow({ carrier, on, contract, height, fill, onToggle, send, enque
   const [from, setFrom] = useState(contract?.effective_from ?? todayIso());
   const [writing, setWriting] = useState(contract?.writing_number ?? "");
   const levelBad = level.trim() !== "" && levelToBp(level) === null;
+  // The row glows once when its contract saves (Wave B, 2026-11-18).
+  const glow = useSavedFlash();
 
   // Saved when all three are there (the contract needs all three); a half-filled row waits quietly.
   function save() {
     const bp = levelToBp(level);
     if (bp === null || !from) return;
     if (contract && bp === contract.contract_level_bp && from === contract.effective_from && writing.trim() === contract.writing_number) return;
-    enqueue(async () => (await send("/api/app/carrier-library/tenant-carriers", "POST", { carrier_id: carrier.id, contract_level_bp: bp, writing_number: writing.trim(), effective_from: from })).ok);
+    enqueue(async () => {
+      const ok = (await send("/api/app/carrier-library/tenant-carriers", "POST", { carrier_id: carrier.id, contract_level_bp: bp, writing_number: writing.trim(), effective_from: from })).ok;
+      if (ok) glow.flash("contract");
+      return ok;
+    });
   }
 
   const id = `contracting-${carrier.id}`;
   return (
-    <li style={height ? { minHeight: height } : undefined} className={cn("-mx-4 flex flex-col justify-center", fill && "flex-1", "border-b border-[var(--border)] px-4 py-1.5 last:border-b-0", on && "bg-[color-mix(in_srgb,var(--primary-soft)_45%,transparent)]")}>
+    <li style={height ? { minHeight: height } : undefined} {...glow.props("contract")} className={cn("-mx-4 flex flex-col justify-center", fill && "flex-1", "border-b border-[var(--border)] px-4 py-1.5 last:border-b-0", on && "bg-[color-mix(in_srgb,var(--primary-soft)_45%,transparent)]")}>
       <div className={cn("flex flex-col gap-2 sm:grid", ROW)}>
         <button type="button" role="checkbox" aria-checked={on} onClick={onToggle} className="flex min-w-0 items-center gap-3 rounded-md py-1.5 text-left">
           <span aria-hidden="true" className={cn("inline-grid size-[18px] shrink-0 place-items-center rounded-[5px] border", on ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--on-primary)]" : "border-[var(--border-strong)]")}>{on && <Check className="size-3" />}</span>

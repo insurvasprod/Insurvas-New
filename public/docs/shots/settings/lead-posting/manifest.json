@@ -1,0 +1,134 @@
+[
+  {
+    "src": "/docs/shots/settings/lead-posting/1.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check Posts today and Refused",
+    "focus": {
+      "x": 157,
+      "y": 14,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/lead-posting/2.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Copy posting address",
+    "focus": {
+      "x": 720,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/lead-posting/3.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Connect a vendor to add one",
+    "focus": {
+      "x": 720,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/lead-posting/4.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Rejections tab",
+    "focus": {
+      "x": 267,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/lead-posting/5.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Vendor guide tab",
+    "focus": {
+      "x": 360,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/lead-posting/6.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Vendors tab",
+    "focus": {
+      "x": 89,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/lead-posting/7.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click a vendor to open its sheet",
+    "focus": {
+      "x": 264,
+      "y": 139,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/lead-posting/8.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set the price per accepted lead",
+    "focus": {
+      "x": 720,
+      "y": 128,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/lead-posting/9.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set a daily cap",
+    "focus": {
+      "x": 606,
+      "y": 230,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/lead-posting/10.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Field map tab",
+    "focus": {
+      "x": 663,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/lead-posting/11.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Test tab",
+    "focus": {
+      "x": 720,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  }
+]

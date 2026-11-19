@@ -10,6 +10,7 @@ import type { PreflightResult } from "@/lib/existingCustomerPreflight/types";
 import { isKnownScreeningVersion } from "@/lib/compliance/screeningCore";
 import { soldByPartners } from "@/lib/existingCustomerPreflight/soldBy";
 import { isWithAgent, transferPhase, TRANSFER_PHASE_LABEL } from "@/lib/transferInbox/constants";
+import { maskLead, maskLeadFieldValue, sensitiveLeadFieldKeys } from "@/lib/leadValues/sensitive";
 
 /** The buffer and re-queue facts of 20260925709850. Null before it is applied (42703). */
 type QueueExtra = { buffer_user_id: string | null; buffer_ended_at: string | null; requeued_at: string | null; requeue_count: number | null };
@@ -129,14 +130,25 @@ export async function getLeadWorkspace(tenantId: string, userId: string, role: T
   if (actors.error) throw new Error(`Could not load lead actors: ${actors.error.message}`);
   const actorNames = new Map((actors.data ?? []).map((actor) => [actor.id, actor.name]));
   if (verificationFields.error) throw new Error(`Could not load verification fields: ${verificationFields.error.message}`);
-  const verification = verificationResult.data ? { session: verificationResult.data, fields: verificationFields.data ?? [], changes: changesResult.data ?? [] } : null;
+  // SSN and bank values leave this read masked to their last four: on the lead, on the verification
+  // rows and in the correction history and timeline built from it (security review 2026-11, H-1). The
+  // full value is shown only through the audited reveal route.
+  const templateFields = (templateResult.template as TemplateRow | null)?.fields ?? [];
+  const sensitiveKeys = sensitiveLeadFieldKeys(templateFields);
+  const maskField = <R extends { field_key: string; old_value: unknown; new_value: unknown }>(row: R): R => ({
+    ...row,
+    old_value: maskLeadFieldValue(row.field_key, row.old_value, sensitiveKeys),
+    new_value: maskLeadFieldValue(row.field_key, row.new_value, sensitiveKeys),
+  });
+  const corrections = (changesResult.data ?? []).map(maskField);
+  const verification = verificationResult.data ? { session: verificationResult.data, fields: (verificationFields.data ?? []).map(maskField), changes: corrections } : null;
   const events: LeadWorkspaceEvent[] = [];
   const addEvent = (id: string, at: string, action: string, actorId: string | null, detail: string | null, immutable = true) => events.push({ id, at, label: label(action), actor: actorId ? actorNames.get(actorId) ?? "Unknown actor" : "System", detail, immutable });
   addEvent(`created:${lead.id}`, lead.created_at, "lead submitted", lead.created_by, `Product: ${lead.product_line}`);
   // Screening is stored on the lead, not as an audit row, so the timeline read it from there.
   if (lead.screening_checked_at && lead.screening_outcome) addEvent(`screening:${lead.id}`, lead.screening_checked_at, lead.screening_outcome === "clear" ? "screening cleared" : `screening ${lead.screening_outcome.replaceAll("_", " ")}`, null, lead.screening_warning ?? (lead.screening_outcome === "clear" ? "No litigator, DNC or duplicate match" : null));
   for (const event of auditResult.data ?? []) addEvent(`audit:${event.id}`, event.ts, event.action, event.actor_id, event.reason ?? (record(event.metadata).stageId ? `Stage: ${record(event.metadata).stageId}` : null));
-  for (const change of changesResult.data ?? []) addEvent(`correction:${change.id}`, change.created_at, "verification correction", change.actor_id, `${change.field_key}: ${display(change.old_value)} → ${display(change.new_value)}`);
+  for (const change of corrections) addEvent(`correction:${change.id}`, change.created_at, "verification correction", change.actor_id, `${change.field_key}: ${display(change.old_value)} → ${display(change.new_value)}`);
   // A note is one event whose timestamp and body move when it is edited, rather than an original
   // followed by a revision -- so this entry does not preserve what it replaced. Flagged accordingly.
   for (const note of notes) addEvent(`note:${note.id}`, note.deletedAt ?? note.editedAt ?? note.createdAt, note.deletedAt ? "lead note deleted" : note.editedAt ? "lead note edited" : "lead note added", note.author.id, note.deletedAt ? "Note deleted (tombstone retained)" : `${note.visibility === "shared" ? "Shared" : "Internal"} note: ${note.body}`, false);
@@ -151,7 +163,7 @@ export async function getLeadWorkspace(tenantId: string, userId: string, role: T
   const bufferInvolved = Boolean(queueExtra?.buffer_user_id && !queueExtra.buffer_ended_at && queue?.status === "la_active");
   const soldBy = soldByPartners(((record(lead.preflight_result).matches ?? []) as PreflightResult["matches"]) ?? []);
   return {
-    lead: { ...lead, values: record(lead.values) },
+    lead: maskLead({ ...lead, values: record(lead.values) }, templateFields),
     template: templateResult.template as TemplateRow,
     queue,
     partner: partnerResult.data,
@@ -185,7 +197,7 @@ export async function getLeadWorkspace(tenantId: string, userId: string, role: T
     },
     disposition: dispositionsResult.data,
     verification,
-    corrections: changesResult.data ?? [],
+    corrections,
     notes,
     teammates: teammates.map((user) => ({ id: user.id, name: user.name, role: user.role })),
     timeline: events,

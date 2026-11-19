@@ -4,16 +4,20 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { UploadProgress } from "@/components/ui/upload-progress";
+import { sendWithProgress } from "@/components/ui/upload-request";
+import { afterStamp } from "@/components/ui/use-done-stamps";
 import type { CarrierImport } from "@/lib/ingestion/bookImport";
 import { fileDay } from "@/lib/ingestion/constants";
 import { fileHref } from "@/lib/ingestion/trace";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
+import { titleCaseNode } from "@/components/ui/title-case";
 const money = (cents: number) => `$${Math.round(cents / 100).toLocaleString("en-US")}`;
 const BOOK_FILE = /\.(csv|xlsx|xls)$/i;
 
@@ -63,6 +67,8 @@ export function FilesInImportDialog({ carrier, initialFile, readOnly, onClose }:
   const [date, setDate] = useState(today);
   const [busy, setBusy] = useState(false);
   const [over, setOver] = useState(false);
+  // How far the file has gone up (Tier 2 motion, 2026-11-18): a real bar while it uploads, then its check.
+  const [progress, setProgress] = useState<number | null>(null);
   const [problem, setProblem] = useState<string | null>(initialFile && !BOOK_FILE.test(initialFile.name) ? "Choose a CSV or an Excel file." : null);
   const name = carrier.carrierName;
   const g = carrier.guidance;
@@ -87,7 +93,7 @@ export function FilesInImportDialog({ carrier, initialFile, readOnly, onClose }:
       form.set("file", chosen);
       form.set("carrier_id", carrier.carrierId);
       form.set("file_date", date);
-      const response = await fetch("/api/app/book-import", { method: "POST", body: form });
+      const response = await sendWithProgress("/api/app/book-import", form, setProgress);
       const data = (await response.json().catch(() => ({}))) as { error?: string; outcome?: string };
       if (!response.ok) throw new Error(data.error ?? "That file did not upload.");
       return data;
@@ -99,9 +105,13 @@ export function FilesInImportDialog({ carrier, initialFile, readOnly, onClose }:
         done: (data) => (data.outcome === "skipped" ? "That exact file was already here — using it." : "Uploaded. Reading it now…"),
         fail: null,
       });
+      // The bar fills and its check draws, then the dialog closes.
+      setProgress(1);
+      await new Promise<void>((done) => afterStamp(done));
       onClose();
       router.refresh();
     } catch (error) {
+      setProgress(null);
       setProblem(error instanceof Error ? error.message : "That file did not upload.");
     } finally {
       setBusy(false);
@@ -156,7 +166,7 @@ export function FilesInImportDialog({ carrier, initialFile, readOnly, onClose }:
             {!inAlready && carrier.status === "skipped" && <Fact label="Now">Skipped for now — import it any time.</Fact>}
           </dl>
           {inAlready && carrier.file?.held ? (
-            <Link href={fileHref(carrier.file.id)} className="text-xs text-[var(--accent-ink)] hover:underline">See the {carrier.file.held.toLocaleString("en-US")} rows waiting on a status word ›</Link>
+            <Link href={fileHref(carrier.file.id)} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>{titleCaseNode(<>See the {carrier.file.held.toLocaleString("en-US")} rows waiting on a status word</>)}</Link>
           ) : null}
 
           {readOnly ? (
@@ -165,8 +175,10 @@ export function FilesInImportDialog({ carrier, initialFile, readOnly, onClose }:
             <>
               <label
                 htmlFor={inputId}
+                // The drop zone lifts and glows while a file is held over it (.m-dropzone, Tier 2 motion).
+                data-drag-over={over ? "" : undefined}
                 className={cn(
-                  "grid cursor-pointer gap-1 rounded-lg border border-dashed border-border bg-[var(--surface-alt)] px-4 py-6 text-center text-sm text-[var(--body)] transition-colors hover:border-[var(--primary)]",
+                  "m-dropzone grid cursor-pointer gap-1 rounded-lg border border-dashed border-border bg-[var(--surface-alt)] px-4 py-6 text-center text-sm text-[var(--body)] hover:border-[var(--primary)]",
                   over && "border-[var(--primary)]",
                 )}
                 onDragOver={(event) => { event.preventDefault(); setOver(true); }}
@@ -182,6 +194,7 @@ export function FilesInImportDialog({ carrier, initialFile, readOnly, onClose }:
                 )}
                 <input id={inputId} type="file" accept=".csv,.xlsx,.xls" className="sr-only" onChange={(event) => { const next = event.target.files?.[0]; event.target.value = ""; choose(next); }} />
               </label>
+              {file && progress !== null ? <UploadProgress name={file.name} value={progress} /> : null}
               <div className="grid gap-1.5">
                 <Label htmlFor={`${inputId}-date`}>Date on the file</Label>
                 <Input id={`${inputId}-date`} type="date" className="h-9 w-[200px]" value={date} max={today} onChange={(event) => setDate(event.target.value)} />

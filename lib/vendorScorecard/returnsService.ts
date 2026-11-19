@@ -1,4 +1,5 @@
 import "server-only";
+import { forgetPrecounted } from "@/lib/supabase/precount";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { createVendorReturnClaim, describeClaims, optionalScorecardUuid } from "./service";
@@ -264,6 +265,7 @@ export async function createCombinedVendorReturnClaim(tenantId: string, campaign
   const parsed = optionalScorecardUuid(campaignId, "campaign");
   if (!parsed) throw new ReturnsRequestError("Choose a campaign for the claim", 400);
   const { data, error } = await db().rpc("create_combined_vendor_return_claim", { p_tenant_id: tenantId, p_campaign_id: parsed, p_created_by: userId, p_reasons: reasons });
+  if (!error) await forgetPrecounted(tenantId, ["vendor_returns_summary", "vendor_scorecard_report"]).catch(() => undefined);
   if (error) {
     const message = error.message ?? "";
     if (isMissingSchema(error)) {

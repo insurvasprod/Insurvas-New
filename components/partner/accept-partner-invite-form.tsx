@@ -12,6 +12,7 @@ import { AuthInput, authLabel } from "@/components/portal/auth-controls";
 import { isPartnerRole, partnerRoleLabel, type PartnerRole } from "@/lib/partnerAuth/roles";
 import { dateTime, viewerTimeZone } from "@/lib/format/dates";
 
+import { CheckBox } from "@/components/ui/check-box";
 type TokenState =
   | { status: "checking" }
   | { status: "valid"; email: string; name: string; partnerName: string; invitedBy: string; role: PartnerRole | null; expiresAt: string }
@@ -116,7 +117,7 @@ export function AcceptPartnerInviteForm() {
           {error && <p id="invite-password-error" className="text-sm text-[var(--error-ink)]" role="alert">{error}</p>}
         </div>
         <label htmlFor="invite-remember" className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
-          <input id="invite-remember" type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="size-5 shrink-0 accent-[var(--accent-ink)]" />
+          <CheckBox id="invite-remember" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
           Keep me signed in on this device
         </label>
         <Button type="submit" className="auth-h mt-1 w-full" disabled={loading}>{loading ? "Accepting…" : "Accept and open the portal"}</Button>

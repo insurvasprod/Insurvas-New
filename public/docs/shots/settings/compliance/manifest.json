@@ -1,0 +1,188 @@
+[
+  {
+    "src": "/docs/shots/settings/compliance/1.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Start here tab",
+    "focus": {
+      "x": 140,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/compliance/2.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Choose If a transfer has no consent on file",
+    "focus": {
+      "x": 250,
+      "y": 0,
+      "w": 1190,
+      "h": 744
+    }
+  },
+  {
+    "src": "/docs/shots/settings/compliance/3.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Leave Delete records on a schedule off for now",
+    "focus": {
+      "x": 250,
+      "y": 3,
+      "w": 1190,
+      "h": 744
+    }
+  },
+  {
+    "src": "/docs/shots/settings/compliance/4.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Complaints tab",
+    "focus": {
+      "x": 173,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/compliance/5.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Add a regulator",
+    "focus": {
+      "x": 720,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/compliance/6.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Pick the regulator and enter Days to respond",
+    "focus": {
+      "x": 720,
+      "y": 123,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/compliance/7.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Records tab",
+    "focus": {
+      "x": 431,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/compliance/8.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check how long each record type is kept"
+  },
+  {
+    "src": "/docs/shots/settings/compliance/9.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Choose who gets the dry-run email",
+    "focus": {
+      "x": 264,
+      "y": 165,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/compliance/10.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Holds & deletion tab",
+    "focus": {
+      "x": 509,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/compliance/11.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Tick the Ways to verify who is asking",
+    "focus": {
+      "x": 264,
+      "y": 165,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/compliance/12.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set Who may verify and perform a deletion",
+    "focus": {
+      "x": 264,
+      "y": 165,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/compliance/13.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click New hold",
+    "focus": {
+      "x": 720,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/compliance/14.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Fill in what it covers, why, and a note",
+    "focus": {
+      "x": 720,
+      "y": 87,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/compliance/15.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Gate & reports tab",
+    "focus": {
+      "x": 548,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/compliance/16.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check the Gap checks that run",
+    "focus": {
+      "x": 264,
+      "y": 165,
+      "w": 1176,
+      "h": 735
+    }
+  }
+]

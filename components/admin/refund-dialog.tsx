@@ -2,20 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { formatCents, formatCentsAsCurrency } from "@/lib/money";
-import {
-  CREDIT_REASONS, CREDIT_REASON_LABELS, needsSecondApprover,
-  type CreditReason,
-} from "@/lib/credits/rules";
-import { inputControl } from "@/components/ui/field";
+import { RefundFields, useRefundForm } from "@/components/admin/billing/refund-fields";
 
 export function RefundDialog({
   tenantId,
@@ -24,6 +16,8 @@ export function RefundDialog({
   totalCents,
   hasProviderPayment,
   approvalThresholdCents,
+  defaultCents,
+  trigger,
 }: {
   tenantId: string;
   invoiceId: string;
@@ -32,50 +26,28 @@ export function RefundDialog({
   hasProviderPayment: boolean;
   /** Resolved from settings on the server (SA-4.1) — never read the constant here. */
   approvalThresholdCents: number;
+  /** The amount the form starts at (Reconciliation passes the difference); the invoice total when absent. */
+  defaultCents?: number;
+  /** The trigger, when it is not the full-width outline button of the detail page (the invoice sheet's footer). */
+  trigger?: { label?: string; variant?: "default" | "outline" | "ghost" | "secondary" | "destructive"; className?: string };
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [type, setType] = useState<"refund" | "credit">(hasProviderPayment ? "refund" : "credit");
-  const [amount, setAmount] = useState(formatCents(totalCents));
-  const [reasonCode, setReasonCode] = useState<CreditReason>("service_issue");
-  const [reasonText, setReasonText] = useState("");
-
-  const cents = Math.round(Number(amount.replace(/[^0-9.]/g, "")) * 100) || 0;
-  const willNeedApproval = needsSecondApprover(type, cents, approvalThresholdCents);
+  const target = { tenantId, invoiceId, number, totalCents, hasProviderPayment, defaultCents };
+  // The fields and the POST are shared with Refunds & credits' in-place sheet (billing-r2 screen 6).
+  const form = useRefundForm(target, approvalThresholdCents);
 
   async function submit() {
-    setBusy(true);
-    const res = await fetch("/api/admin/credit-notes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tenant_id: tenantId,
-        invoice_id: invoiceId,
-        type,
-        amount: amount.trim(),
-        reason_code: reasonCode,
-        reason_text: reasonText.trim() || null,
-      }),
-    });
-    const body = await res.json().catch(() => null);
-    setBusy(false);
-
-    if (!res.ok) {
-      notify.block(body?.error ?? "Could not raise the credit note");
-      return;
+    if (await form.submit()) {
+      setOpen(false);
+      router.refresh();
     }
-
-    if (body.awaitingApproval) notify.warn(body.message);
-    else notify.done(body.message);
-    setOpen(false);
-    router.refresh();
   }
 
   return (
     <>
-      <Button variant="outline" className="w-full" onClick={() => setOpen(true)}>
-        Raise a credit note
+      <Button variant={trigger?.variant ?? "outline"} className={trigger?.className ?? "w-full"} onClick={() => setOpen(true)}>
+        {trigger?.label ?? "Raise a credit note"}
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -87,57 +59,11 @@ export function RefundDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label>Type</Label>
-              <select aria-label="Type" className={inputControl} value={type} onChange={(event) => { const v = event.target.value; setType(v as "refund"); }}>
-                  <option value="refund" disabled={!hasProviderPayment}>
-                    Refund — money back to the card
-                  </option>
-                  <option value="credit">Credit — applied against future billing</option>
-                </select>
-              {!hasProviderPayment && (
-                <p className="text-xs text-muted-foreground">
-                  This invoice was settled outside the provider, so there is no card charge to reverse.
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="amount">Amount</Label>
-              <Input id="amount" value={amount} onChange={(e) => setAmount(e.target.value)} />
-              <p className="text-xs text-muted-foreground">
-                Invoice total {formatCentsAsCurrency(totalCents)}.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Reason</Label>
-              <select aria-label="Reason" className={inputControl} value={reasonCode} onChange={(event) => { const v = event.target.value; setReasonCode(v as CreditReason); }}>
-                  {CREDIT_REASONS.map((r) => (
-                    <option key={r} value={r}>{CREDIT_REASON_LABELS[r]}</option>
-                  ))}
-                </select>
-              <Input
-                value={reasonText}
-                onChange={(e) => setReasonText(e.target.value)}
-                placeholder="Optional detail"
-              />
-            </div>
-
-            {willNeedApproval && (
-              <p className="rounded-md border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/5 p-2.5 text-xs text-[var(--color-warning)]">
-                Above {formatCentsAsCurrency(approvalThresholdCents)}, so this will wait for a second
-                admin. No money moves until then, and you cannot approve it yourself.
-              </p>
-            )}
-          </div>
+          <RefundFields form={form} target={target} approvalThresholdCents={approvalThresholdCents} idPrefix={`refund-${invoiceId}`} />
 
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
-            <Button onClick={submit} disabled={busy || cents <= 0}>
-              {willNeedApproval ? "Request approval" : type === "refund" ? "Refund" : "Apply credit"}
-            </Button>
+            <Button variant="ghost" onClick={() => setOpen(false)} disabled={form.busy}>Cancel</Button>
+            <Button onClick={() => void submit()} disabled={form.busy || form.cents <= 0}>{form.submitLabel}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -22,9 +23,12 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs } from "@/components/ui/view-tabs";
+import { StreamSection, TitleShape } from "@/components/ui/stream-section";
+import { Part, startParts } from "@/components/app/commissions/frame-parts";
 import { COMMISSIONS_STEPS } from "@/lib/commissions/steps";
 import { STATEMENT_SCHEMA_PENDING_MESSAGE, isRecordId, statementDay, statementMoney, statementPeriod, type StatementSummary } from "@/lib/ledger/statementConstants";
 import { getStatementDetail, listStatements } from "@/lib/ledger/statementService";
+import { IntentLink } from "@/components/ui/nav-pending";
 
 /**
  * One carrier statement, and the review that posts its lines (round 7, owner pick 1·A, 2026-11-10;
@@ -57,113 +61,127 @@ export default async function StatementPage({ params, searchParams }: { params: 
   const [{ id }, query] = await Promise.all([params, searchParams]);
   if (!isRecordId(id)) notFound();
   const tenantId = guard.context.tenantId;
-  const [{ available, detail }, list] = await Promise.all([getStatementDetail(tenantId, id), listStatements(tenantId)]);
   const commissions = { label: "Commissions", href: COMMISSIONS_STEPS[0].href };
+  // Frame first (§7a): the trail, the tabs and the slot for the step's primary draw at once; the statement's name,
+  // its counts, the ‹ › and its lines stream in. A PDF still to be typed in swaps the tabs for "Type the lines".
+  const asked: StatementsView | null = query.from ? parseStatementsView(query.from) : null;
+  const askedTab = parseStatementTab(query.tab);
+  const tabsWithoutCounts = (
+    <ViewTabs label="This statement" value={askedTab} tabs={(["waiting", "accepted", "aside", "file"] as const).map((key) => ({ key, label: TAB_LABELS[key], count: key === "file" ? undefined : null, href: `/app/statements/${id}?${new URLSearchParams({ ...(key === "waiting" ? {} : { tab: key }), ...(asked ? { from: asked } : {}) })}` }))} />
+  );
+  const read = startParts((async () => {
+    const [{ available, detail }, list] = await Promise.all([getStatementDetail(tenantId, id), listStatements(tenantId)]);
 
-  if (!available) {
-    return (
-      <CommissionsPage step="statements" title="Statement" breadcrumbs={[commissions, { label: "Statements", href: "/app/statements" }, { label: "Statement" }]}>
-        <TableCard><EmptyState title="Statements are not available yet" hint={STATEMENT_SCHEMA_PENDING_MESSAGE} /></TableCard>
-      </CommissionsPage>
+    if (!available) {
+      return { title: "Statement", tabs: null, stepper: null, more: null, body: <TableCard><EmptyState title="Statements are not available yet" hint={STATEMENT_SCHEMA_PENDING_MESSAGE} /></TableCard> };
+    }
+    if (!detail) notFound();
+
+    const { statement, lines, policies, carrier } = detail;
+    const readOnly = guard.entitlement.access === "read_only";
+    const voided = statement.status === "voided";
+    const awaitingEntry = statement.status === "awaiting_entry";
+    const canWrite = !readOnly && !voided;
+    const name = nameOf(statement);
+
+    // The list it came from; a statement opened from elsewhere walks the tab it sits on.
+    const from: StatementsView = query.from ? parseStatementsView(query.from) : statementTabOf(statement);
+    const { previous, next } = statementNeighbours(statementsOn(list.statements, from), statement.id);
+    const tab: StatementTab = awaitingEntry ? "waiting" : parseStatementTab(query.tab);
+    const here = (t: StatementTab) => statementHref(statement.id, from, { tab: t });
+
+    const stepper = (
+      <>
+        {previous
+          ? <IntentLink transitionTypes={["nav-back"]} href={statementHref(previous.id, from)} className={`${buttonVariants({ variant: "outline" })} max-w-[260px]`} title={`Previous statement: ${nameOf(previous)}`}><ChevronLeft aria-hidden="true" /><span className="truncate">{nameOf(previous)}</span></IntentLink>
+          : <Button type="button" variant="outline" disabled title={`The first statement on ${STATEMENT_VIEWS.find((view) => view.key === from)?.label ?? "the list"}`}><ChevronLeft aria-hidden="true" />None before</Button>}
+        {next
+          ? <IntentLink transitionTypes={["nav-forward"]} href={statementHref(next.id, from)} className={`${buttonVariants({ variant: "outline" })} max-w-[260px]`} title={`Next statement: ${nameOf(next)}`}><span className="truncate">{nameOf(next)}</span><ChevronRight aria-hidden="true" /></IntentLink>
+          : <Button type="button" variant="outline" disabled title={`The last statement on ${STATEMENT_VIEWS.find((view) => view.key === from)?.label ?? "the list"}`}>None after<ChevronRight aria-hidden="true" /></Button>}
+      </>
     );
-  }
-  if (!detail) notFound();
+    const canReprocess = statement.hasFile && statement.fileKind !== "pdf" && statement.headers.length > 0;
 
-  const { statement, lines, policies, carrier } = detail;
-  const readOnly = guard.entitlement.access === "read_only";
-  const voided = statement.status === "voided";
-  const awaitingEntry = statement.status === "awaiting_entry";
-  const canWrite = !readOnly && !voided;
-  const name = nameOf(statement);
+    const tabs = awaitingEntry ? (
+      <ViewTabs label={name} value="type" tabs={[{ key: "type", label: "Type the lines", href: statementHref(statement.id, from) }]} />
+    ) : (
+      <ViewTabs label={name} value={tab} tabs={[
+        { key: "waiting", label: TAB_LABELS.waiting, count: statementTabCount(lines, "waiting"), href: here("waiting") },
+        { key: "accepted", label: TAB_LABELS.accepted, count: statementTabCount(lines, "accepted"), href: here("accepted") },
+        { key: "aside", label: TAB_LABELS.aside, count: statementTabCount(lines, "aside"), tone: statement.counts.errors > 0 ? "danger" : undefined, href: here("aside") },
+        { key: "file", label: TAB_LABELS.file, href: here("file") },
+      ]} />
+    );
 
-  // The list it came from; a statement opened from elsewhere walks the tab it sits on.
-  const from: StatementsView = query.from ? parseStatementsView(query.from) : statementTabOf(statement);
-  const { previous, next } = statementNeighbours(statementsOn(list.statements, from), statement.id);
-  const tab: StatementTab = awaitingEntry ? "waiting" : parseStatementTab(query.tab);
-  const listHref = statementsViewHref(from);
-  const here = (t: StatementTab) => statementHref(statement.id, from, { tab: t });
-
-  const stepper = (
-    <>
-      {previous
-        ? <Link href={statementHref(previous.id, from)} className={`${buttonVariants({ variant: "outline" })} max-w-[260px]`} title={`Previous statement: ${nameOf(previous)}`}><ChevronLeft aria-hidden="true" /><span className="truncate">{nameOf(previous)}</span></Link>
-        : <Button type="button" variant="outline" disabled title={`The first statement on ${STATEMENT_VIEWS.find((view) => view.key === from)?.label ?? "the list"}`}><ChevronLeft aria-hidden="true" />None before</Button>}
-      {next
-        ? <Link href={statementHref(next.id, from)} className={`${buttonVariants({ variant: "outline" })} max-w-[260px]`} title={`Next statement: ${nameOf(next)}`}><span className="truncate">{nameOf(next)}</span><ChevronRight aria-hidden="true" /></Link>
-        : <Button type="button" variant="outline" disabled title={`The last statement on ${STATEMENT_VIEWS.find((view) => view.key === from)?.label ?? "the list"}`}>None after<ChevronRight aria-hidden="true" /></Button>}
-    </>
-  );
-  const canReprocess = statement.hasFile && statement.fileKind !== "pdf" && statement.headers.length > 0;
-  const actions = (
-    <span className="inline-flex flex-wrap items-center gap-2">
-      {stepper}
-      <StepSlotTarget id={STATEMENT_PRIMARY_SLOT} />
-      <StatementActions statementId={statement.id} canWrite={!readOnly} voided={voided} hasFile={statement.hasFile} reprocess={canReprocess && !awaitingEntry ? { headers: statement.headers, mapping: statement.mapping } : null} />
-    </span>
-  );
-
-  const tabs = awaitingEntry ? (
-    <ViewTabs label={name} value="type" tabs={[{ key: "type", label: "Type the lines", href: statementHref(statement.id, from) }]} />
-  ) : (
-    <ViewTabs label={name} value={tab} tabs={[
-      { key: "waiting", label: TAB_LABELS.waiting, count: statementTabCount(lines, "waiting"), href: here("waiting") },
-      { key: "accepted", label: TAB_LABELS.accepted, count: statementTabCount(lines, "accepted"), href: here("accepted") },
-      { key: "aside", label: TAB_LABELS.aside, count: statementTabCount(lines, "aside"), tone: statement.counts.errors > 0 ? "danger" : undefined, href: here("aside") },
-      { key: "file", label: TAB_LABELS.file, href: here("file") },
-    ]} />
-  );
-
-  // The strip (board 1·1): what the facts line said, as figures, each a link. A voided statement says so first.
-  const kindLabel = statement.fileKind === "pdf" ? "PDF" : statement.fileKind === "xlsx" ? `Excel${statement.sheetName ? `, sheet “${statement.sheetName}”` : ""}` : "CSV";
-  const waiting = statement.counts.proposed + statement.counts.unmatched;
-  const strip = (
-    <StatStrip label={`${name} at a glance`}>
-      {voided && (
-        <StatTile label="Voided" valueSize="text" value={statement.voidedAt ? `Voided ${statementDay(statement.voidedAt)}` : "Voided"}
-          footnote={<span title={statement.voidReason ?? undefined}><StatusChip tone="danger">{statement.voidedByName ? `By ${statement.voidedByName}` : "By a former member"}</StatusChip>{statement.voidReason ? ` “${statement.voidReason}”` : ""}</span>} />
-      )}
-      <StatTile label="Net on the statement" value={statementMoney(statement.statementCents)} href={here("file")}
-        footnote={awaitingEntry ? "lines not typed in yet" : statement.statementCents < 0 ? <StatusChip tone="danger">{`${n(statement.counts.lines)} ${statement.counts.lines === 1 ? "line" : "lines"}`}</StatusChip> : `${n(statement.counts.lines)} ${statement.counts.lines === 1 ? "line" : "lines"}`} />
-      {!voided && (
-        <StatTile label="Waiting" value={n(waiting)} href={awaitingEntry ? undefined : here("waiting")}
-          footnote={awaitingEntry ? "type the lines in first" : waiting > 0 ? <StatusChip tone="warning">{`${n(statement.counts.proposed)} proposed · ${n(statement.counts.unmatched)} no match`}</StatusChip> : `${n(statement.counts.proposed)} proposed · ${n(statement.counts.unmatched)} no match`} />
-      )}
-      <StatTile label="Posted to the ledger" value={statementMoney(voided ? 0 : statement.acceptedCents)} href="/app/ledger"
-        footnote={voided ? `${statementMoney(statement.acceptedCents)} no longer posts · Commission ledger ›` : "Commission ledger ›"} />
-      <StatTile label="File" valueSize="text" value={<span title={statement.fileName}>{statement.fileName}</span>}
-        footnote={<>{kindLabel} · {statementDay(statement.uploadedAt)} · {statement.uploadedByName ?? "a former member"}{statement.reprocessedFrom && <> · <Link className="hover:underline" href={statementHref(statement.reprocessedFrom, "voided")} title="Re-processed from the stored file of an earlier import, which is voided and kept">re-processed from an earlier import</Link></>}</>} />
-      <StatTile label="Period" valueSize="text" value={statementSpan(statement.periodStart, statement.periodEnd)}
-        href={statementsViewHref(from === "unmatched" ? "review" : from, { carrier: statement.carrierId })} footnote={`${statement.carrierName}'s statements ›`} />
-    </StatStrip>
-  );
+    // The strip (board 1·1): what the facts line said, as figures, each a link. A voided statement says so first.
+    const kindLabel = statement.fileKind === "pdf" ? "PDF" : statement.fileKind === "xlsx" ? `Excel${statement.sheetName ? `, sheet “${statement.sheetName}”` : ""}` : "CSV";
+    const waiting = statement.counts.proposed + statement.counts.unmatched;
+    const strip = (
+      <StatStrip label={`${name} at a glance`}>
+        {voided && (
+          <StatTile label="Voided" valueSize="text" value={statement.voidedAt ? `Voided ${statementDay(statement.voidedAt)}` : "Voided"}
+            footnote={<span title={statement.voidReason ?? undefined}><StatusChip tone="danger">{statement.voidedByName ? `By ${statement.voidedByName}` : "By a former member"}</StatusChip>{statement.voidReason ? ` “${statement.voidReason}”` : ""}</span>} />
+        )}
+        <StatTile label="Net on the statement" value={statementMoney(statement.statementCents)} href={here("file")}
+          footnote={awaitingEntry ? "lines not typed in yet" : statement.statementCents < 0 ? <StatusChip tone="danger">{`${n(statement.counts.lines)} ${statement.counts.lines === 1 ? "line" : "lines"}`}</StatusChip> : `${n(statement.counts.lines)} ${statement.counts.lines === 1 ? "line" : "lines"}`} />
+        {!voided && (
+          <StatTile label="Waiting" value={n(waiting)} href={awaitingEntry ? undefined : here("waiting")}
+            footnote={awaitingEntry ? "type the lines in first" : waiting > 0 ? <StatusChip tone="warning">{`${n(statement.counts.proposed)} proposed · ${n(statement.counts.unmatched)} no match`}</StatusChip> : `${n(statement.counts.proposed)} proposed · ${n(statement.counts.unmatched)} no match`} />
+        )}
+        <StatTile label="Posted to the ledger" value={statementMoney(voided ? 0 : statement.acceptedCents)} href="/app/ledger"
+          footnote={voided ? `${statementMoney(statement.acceptedCents)} no longer posts · Commission ledger ›` : "Commission ledger ›"} />
+        <StatTile label="File" valueSize="text" value={<span title={statement.fileName}>{statement.fileName}</span>}
+          footnote={<>{kindLabel} · {statementDay(statement.uploadedAt)} · {statement.uploadedByName ?? "a former member"}{statement.reprocessedFrom && <> · <Link className="hover:underline" href={statementHref(statement.reprocessedFrom, "voided")} title="Re-processed from the stored file of an earlier import, which is voided and kept">re-processed from an earlier import</Link></>}</>} />
+        <StatTile label="Period" valueSize="text" value={statementSpan(statement.periodStart, statement.periodEnd)}
+          href={statementsViewHref(from === "unmatched" ? "review" : from, { carrier: statement.carrierId })} footnote={`${statement.carrierName}'s statements ›`} />
+      </StatStrip>
+    );
+    return {
+      title: name,
+      tabs,
+      stepper,
+      more: <StatementActions statementId={statement.id} canWrite={!readOnly} voided={voided} hasFile={statement.hasFile} reprocess={canReprocess && !awaitingEntry ? { headers: statement.headers, mapping: statement.mapping } : null} />,
+      body: (
+        <>
+          {strip}
+          {awaitingEntry ? (
+            <StatementManualEntry statementId={statement.id} canWrite={!readOnly} slotId={STATEMENT_PRIMARY_SLOT} />
+          ) : tab === "file" ? (
+            <StatementFileRows lines={lines} headers={statement.headers} mapping={statement.mapping} typed={lines.length > 0 && lines.every((line) => line.entrySource === "manual")} />
+          ) : (
+            <StatementReview
+              key={tab}
+              statementId={statement.id}
+              lines={lines}
+              policies={policies}
+              carrier={carrier}
+              tab={tab}
+              voided={voided}
+              canWrite={canWrite}
+              initialLineId={query.line ?? null}
+              slotId={STATEMENT_PRIMARY_SLOT}
+            />
+          )}
+        </>
+      ),
+    };
+  })());
 
   return (
     <CommissionsPage
       step="statements"
-      title={name}
-      breadcrumbs={[commissions, { label: "Statements", href: listHref }, { label: name }]}
-      tabs={tabs}
-      actions={actions}
+      title={<Suspense fallback={<TitleShape />}><Part read={read} part="title" /></Suspense>}
+      breadcrumbs={[commissions, { label: "Statements", href: asked ? statementsViewHref(asked) : "/app/statements" }, { label: "Statement" }]}
+      tabs={<Suspense fallback={tabsWithoutCounts}><Part read={read} part="tabs" /></Suspense>}
+      actions={
+        <span className="inline-flex flex-wrap items-center gap-2">
+          <Suspense fallback={null}><Part read={read} part="stepper" /></Suspense>
+          <StepSlotTarget id={STATEMENT_PRIMARY_SLOT} />
+          <Suspense fallback={null}><Part read={read} part="more" /></Suspense>
+        </span>
+      }
     >
-      {strip}
-      {awaitingEntry ? (
-        <StatementManualEntry statementId={statement.id} canWrite={!readOnly} slotId={STATEMENT_PRIMARY_SLOT} />
-      ) : tab === "file" ? (
-        <StatementFileRows lines={lines} headers={statement.headers} mapping={statement.mapping} typed={lines.length > 0 && lines.every((line) => line.entrySource === "manual")} />
-      ) : (
-        <StatementReview
-          key={tab}
-          statementId={statement.id}
-          lines={lines}
-          policies={policies}
-          carrier={carrier}
-          tab={tab}
-          voided={voided}
-          canWrite={canWrite}
-          initialLineId={query.line ?? null}
-          slotId={STATEMENT_PRIMARY_SLOT}
-        />
-      )}
+      <StreamSection shape="strip+table"><Part read={read} part="body" /></StreamSection>
     </CommissionsPage>
   );
 }

@@ -7,10 +7,11 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { inputControl } from "@/components/ui/field";
-import { Switch, checkboxControl } from "@/components/app/settings/primitives";
+import { Switch } from "@/components/app/settings/primitives";
 import type { TemplateField, TemplateFormDefinition, TemplateLogic, TemplateRule, TemplateRuleGroup, TemplateRuleOp } from "@/lib/templates/constants";
 import { RULE_OP_LABELS, cleanLogic, formLogicList, isRuleGroup, logicSentence, ruleAnswers, ruleNeedsValue, ruleOpsFor, starterRule } from "@/lib/templates/logic";
 
+import { CheckBox } from "@/components/ui/check-box";
 const small = cn(inputControl, "h-8 w-auto min-w-0 text-sm");
 
 /** One rule: the question, how it is tested, and the answer. */
@@ -33,7 +34,7 @@ function RuleRow({ rule, candidates, onChange, onRemove }: { rule: TemplateRule;
         <div role="group" aria-label="Any of these answers" className="flex basis-full flex-wrap gap-x-3 gap-y-1 pt-1">
           {answers.map((answer) => (
             <label key={answer.value} className="flex items-center gap-1.5 text-sm text-[var(--body)]">
-              <input type="checkbox" className={checkboxControl} checked={(rule.values ?? []).includes(answer.value)} onChange={(event) => onChange({ ...rule, values: event.target.checked ? [...(rule.values ?? []), answer.value] : (rule.values ?? []).filter((value) => value !== answer.value) })} />
+              <CheckBox checked={(rule.values ?? []).includes(answer.value)} onChange={(event) => onChange({ ...rule, values: event.target.checked ? [...(rule.values ?? []), answer.value] : (rule.values ?? []).filter((value) => value !== answer.value) })} />
               {answer.label}
             </label>
           ))}

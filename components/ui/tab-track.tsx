@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -53,29 +53,7 @@ export function TabTrack({ className, children, indicator = "underline", ...rest
     };
   }, []);
 
-  // The chosen tab's pill slides from tab to tab (§ Motion, "indicator", 2026-11-09) instead of jumping: one pill
-  // under the row, sized to the chosen tab — or to the tab just clicked while its view is on its way (a pending
-  // marker inside it, nav-pending.tsx). It jumps into place the first time and only glides after that.
-  const [pill, setPill] = useState<{ left: number; top: number; width: number; height: number; glide: boolean } | null>(null);
-  useEffect(() => {
-    const track = ref.current;
-    if (!track) return;
-    let frame = 0;
-    const place = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const tabs = [...track.querySelectorAll<HTMLElement>(':scope > [role="tab"]')];
-        const on = tabs.find((tab) => tab.querySelector(":scope > [data-nav-pending]")) ?? tabs.find((tab) => tab.getAttribute("aria-selected") === "true");
-        setPill((now) => (on ? { left: on.offsetLeft, top: on.offsetTop, width: on.offsetWidth, height: on.offsetHeight, glide: now !== null } : null));
-      });
-    };
-    place();
-    const changes = new MutationObserver(place);
-    changes.observe(track, { subtree: true, childList: true, attributes: true, attributeFilter: ["aria-selected"] });
-    const sizes = new ResizeObserver(place);
-    sizes.observe(track);
-    return () => { cancelAnimationFrame(frame); changes.disconnect(); sizes.disconnect(); };
-  }, []);
+  const pill = useGlidePill(ref);
 
   const fade = edges.start && edges.end
     ? "linear-gradient(to right, transparent, black 28px, black calc(100% - 28px), transparent)"
@@ -106,4 +84,60 @@ export function TabTrack({ className, children, indicator = "underline", ...rest
       {children}
     </div>
   );
+}
+
+export type GlidePill = { left: number; top: number; width: number; height: number; glide: boolean } | null;
+
+/**
+ * Where each remembered pill last sat (`remember`), so a rail that is drawn afresh by the next page (or by the loading
+ * state while it comes) starts its pill on the step it came from and glides it to the step that is open now. Written
+ * only in the browser, after a placement; the server never reads a value from it.
+ */
+const lastPlace = new Map<string, NonNullable<GlidePill>>();
+
+/**
+ * Where the gliding pill sits (§ Motion, "indicator", 2026-11-09): the chosen tab's pill slides from tab to tab
+ * instead of jumping — one pill under the row, sized to the chosen tab, or to the tab just clicked while its view
+ * is on its way (a pending marker inside it, nav-pending.tsx). It jumps into place the first time and only glides
+ * after that. TabTrack uses it for tabs; the boxed switch (ViewSwitch `glide`) and a rail's active step reuse it
+ * with their own `items` and `chosen` (Tier 1, 2026-11-17). The track must be the items' offset parent.
+ */
+export function useGlidePill(ref: RefObject<HTMLElement | null>, {
+  items = ':scope > [role="tab"]',
+  chosen = '[aria-selected="true"]',
+  watch = "aria-selected",
+  remember,
+}: {
+  items?: string;
+  chosen?: string;
+  watch?: string;
+  /** A name for this track (a rail's label): its pill carries over from the last track of that name, and glides on. */
+  remember?: string;
+} = {}): GlidePill {
+  const [pill, setPill] = useState<GlidePill>(() => {
+    const kept = remember && typeof window !== "undefined" ? lastPlace.get(remember) : undefined;
+    return kept ? { ...kept, glide: false } : null;
+  });
+  useEffect(() => {
+    const track = ref.current;
+    if (!track) return;
+    let frame = 0;
+    const place = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const tabs = [...track.querySelectorAll<HTMLElement>(items)];
+        const on = tabs.find((tab) => tab.querySelector(":scope > [data-nav-pending]")) ?? tabs.find((tab) => tab.matches(chosen));
+        const spot = on ? { left: on.offsetLeft, top: on.offsetTop, width: on.offsetWidth, height: on.offsetHeight } : null;
+        if (spot && remember) lastPlace.set(remember, { ...spot, glide: true });
+        setPill((now) => (spot ? { ...spot, glide: now !== null } : null));
+      });
+    };
+    place();
+    const changes = new MutationObserver(place);
+    changes.observe(track, { subtree: true, childList: true, attributes: true, attributeFilter: [watch] });
+    const sizes = new ResizeObserver(place);
+    sizes.observe(track);
+    return () => { cancelAnimationFrame(frame); changes.disconnect(); sizes.disconnect(); };
+  }, [ref, items, chosen, watch, remember]);
+  return pill;
 }

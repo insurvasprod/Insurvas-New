@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { Suspense, type ReactNode } from "react";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { getPlanAudience } from "@/lib/agency/audience";
@@ -15,6 +16,7 @@ import { currentSplit, dateLabel, monthYearLabel, splitText } from "@/lib/accoun
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
+import { StreamSection, TitleShape } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs } from "@/components/ui/view-tabs";
 
@@ -59,19 +61,81 @@ export default async function ProducerPage({ params, searchParams }: { params: P
   const show: EntryFilter = asked.show === "shares" || asked.show === "chargebacks" ? asked.show : "all";
   const tenantId = guard.context.tenantId;
   const readOnly = guard.entitlement.access === "read_only";
-  let loaded: { data: Awaited<ReturnType<typeof producersOverview>>; entries: Awaited<ReturnType<typeof producerEntries>> } | null = null;
-  let problem: string | null = null;
-  try {
-    const [data, entries] = await Promise.all([producersOverview(tenantId), producerEntries(tenantId, userId)]);
-    loaded = { data, entries };
-  } catch (error) {
-    if (!(error instanceof ProducerError)) throw error;
-    problem = error.message;
-  }
-  if (!loaded) return <AccountingPage step="splits" title="Producer"><TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard></AccountingPage>;
-  const { data, entries } = loaded;
-  const person = data.people.find((p) => p.userId === userId);
-  if (!person) notFound();
+  const base = `/app/producer-splits/${userId}`;
+  const at = (t: Tab) => (t === "entries" ? base : `${base}?tab=${t}`);
+  // Frame first (UI-CONSISTENCY §7a): the overview and this producer's entries are read now; the name streams in
+  // behind a title shape, and the three tabs draw at once (their counts, ‹ › and the buttons when the data lands).
+  const read: ProducerRead = (async () => {
+    try {
+      const [data, entries] = await Promise.all([producersOverview(tenantId), producerEntries(tenantId, userId)]);
+      const person = data.people.find((p) => p.userId === userId);
+      if (!person) notFound();
+      return { loaded: { data, entries, person }, problem: null };
+    } catch (error) {
+      if (!(error instanceof ProducerError)) throw error;
+      return { loaded: null, problem: error.message };
+    }
+  })();
+  const tabsOf = (counts: { entries: number; splits: number; runs: number } | null) => (
+    <ViewTabs label="This producer" value={tab} tabs={[
+      { key: "entries", label: "Entries", count: counts?.entries ?? null, href: at("entries") },
+      { key: "splits", label: "Splits", count: counts?.splits ?? null, tone: counts && !counts.splits ? "danger" : undefined, href: at("splits") },
+      { key: "runs", label: "Payout runs", count: counts?.runs ?? null, href: at("runs") },
+    ]} />
+  );
+
+  return (
+    <AccountingPage
+      step="splits"
+      title={<Suspense fallback={<TitleShape />}><ProducerName read={read} /></Suspense>}
+      tabs={<Suspense fallback={tabsOf(null)}><ProducerTabs read={read} tabsOf={tabsOf} /></Suspense>}
+      stepper={<Suspense fallback={<span aria-hidden="true" className="h-9" />}><ProducerStepper read={read} tab={tab} /></Suspense>}
+      actions={<Suspense fallback={null}><ProducerTitleActions read={read} tab={tab} readOnly={readOnly} /></Suspense>}
+    >
+      <StreamSection shape="strip+table">
+        <ProducerBody read={read} tab={tab} show={show} run={asked.run} readOnly={readOnly} />
+      </StreamSection>
+    </AccountingPage>
+  );
+}
+
+type Overview = Awaited<ReturnType<typeof producersOverview>>;
+type ProducerRead = Promise<{ loaded: { data: Overview; entries: Awaited<ReturnType<typeof producerEntries>>; person: Overview["people"][number] } | null; problem: string | null }>;
+
+async function ProducerName({ read }: { read: ProducerRead }) {
+  const { loaded } = await read;
+  return loaded ? loaded.person.name : "Producer";
+}
+
+async function ProducerTabs({ read, tabsOf }: { read: ProducerRead; tabsOf: (counts: { entries: number; splits: number; runs: number } | null) => ReactNode }) {
+  const { loaded } = await read;
+  if (!loaded) return null;
+  const { data, entries, person } = loaded;
+  return tabsOf({ entries: entries.length, splits: data.splits.filter((s) => s.producerUserId === person.userId).length, runs: data.runs.filter((r) => r.producerUserId === person.userId).length });
+}
+
+async function ProducerStepper({ read, tab }: { read: ProducerRead; tab: Tab }) {
+  const { loaded } = await read;
+  if (!loaded) return null;
+  const { data, person } = loaded;
+  // ‹ › walk the Producers list in the order it is drawn, staying on the same tab.
+  const near = neighboursOf(data.people, person.userId, (p) => p.userId);
+  const neighbour = (p: typeof person | null) => (p ? { href: `/app/producer-splits/${p.userId}${tab === "entries" ? "" : `?tab=${tab}`}`, label: p.name } : null);
+  return <RecordStepper previous={neighbour(near.previous)} next={neighbour(near.next)} noun="producer" />;
+}
+
+async function ProducerTitleActions({ read, tab, readOnly }: { read: ProducerRead; tab: Tab; readOnly: boolean }) {
+  const { loaded } = await read;
+  if (!loaded) return null;
+  const { data, person } = loaded;
+  return tab === "splits" ? <AddSplitForm person={person} carriers={data.carriers} defaults={data.settings} readOnly={readOnly} /> : <ProducerActions person={person} readOnly={readOnly} />;
+}
+
+async function ProducerBody({ read, tab, show, run, readOnly }: { read: ProducerRead; tab: Tab; show: EntryFilter; run?: string; readOnly: boolean }) {
+  const { loaded, problem } = await read;
+  if (!loaded) return <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>;
+  const { data, entries, person } = loaded;
+  const userId = person.userId;
   const splits = data.splits.filter((s) => s.producerUserId === userId);
   const runs = data.runs.filter((r) => r.producerUserId === userId);
   const current = currentSplit(data.splits, userId);
@@ -81,36 +145,21 @@ export default async function ProducerPage({ params, searchParams }: { params: P
   const lastRun = runs.find((r) => r.status !== "void");
   const base = `/app/producer-splits/${userId}`;
   const at = (t: Tab) => (t === "entries" ? base : `${base}?tab=${t}`);
-  // ‹ › walk the Producers list in the order it is drawn, staying on the same tab.
-  const near = neighboursOf(data.people, userId, (p) => p.userId);
-  const neighbour = (p: typeof person | null) => (p ? { href: `/app/producer-splits/${p.userId}${tab === "entries" ? "" : `?tab=${tab}`}`, label: p.name } : null);
   const carried = data.settings.negativePolicy === "cap" ? "recovered from the next runs" : data.settings.negativePolicy === "write_off" ? "to write off" : "carried";
   const otherRules = splits.filter((s) => s.id !== current?.id).length;
 
   return (
-    <AccountingPage
-      step="splits"
-      title={person.name}
-      tabs={<ViewTabs label={person.name} value={tab} tabs={[
-        { key: "entries", label: "Entries", count: entries.length, href: at("entries") },
-        { key: "splits", label: "Splits", count: splits.length, tone: splits.length ? undefined : "danger", href: at("splits") },
-        { key: "runs", label: "Payout runs", count: runs.length, href: at("runs") },
-      ]} />}
-      stepper={<RecordStepper previous={neighbour(near.previous)} next={neighbour(near.next)} noun="producer" />}
-      actions={<>
-        {tab === "splits" ? <AddSplitForm person={person} carriers={data.carriers} defaults={data.settings} readOnly={readOnly} /> : <ProducerActions person={person} readOnly={readOnly} />}
-      </>}
-    >
-      <StatStrip label={`${person.name}'s balance`}>
-        <StatTile label="Split" valueSize="text" value={splitText(current)} footnote={current ? `from ${dateLabel(current.effectiveFrom)} · all carriers${otherRules ? ` · ${otherRules} more rule${otherRules === 1 ? "" : "s"}` : ""}` : <StatusChip tone="danger">Nothing is owed until one is</StatusChip>} href={at("splits")} />
-        <StatTile label="Balance" value={money(person.balanceCents)} footnote={person.balanceCents < 0 ? <><StatusChip tone="danger">Owes the agency</StatusChip> {carried}</> : person.balanceCents > 0 ? "owed to them" : "settled"} />
-        <StatTile label="Owed to date" value={money(person.owedCents)} footnote={firstShare ? `since ${monthYearLabel(firstShare.occurredOn)}` : "no shares yet"} href={`${base}?show=shares`} />
-        <StatTile label="Clawed back" value={money(person.clawedBackCents)} footnote={`${chargebacks} chargeback${chargebacks === 1 ? "" : "s"}`} href={`${base}?show=chargebacks`} />
-        <StatTile label="Last run" value={lastRun ? money(lastRun.netCents) : "—"} footnote={lastRun ? `${monthYearLabel(lastRun.periodStart)} · ${lastRun.status === "paid" && lastRun.paidOn ? `paid ${dateLabel(lastRun.paidOn)}` : lastRun.status}` : "no runs yet"} href={lastRun ? `${base}?tab=runs&run=${lastRun.id}` : at("runs")} />
-      </StatStrip>
-      {tab === "runs" ? <RunsTable key={asked.run ?? "runs"} runs={runs} readOnly={readOnly} openRunId={asked.run} />
-        : tab === "splits" ? <SplitsTable splits={splits} carriers={data.carriers} />
-        : <EntriesTable key={show} rows={rows} show={show} />}
-    </AccountingPage>
+    <>
+    <StatStrip label={`${person.name}'s balance`}>
+      <StatTile label="Split" valueSize="text" value={splitText(current)} footnote={current ? `from ${dateLabel(current.effectiveFrom)} · all carriers${otherRules ? ` · ${otherRules} more rule${otherRules === 1 ? "" : "s"}` : ""}` : <StatusChip tone="danger">Nothing is owed until one is</StatusChip>} href={at("splits")} />
+      <StatTile label="Balance" value={money(person.balanceCents)} footnote={person.balanceCents < 0 ? <><StatusChip tone="danger">Owes the agency</StatusChip> {carried}</> : person.balanceCents > 0 ? "owed to them" : "settled"} />
+      <StatTile label="Owed to date" value={money(person.owedCents)} footnote={firstShare ? `since ${monthYearLabel(firstShare.occurredOn)}` : "no shares yet"} href={`${base}?show=shares`} />
+      <StatTile label="Clawed back" value={money(person.clawedBackCents)} footnote={`${chargebacks} chargeback${chargebacks === 1 ? "" : "s"}`} href={`${base}?show=chargebacks`} />
+      <StatTile label="Last run" value={lastRun ? money(lastRun.netCents) : "—"} footnote={lastRun ? `${monthYearLabel(lastRun.periodStart)} · ${lastRun.status === "paid" && lastRun.paidOn ? `paid ${dateLabel(lastRun.paidOn)}` : lastRun.status}` : "no runs yet"} href={lastRun ? `${base}?tab=runs&run=${lastRun.id}` : at("runs")} />
+    </StatStrip>
+    {tab === "runs" ? <RunsTable key={run ?? "runs"} runs={runs} readOnly={readOnly} openRunId={run} />
+      : tab === "splits" ? <SplitsTable splits={splits} carriers={data.carriers} />
+      : <EntriesTable key={show} rows={rows} show={show} />}
+    </>
   );
 }

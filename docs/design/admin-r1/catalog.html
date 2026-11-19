@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin Catalog Area</title>
+<!--kit-css-->
+<style>
+/*
+ * Settings round 8 — shared mockup kit. Every board links this file so all boards share one look.
+ * Tokens = the live app: light "C · White + olive lines" + gold third colour; dark = the live dark theme.
+ * Text 12 / 14 / 16 only; page title 24. Theme: <body class="light|dark">. Option: <body data-opt="A|B|C">.
+ */
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--board);color:var(--ink)}
+body.light{--board:#e9ecea;--board-ink:#0d4037;--board-line:#cdd6d1;--board-card:#fff;
+  --canvas:#fbfcfb;--card:#fff;--card-border:#cbd8d2;--band:#e9f2ee;--tile:#fff;--tile-edge:#d9e5df;--hover:#f1f7f4;--rule:#dbe6e1;
+  --border:#cbd8d2;--border-strong:#6d7f77;--ink:#0d4037;--body:#26332e;--muted:#4d5f58;
+  --primary:#07d6a0;--primary-hover:#08bf8b;--on-primary:#0d4037;--primary-soft:#dcfaf0;--accent-ink:#00735a;--ring:#008769;
+  --ok:#0c6633;--ok-s:#e0f3e7;--warn:#9a3d00;--warn-s:#fde8dc;--bad:#ab1f1f;--bad-s:#fdeaea;--info:#1d4f9a;--info-s:#e3edfa;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#8a5a00;--hl-soft:#fdf2d9;--hl-mark:#c98a12;
+  --backdrop:rgba(13,40,34,.38);--shadow:0 1px 0 rgba(13,64,55,.04);--overlay:0 2px 6px rgba(13,64,55,.08),0 28px 60px -12px rgba(13,64,55,.28);--code:#f4f8f6}
+body.dark{--board:#050b09;--board-ink:#f2f7f5;--board-line:#1d2b26;--board-card:#0d1714;
+  --canvas:#08110f;--card:#0d1714;--card-border:rgba(255,255,255,.09);--band:rgba(255,255,255,.04);--tile:rgba(255,255,255,.035);--tile-edge:rgba(255,255,255,.06);--hover:rgba(255,255,255,.04);--rule:#1b2a25;
+  --border:#22342e;--border-strong:#5f7a71;--ink:#f2f7f5;--body:#c9d6d1;--muted:#93a69f;
+  --primary:#07d6a0;--primary-hover:#2fe0b0;--on-primary:#0d4037;--primary-soft:#0f3a30;--accent-ink:#4fe3bb;--ring:#07d6a0;
+  --ok:#45c07d;--ok-s:#11291d;--warn:#f08a4b;--warn-s:#2e180c;--bad:#f0837c;--bad-s:#2d1412;--info:#7fb0ff;--info-s:#10203a;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#f5c562;--hl-soft:#2b2210;--hl-mark:#f2b33d;
+  --backdrop:rgba(0,0,0,.6);--shadow:none;--overlay:0 24px 64px rgba(0,0,0,.7);--code:#0a1412}
+body{--nav:#0d4037;--nav-ink:#eaf6f2;--nav-muted:#9fc4b8;--nav-line:#1d5649}
+
+/* ── Board chrome ───────────────────────────────────────────── */
+.board{max-width:1520px;margin:0 auto;padding:24px 16px 120px;color:var(--board-ink)}
+.board > h1{font-size:24px;margin:0;letter-spacing:-.02em}
+.lead{max-width:1100px;margin:8px 0 0;color:var(--board-ink);opacity:.85}
+.bar{position:sticky;top:0;z-index:80;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 0;margin:16px 0;background:var(--board);border-bottom:1px solid var(--board-line)}
+.bar .grp{display:flex;gap:6px;align-items:center;margin-right:10px}
+.bar .grp > span{font-size:12px;font-weight:600;opacity:.75;margin-right:2px}
+.bar button{font:600 14px Inter,system-ui,sans-serif;border:1px solid var(--board-line);background:var(--board-card);color:var(--board-ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+.bar button[aria-pressed=true]{background:#0d4037;color:#fff;border-color:#0d4037}
+.bar .hint{font-size:12px;opacity:.7;margin-left:auto}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin:14px 0}
+.notes > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px;font-size:14px}
+.notes b{display:block;margin-bottom:3px}
+.sec{display:flex;align-items:baseline;gap:12px;margin:30px 0 10px}
+.sec h2{font-size:16px;margin:0}
+.sec span{font-size:12px;opacity:.75}
+.opt{display:none}
+body[data-opt=A] .opt.A, body[data-opt=B] .opt.B, body[data-opt=C] .opt.C{display:block}
+.pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px}
+.pick > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:14px;font-size:14px}
+.pick > div.rec{border:2px solid #07d6a0}
+.pick b{font-size:16px;display:block;margin-bottom:4px}
+.pick ul{margin:6px 0 0;padding-left:18px}
+.tag-mig{display:inline-block;font-size:12px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink);margin-left:6px;vertical-align:middle}
+
+/* ── App shell ──────────────────────────────────────────────── */
+.app{display:grid;grid-template-columns:56px 232px 1fr;grid-template-rows:52px 1fr;height:760px;background:var(--canvas);border-radius:14px;overflow:hidden;border:1px solid var(--board-line);margin-bottom:20px;color:var(--ink);position:relative}
+.app.tall{height:880px}
+.app.norail{grid-template-columns:56px 1fr}
+.top{grid-column:1/-1;background:var(--nav);display:flex;align-items:center;gap:12px;padding:0 16px}
+.top .logo{width:22px;height:22px;border-radius:6px;background:var(--primary)}
+.top .search{flex:0 0 280px;height:32px;border-radius:8px;background:rgba(234,246,242,.08);color:var(--nav-muted);display:flex;align-items:center;padding:0 12px;font-size:12px}
+.top .sp{flex:1}
+.top .me{width:30px;height:30px;border-radius:50%;background:var(--hl);color:var(--on-hl);display:grid;place-items:center;font-size:12px;font-weight:700}
+.icons{background:var(--nav);display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0}
+.icons i{display:block;width:22px;height:22px;border-radius:6px;border:1.5px solid var(--nav-muted);opacity:.85}
+.icons i.on{border-color:var(--primary);background:rgba(7,214,160,.16)}
+/* settings rail */
+.srail{border-right:1px solid var(--border);background:var(--card);padding:12px 10px;overflow:auto}
+.srail .find{height:32px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--muted);margin-bottom:10px}
+.srail h5{font-size:12px;font-weight:600;color:var(--muted);margin:12px 6px 4px}
+.srail a{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:8px;font-size:14px;color:var(--body);text-decoration:none}
+.srail a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.srail a small{font-size:12px;color:var(--muted)}
+.srail a .cnt{font-size:12px;font-weight:700;padding:0 6px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink)}
+/* main */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px 24px 20px}
+.crumb{font-size:12px;color:var(--muted)}
+.head{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;margin:2px 0 4px}
+.head h3{font-size:24px;font-weight:600;letter-spacing:-.025em;margin:0}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--border);flex:1;min-width:200px}
+.tabs a{font-size:14px;color:var(--muted);padding:6px 0 8px;border-bottom:2px solid transparent;text-decoration:none;white-space:nowrap}
+.tabs a.on{color:var(--ink);border-color:var(--primary);font-weight:500}
+.tabs a .c{font-size:12px;margin-left:4px;padding:0 5px;border-radius:5px;background:var(--band);color:var(--muted)}
+.head .acts{display:flex;gap:8px;margin-left:auto;padding-bottom:6px}
+.status{font-size:12px;color:var(--muted);margin:2px 0 12px;display:flex;align-items:center;gap:6px}
+.status .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.status.bad .dot{background:var(--bad)}
+.status.warn .dot{background:var(--warn)}
+.body{flex:1;min-height:0;display:flex;gap:12px}
+/* cards */
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--shadow);min-width:0;display:flex;flex-direction:column;min-height:0}
+.card.flex1{flex:1}
+.card-h{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--rule);background:var(--band);border-radius:16px 16px 0 0}
+.card-h b{font-size:14px;font-weight:600}
+.card-h .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.card-b{padding:14px 16px}
+.scroll{overflow:auto;min-height:0;flex:1}
+.card-f{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule)}
+.card-f .sp{flex:1}
+.savebar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule);background:var(--hl-soft);border-radius:0 0 16px 16px;font-size:14px;color:var(--hl-ink);font-weight:500}
+.savebar .sp{flex:1}
+/* form */
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+.fgrid .full{grid-column:1/-1}
+label.l{display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:5px}
+.help{font-size:12px;color:var(--muted);margin-top:4px}
+.err{font-size:12px;color:var(--bad);margin-top:4px}
+.input{height:36px;border-radius:8px;border:1px solid var(--border-strong);background:var(--card);color:var(--ink);padding:0 12px;font-size:14px;display:flex;align-items:center;gap:8px;min-width:0}
+.input.ph{color:var(--muted)}
+.input.focus{outline:2px solid var(--ring);outline-offset:2px}
+.input.bad{border-color:var(--bad)}
+.input.dis{background:var(--band);color:var(--muted);border-color:var(--border)}
+.input .end{margin-left:auto;color:var(--muted);font-size:12px}
+.textarea{min-height:72px;align-items:flex-start;padding:8px 12px;height:auto}
+.fsec{padding:16px 0;border-top:1px solid var(--rule)}
+.fsec:first-child{border-top:0;padding-top:4px}
+.fsec > h4{font-size:16px;margin:0 0 2px}
+.fsec > p{font-size:12px;color:var(--muted);margin:0 0 12px}
+/* controls */
+.btn{font:500 14px Inter,system-ui,sans-serif;height:36px;padding:0 14px;border-radius:8px;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;cursor:default}
+.btn.sm{height:30px;padding:0 10px;font-size:12px}
+.btn.p{background:var(--primary);color:var(--on-primary)}
+.btn.o{background:var(--card);border-color:var(--border);color:var(--ink)}
+.btn.g{background:transparent;color:var(--body)}
+.btn.hl{background:var(--hl);color:var(--on-hl);font-weight:600}
+.btn.danger{background:var(--bad-s);color:var(--bad)}
+.btn.d{opacity:.5}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:500;background:var(--card);color:var(--body);border:1px solid var(--tile-edge);white-space:nowrap}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.n::before{display:none}
+.chip.ok{background:var(--ok-s);color:var(--ok);border-color:transparent}
+.chip.warn{background:var(--warn-s);color:var(--warn);border-color:transparent}
+.chip.bad{background:var(--bad-s);color:var(--bad);border-color:transparent}
+.chip.info{background:var(--info-s);color:var(--info);border-color:transparent}
+.chip.act{background:var(--primary-soft);color:var(--accent-ink);border-color:transparent}
+.chip.hl{background:var(--hl-soft);color:var(--hl-ink);border-color:transparent;font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg span{padding:6px 12px;font-size:14px;color:var(--body);border-left:1px solid var(--border)}
+.seg span:first-child{border-left:0}
+.seg span.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.tog{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);font-size:14px;color:var(--body)}
+.tog.on{background:var(--primary-soft);border-color:transparent;color:var(--accent-ink);font-weight:500}
+.switch{width:36px;height:20px;border-radius:999px;background:var(--border-strong);position:relative;display:inline-block;vertical-align:middle;flex:none}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(13,64,55,.25)}
+.switch.on{background:var(--primary)}
+.switch.on::after{left:18px}
+.check{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.check.on{background:var(--primary);border-color:var(--primary)}
+.radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.radio.on{border:5px solid var(--primary)}
+.av{width:28px;height:28px;border-radius:50%;display:inline-grid;place-items:center;font-size:12px;font-weight:700;background:var(--hl-soft);color:var(--hl-ink);flex:none}
+.ic{width:32px;height:32px;border-radius:9px;display:inline-grid;place-items:center;background:var(--primary-soft);color:var(--accent-ink);font-weight:700;flex:none}
+.muted{color:var(--muted)}
+small{font-size:12px}
+.small{font-size:12px}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--code);border:1px solid var(--tile-edge);border-radius:10px;padding:10px 12px;color:var(--body);white-space:pre;overflow:auto}
+.copy{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:0 4px 0 12px;height:36px;background:var(--card)}
+.copy .v{flex:1;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile{background:var(--tile);box-shadow:inset 0 0 0 1px var(--tile-edge);border-radius:12px;padding:10px 12px}
+.tile small{display:block;font-size:12px;color:var(--muted)}
+.tile b{font-size:16px}
+.list a,.li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--rule);color:var(--body);text-decoration:none}
+.li.on{background:var(--primary-soft);box-shadow:inset 2px 0 0 var(--primary)}
+.li b{font-size:14px;color:var(--ink);display:block}
+.li small{font-size:12px;color:var(--muted)}
+.li .end{margin-left:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+thead th{background:var(--band);color:var(--muted);font-weight:500;font-size:12px;text-align:left;padding:8px 14px;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:9px 14px;border-bottom:1px solid var(--rule);color:var(--body);white-space:nowrap}
+tbody tr.h td{background:var(--hover)}
+tbody tr.s td{background:var(--primary-soft)}
+.strip{display:grid;grid-auto-flow:column;grid-auto-columns:1fr}
+.strip > div{padding:10px 16px;border-left:1px solid var(--rule)}
+.strip > div:first-child{border-left:0}
+.strip small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.strip b{display:block;font-size:24px;font-weight:600;letter-spacing:-.02em}
+.steps{display:flex;gap:8px;align-items:center}
+.steps span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.steps span i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;background:var(--band);color:var(--muted)}
+.steps span.on{color:var(--ink);font-weight:600}
+.steps span.on i{background:var(--primary);color:var(--on-primary)}
+.steps span.done i{background:var(--primary-soft);color:var(--accent-ink)}
+.steps em{flex:1;height:1px;background:var(--border);min-width:16px}
+/* overlays */
+.scrim{position:absolute;inset:52px 0 0 0;background:var(--backdrop);z-index:5}
+.sheet{position:absolute;top:52px;right:0;bottom:0;width:480px;background:var(--card);border-left:1px solid var(--border);box-shadow:var(--overlay);z-index:6;display:flex;flex-direction:column}
+.sheet.wide{width:640px}
+.sheet-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--rule)}
+.sheet-h b{font-size:16px}
+.sheet-h .x{margin-left:auto;color:var(--muted);font-size:16px}
+.sheet-b{padding:16px 18px;overflow:auto;flex:1}
+.sheet-f{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--rule)}
+.dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:440px;background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--overlay);z-index:6;padding:18px}
+.dialog h4{margin:0 0 6px;font-size:16px}
+.dialog p{margin:0 0 12px;font-size:14px;color:var(--body)}
+.menu{background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:var(--overlay);padding:4px;width:220px}
+.menu div{padding:8px 10px;border-radius:6px;font-size:14px;color:var(--body);display:flex;justify-content:space-between}
+.menu div.h{background:var(--hover);color:var(--ink)}
+.menu hr{border:0;border-top:1px solid var(--rule);margin:4px 0}
+.toast{display:inline-flex;align-items:center;gap:10px;background:#0d4037;color:#f2f7f5;border-radius:999px;padding:10px 16px;font-size:14px}
+body.dark .toast{background:#f2f7f5;color:#0d4037}
+.toast i{width:8px;height:8px;border-radius:50%;background:#07d6a0}
+.skel{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--band),var(--hover),var(--band));margin:8px 0}
+.empty{text-align:center;padding:28px 16px}
+.empty .ic{margin:0 auto 10px}
+.empty b{display:block;font-size:16px}
+.empty p{font-size:14px;color:var(--muted);margin:4px 0 12px}
+/* state strip under a board section: loading / empty / error side by side */
+.states{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.states > .card{min-height:180px}
+@media (max-width:1100px){.app{grid-template-columns:56px 1fr}.srail{display:none}.states{grid-template-columns:1fr}.fgrid{grid-template-columns:1fr}}
+
+</style>
+<!--/kit-css-->
+<style>
+/* Admin area boards (Billing, Catalog) (owner 2026-11-17): app-style icon menu with hover flyout, a step rail on the left of the page, Overview first. */
+.app.bl{grid-template-columns:64px 1fr;height:820px}
+.app.bl.tall{height:940px}
+.app.bl .icons{gap:14px}
+.app.bl .icons i.on{background:rgba(7,214,160,.22)}
+.page{display:flex;flex-direction:column;min-width:0;min-height:0;padding:14px 22px 18px;overflow:hidden}
+.page .crumb{margin-bottom:2px}
+.frame{display:grid;grid-template-columns:232px minmax(0,1fr);gap:14px;flex:1;min-height:0}
+.steprail{background:var(--card);border:1px solid var(--card-border);border-radius:16px;padding:10px;display:flex;flex-direction:column;gap:2px;overflow:auto}
+.steprail h6{font-size:12px;font-weight:600;color:var(--muted);margin:10px 8px 4px}
+.steprail h6:first-child{margin-top:2px}
+.steprail a{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:10px;font-size:14px;color:var(--body)}
+.steprail a i{width:26px;height:26px;border-radius:8px;background:var(--band);box-shadow:inset 0 0 0 1px var(--tile-edge);flex:none;display:grid;place-items:center;font-style:normal;font-size:12px;color:var(--muted)}
+.steprail a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600;box-shadow:inset 0 0 0 1px var(--primary)}
+.steprail a.on i{background:var(--primary);color:var(--on-primary)}
+.steprail a .c{margin-left:auto;font-size:12px;font-weight:600;padding:0 6px;border-radius:6px;background:var(--band);color:var(--muted)}
+.steprail a .c.w{background:var(--warn-s);color:var(--warn)}
+.steprail a .c.b{background:var(--bad-s);color:var(--bad)}
+.steprail a .nw{margin-left:auto;font-size:12px;font-weight:600;color:var(--info)}
+.steprail .foot{margin-top:auto;border-top:1px solid var(--rule);padding-top:6px}
+.body2{display:flex;flex-direction:column;gap:12px;min-width:0;min-height:0;overflow:hidden}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kpis.k5{grid-template-columns:repeat(5,minmax(0,1fr))}
+.kpis.k3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.kpi{background:var(--card);border:1px solid var(--card-border);border-radius:16px;padding:10px 14px;box-shadow:var(--shadow);min-width:0}
+.kpi small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.kpi b{font-size:24px;font-weight:600;color:var(--ink);letter-spacing:-.02em}
+.kpi b.stale{color:var(--muted)}
+.kpi .d{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .d .up{color:var(--hl-ink);font-weight:600}
+.kpi .d .dn{color:var(--warn);font-weight:600}
+.kpi svg{width:100%;height:24px;margin-top:4px}
+.sp1{fill:none;stroke:var(--primary);stroke-width:2}
+.tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tools .input{height:32px;font-size:12px;min-width:200px}
+.fchip{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;color:var(--body);background:var(--card);white-space:nowrap}
+.fchip.on{background:var(--primary-soft);border-color:transparent;color:var(--accent-ink);font-weight:600}
+td.r,th.r{text-align:right}
+td b{color:var(--ink);font-weight:500}
+.go{color:var(--muted)}
+.grid2{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:12px;min-height:0;flex:1}
+.stack{display:flex;flex-direction:column;gap:12px;min-height:0}
+.new{display:inline-block;font-size:12px;font-weight:600;padding:0 6px;border-radius:6px;background:var(--info-s);color:var(--info);margin-left:6px;vertical-align:1px}
+.bulk{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--primary-soft);border-bottom:1px solid var(--rule);font-size:14px;color:var(--accent-ink);font-weight:500}
+.bulk .sp{flex:1}
+.stabs{display:flex;gap:4px;border-bottom:1px solid var(--rule);padding:0 18px}
+.stabs a{font-size:14px;color:var(--muted);padding:8px 8px;border-bottom:2px solid transparent}
+.stabs a.on{color:var(--ink);border-color:var(--primary);font-weight:500}
+.facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px}
+.tl{list-style:none;margin:0;padding:0}
+.tl li{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--rule);font-size:14px;color:var(--body)}
+.tl li small{margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap}
+.tl li i{width:8px;height:8px;border-radius:50%;background:var(--primary);margin-top:6px;flex:none}
+.tl li i.w{background:var(--warn)}.tl li i.b{background:var(--bad)}.tl li i.n{background:var(--border-strong)}
+.flyout{position:absolute;left:64px;top:150px;z-index:9;width:250px;background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--overlay);padding:8px}
+.flyout b{display:block;font-size:14px;padding:6px 8px;color:var(--ink)}
+.flyout a{display:flex;justify-content:space-between;padding:6px 8px;border-radius:8px;font-size:14px;color:var(--body)}
+.flyout a.h{background:var(--hover);color:var(--ink)}
+.flyout h6{font-size:12px;color:var(--muted);margin:8px 8px 2px;font-weight:600}
+.flyout .c{font-size:12px;color:var(--muted)}
+.wf{display:flex;align-items:flex-end;gap:10px;height:140px;padding:18px 4px 0}
+.wf div{flex:1;border-radius:6px 6px 0 0;position:relative}
+.wf span{position:absolute;bottom:-20px;left:0;right:0;text-align:center;font-size:12px;color:var(--muted)}
+.wf em{position:absolute;top:-18px;left:0;right:0;text-align:center;font-size:12px;color:var(--ink);font-style:normal}
+.bar-h{height:10px;border-radius:4px;background:var(--primary)}
+.cohort td{text-align:center;font-size:12px;padding:6px}
+.cohort td.h1{background:color-mix(in srgb,var(--primary) 70%,transparent);color:var(--on-primary)}
+.cohort td.h2{background:color-mix(in srgb,var(--primary) 45%,transparent)}
+.cohort td.h3{background:color-mix(in srgb,var(--primary) 22%,transparent)}
+.ladder{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.ladder span{padding:3px 8px;border-radius:6px;background:var(--band);color:var(--body)}
+.ladder span.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.ladder em{font-style:normal}
+.addlist{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;margin:8px 0 22px}
+.addlist > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px;font-size:14px;color:var(--board-ink)}
+.addlist b{display:block;margin-bottom:4px}
+.addlist ul{margin:4px 0 0;padding-left:18px}
+.addlist li{margin:2px 0}
+.keep{opacity:.8}
+</style>
+<style>
+.tabsrow{display:flex;gap:18px;border-bottom:1px solid var(--rule);margin:-4px 0 4px}
+.tabsrow a{font-size:14px;color:var(--muted);padding:6px 0 8px;border-bottom:2px solid transparent}
+.tabsrow a.on{color:var(--ink);border-color:var(--primary);font-weight:500}
+.diff td.add{color:var(--ok)} .diff td.del{color:var(--bad);text-decoration:line-through}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.cov td{text-align:center}
+.cov td:first-child{text-align:left}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--primary)}
+.dot.no{background:transparent;box-shadow:inset 0 0 0 1.5px var(--border-strong)}
+.dot.w{background:var(--warn)}
+</style>
+</head>
+<body class="light" data-opt="A">
+<div class="board">
+  <h1>Admin › Catalog: one area with a rail</h1>
+  <p class="lead">Catalog gets the same treatment as Billing. Hovering Catalog in the menu lists every page. Clicking it opens the Catalog workspace: what's waiting for review across plans, features and carriers. Inside, a rail on the left switches pages. Every one of today's 13 pages keeps its content and actions in a cleaner layout. The biggest change is new: eight pages are really one carrier split eight ways (rules, file layouts, status words, field maps, portal guidance, servicing, fact reports), so each carrier gets its own <b>carrier record</b> page with all of them in tabs. The cross-carrier pages stay in the rail for working across carriers.</p>
+  <p class="lead small">Tile figures are from the live pages on Nov 17 where shown. Row names and the numbers in new features are illustrative.</p>
+  <div class="notes">
+    <div><b>1 · One carrier, eight pages</b>To see everything about Americo you visit Carriers, Carrier rules, Layout maps, Status maps, Field maps, Portal guidance, Servicing instructions and Fact reports. Nothing links them.</div>
+    <div><b>2 · Facts you can't edit</b>A carrier's portal address, reference pattern and bank descriptor can only change by "fixing" an agency's fact report. Admins can't simply edit them.</div>
+    <div><b>3 · Counts that go nowhere</b>"3 plans · 2 add-ons" on a feature, "4 templates · 2 partners" on a product: counts with no link to the rows behind them.</div>
+    <div><b>4 · No history</b>Plans publish versions but you can't see what changed between them, who is on which, or compare two plans. No page links to the audit log.</div>
+    <div><b>5 · Review queues hidden</b>Status words waiting, fact reports waiting, field maps in review and carriers missing rules are each a tile on a different page. No single place says "this needs you".</div>
+    <div><b>6 · Old look</b>Capital-letter labels, notice cards, filters inside cards, dialogs for records, and several lists with no search (Field maps, Status maps, Servicing).</div>
+  </div>
+
+  <div class="bar" role="toolbar">
+    <div class="grp"><span>Theme</span><button data-theme-btn="light">Light</button><button data-theme-btn="dark">Dark</button></div>
+    <span class="hint">L / D theme · scroll for every page</span>
+  </div>
+
+  <div class="opt A">
+
+  <div class="sec"><h2>0 · Hover Catalog in the menu</h2><span>The flyout lists every page by group with its waiting count. Click Catalog itself for the workspace.</span></div>
+  <div class="app bl" data-step="overview" style="height:560px">
+    <div class="flyout" style="top:140px"><b>Catalog</b><a class="h">Workspace <span class="c">5 need review</span></a><h6>What we sell</h6><a>Plans</a><a>Add-ons</a><a>Features <span class="c">1 off</span></a><h6>Insurance</h6><a>Products</a><a>Templates <span class="c">2 drafts</span></a><h6>Carriers</h6><a>Carriers</a><a>Carrier rules <span class="c">9 missing</span></a><a>Layout maps</a><a>Status maps <span class="c">4 words</span></a><a>Field maps <span class="c">2 in review</span></a><a>Portal guidance</a><a>Servicing instructions</a><a>Fact reports <span class="c">3</span></a></div>
+    <div data-body><div class="kpis"><div class="kpi"><small>Plans</small><b>8</b></div><div class="kpi"><small>Features</small><b>37</b></div><div class="kpi"><small>Carriers</small><b>14</b></div><div class="kpi"><small>Waiting for review</small><b>18</b></div></div></div>
+  </div>
+
+  <!-- 1 · Workspace -->
+  <div class="sec"><h2>1 · Catalog workspace <span class="new">New</span></h2><span>One place that says what needs review, what's live, and what changed lately.</span></div>
+  <div class="app bl tall" data-step="overview" data-title="Catalog" data-status="warn|18 things wait for review · 1 feature switched off for everyone · 3 fact reports from agencies, oldest 6 days" data-acts="<span class='btn o'>Open audit log</span><span class='btn p'>New plan</span>">
+    <div data-body>
+      <div class="kpis k5">
+        <div class="kpi"><small>Plans live</small><b>6</b><div class="d">2 archived · 60 subscribers</div></div>
+        <div class="kpi"><small>On an old plan version</small><b>12%</b><div class="d">7 subscribers</div></div>
+        <div class="kpi"><small>Features</small><b>37</b><div class="d">1 off · 1 in beta</div></div>
+        <div class="kpi"><small>Carriers active</small><b>14</b><div class="d">423 appointments</div></div>
+        <div class="kpi"><small>Waiting for review</small><b>18</b><div class="d">across 5 queues</div></div>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <div class="card-h"><b>Needs review</b><span class="chip n hl">18</span><div class="r small muted">oldest first · each opens its page, filtered</div></div>
+          <div class="scroll"><table><tbody>
+            <tr><td><b>Status words waiting</b></td><td>4 words · 212 rows held · 3 agencies affected</td><td><span class="chip warn">Review</span></td><td class="go">›</td></tr>
+            <tr><td><b>Fact reports from agencies</b></td><td>3 waiting · oldest 6 days</td><td><span class="chip warn">Review</span></td><td class="go">›</td></tr>
+            <tr><td><b>Field maps in review</b></td><td>2 drafts · 1 needs review after a miss</td><td><span class="chip warn">Review</span></td><td class="go">›</td></tr>
+            <tr><td><b>Carriers missing a save rule</b></td><td>9 of 14</td><td><span class="chip">Fill in</span></td><td class="go">›</td></tr>
+            <tr><td><b>Carriers with no commission layout</b></td><td>2</td><td><span class="chip">Fill in</span></td><td class="go">›</td></tr>
+            <tr><td><b>Features in no plan or add-on</b></td><td>3</td><td><span class="chip">Fill in</span></td><td class="go">›</td></tr>
+            <tr><td><b>Template drafts</b></td><td>2 not published</td><td><span class="chip">Fill in</span></td><td class="go">›</td></tr>
+          </tbody></table></div>
+        </div>
+        <div class="stack">
+          <div class="card"><div class="card-h"><b>Switches</b><div class="r small muted">who sees what right now</div></div><table><tbody>
+            <tr><td><b>AI assistant</b></td><td>Off for everyone</td><td><span class="chip bad">Off</span></td></tr>
+            <tr><td><b>Lead posting sandbox</b></td><td>Beta · 3 agencies</td><td><span class="chip info">Beta</span></td></tr>
+          </tbody></table></div>
+          <div class="card" style="flex:1;min-height:0"><div class="card-h"><b>Recent changes</b><div class="r small muted">from the audit log</div></div><div class="scroll card-b" style="padding-top:4px"><ul class="tl">
+            <li><i></i>Plan "Agency" published v4 · by QA<small>2h ago</small></li>
+            <li><i class="w"></i>Feature "AI assistant" switched off<small>yesterday</small></li>
+            <li><i></i>Status word "LAPSE-PEND" mapped to Pending lapse<small>Nov 15</small></li>
+            <li><i class="n"></i>Layout "Americo commissions" v3 published<small>Nov 14</small></li>
+          </ul></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="addlist"><div><b>Built from data we keep (needs nothing)</b><ul><li>Needs review: the queues each page already counts, in one list</li><li>Switches now, and recent catalog changes from the audit log</li><li>Platform config sees no plan, add-on or pricing tiles (it can't open those pages today)</li></ul></div></div>
+
+  <!-- 2 · Plans -->
+  <div class="sec"><h2>2 · Plans</h2><span>Same tiles, columns, filters and row actions. A plan opens a sheet with its versions, who is on each, and what changed. The editor stays its own page, inside the frame.</span></div>
+  <div class="app bl" data-step="plans" data-title="Plans" data-status="ok|6 live · 2 archived · 60 subscribers · 7 still on an older version" data-acts="<span class='btn o'>Compare plans</span><span class='btn p'>New plan</span>">
+    <div data-body>
+      <div class="kpis"><div class="kpi"><small>Plans</small><b>8</b><div class="d">2 archived</div></div><div class="kpi"><small>Public</small><b>6</b><div class="d">shown at sign-up</div></div><div class="kpi"><small>Subscribers</small><b>60</b><div class="d">across all plans</div></div><div class="kpi"><small>On an old version</small><b>12%</b><div class="d">7 subscribers</div></div></div>
+      <div class="card" style="flex:1;min-height:0">
+        <div class="card-h"><div class="tools"><span class="input ph">Search name or code…</span><span class="fchip">Type ▾</span><span class="fchip">Include archived</span></div></div>
+        <div class="scroll"><table><thead><tr><th>Plan</th><th>Code</th><th>Type</th><th class="r">Price</th><th>Visibility</th><th class="r">Subscribers</th><th>Status</th><th></th></tr></thead><tbody>
+          <tr class="s"><td><b>Agency</b> <span class="chip n">v4</span></td><td>agency</td><td>Agency</td><td class="r">$299.00 / mo</td><td>Public</td><td class="r">14 · 3 on older</td><td><span class="chip ok">Live</span></td><td class="go">⋯</td></tr>
+          <tr><td><b>Ledger</b> <span class="chip n">v2</span></td><td>ledger</td><td>Individual</td><td class="r">$99.00 / mo</td><td>Public</td><td class="r">14</td><td><span class="chip ok">Live</span></td><td class="go">⋯</td></tr>
+          <tr><td><b>Advanced</b> <span class="chip n">v3</span></td><td>advanced</td><td>Individual</td><td class="r">$149.00 / mo</td><td>Public</td><td class="r">3</td><td><span class="chip ok">Live</span></td><td class="go">⋯</td></tr>
+        </tbody></table></div>
+      </div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet wide">
+      <div class="sheet-h"><div><b>Agency</b><div class="small muted">agency · v4 live · 14 subscribers</div></div><span class="chip ok">Live</span><span class="x">✕</span></div>
+      <div class="stabs"><a>Details</a><a class="on">Versions · 4 <span class="new" style="margin:0">New</span></a><a>Subscribers · 14 <span class="new" style="margin:0">New</span></a><a>History <span class="new" style="margin:0">New</span></a></div>
+      <div class="sheet-b">
+        <table><thead><tr><th>Version</th><th>Published</th><th class="r">On it</th><th>What changed</th></tr></thead><tbody>
+          <tr class="s"><td><b>v4</b></td><td>Nov 17</td><td class="r">11</td><td>Price $279 → $299 · + Lead posting</td></tr>
+          <tr><td><b>v3</b></td><td>Sep 2</td><td class="r">3</td><td>+ Carrier sync · seats 20 → 26</td></tr>
+          <tr><td><b>v2</b></td><td>Jun 10</td><td class="r">0</td><td>Trial 7 → 14 days</td></tr>
+        </tbody></table>
+        <div class="fsec"><h4>v3 → v4</h4><table class="diff"><tbody><tr><td>Monthly price</td><td class="del">$279.00</td><td class="add">$299.00</td></tr><tr><td>Lead posting</td><td>—</td><td class="add">Granted</td></tr></tbody></table></div>
+      </div>
+      <div class="sheet-f"><span class="btn g">Edit features &amp; pricing ›</span><span style="flex:1"></span><span class="btn o">Edit details…</span><span class="btn o">Publish new version…</span><span class="btn danger">Archive…</span></div>
+    </aside>
+  </div>
+  <div class="addlist">
+    <div class="keep"><b>Kept from today</b><ul><li>Tiles: Plans, Public, Subscribers, On an old version</li><li>Columns: plan (version, Default), code, type, price ("Not sellable"), visibility, subscribers with "N on older"</li><li>Search, Type, archived toggle, refresh, paging; sorted by subscribers</li><li>Edit features &amp; pricing (editor page: pricing, capacity, meters, feature checklists, menu preview; save publishes N+1), Edit details, Publish new version, Archive / Restore, Delete when never subscribed</li><li>Super admin only, as today</li></ul></div>
+    <div><b>New (needs nothing)</b><ul><li>Versions tab: each version, when, how many on it, and what changed (diff from the stored versions)</li><li>Subscribers tab: who is on this plan and which version, each opening Billing › Subscriptions</li><li>History from the audit log</li><li>Compare plans: two or three side by side, price, limits and features</li></ul></div>
+  </div>
+
+  <!-- 3 · Add-ons -->
+  <div class="sec"><h2>3 · Add-ons</h2><span>Same tiles, columns, filters and actions. The add-on opens as a sheet instead of a dialog, with who's on it.</span></div>
+  <div class="app bl" data-step="addons" data-title="Add-ons" data-status="warn|5 attachable · 9 attached across customers · $340.00 MRR (2% of total) · 1 add-on still offers an archived feature" data-acts="<span class='btn p'>New add-on</span>">
+    <div data-body>
+      <div class="kpis"><div class="kpi"><small>Add-ons</small><b>6</b><div class="d">5 attachable</div></div><div class="kpi"><small>Attached</small><b>9</b><div class="d">across customers</div></div><div class="kpi"><small>MRR from add-ons</small><b>$340</b><div class="d">2% of total</div></div><div class="kpi"><small>Archived features offered</small><b>1</b><div class="d">in Extra seats</div></div></div>
+      <div class="card" style="flex:1;min-height:0"><div class="card-h"><div class="tools"><span class="input ph">Search name, code or feature…</span><span class="fchip">Status ▾</span><span class="fchip">Cycle ▾</span><span class="fchip">Attachable to ▾</span></div></div>
+        <table><thead><tr><th>Add-on</th><th>Code</th><th class="r">Price</th><th>Grants</th><th>Attachable to</th><th class="r">Attached <span class="new" style="margin:0">New</span></th><th>Status</th><th></th></tr></thead><tbody>
+          <tr><td><b>Extra seats</b></td><td>seats_5</td><td class="r">$25.00 / mo</td><td>5 seats</td><td>Agency v3, v4</td><td class="r">6</td><td><span class="chip warn">Archived feature</span></td><td class="go">›</td></tr>
+          <tr><td><b>Carrier sync</b></td><td>carrier_sync</td><td class="r">$49.00 / mo</td><td>carrier_sync</td><td>Ledger v2</td><td class="r">3</td><td><span class="chip ok">Active</span></td><td class="go">›</td></tr>
+        </tbody></table></div>
+    </div>
+  </div>
+  <div class="addlist">
+    <div class="keep"><b>Kept from today</b><ul><li>Tiles: Add-ons, Attached, MRR from add-ons (share), Archived features offered</li><li>Columns: add-on, code, price/cycle, grants features and meters, attachable to (versions), status</li><li>Search (incl. feature keys), status, cycle, attachable-to filters, paging</li><li>Create, edit, archive/restore with confirm; price and cycle locked while anyone is billed</li></ul></div>
+    <div><b>New (needs nothing)</b><ul><li>Attached column, and a sheet tab listing who has it (opens their subscription)</li><li>History from the audit log</li></ul></div>
+  </div>
+
+  <!-- 4 · Features -->
+  <div class="sec"><h2>4 · Features</h2><span>Catalog and Switches stay as tabs. A feature opens a sheet that lists the plans and add-ons granting it, its switch, and its history.</span></div>
+  <div class="app bl" data-step="features" data-title="Features" data-status="bad|AI assistant is off for everyone · 1 in beta · 3 features are in no plan or add-on" data-acts="<span class='btn p'>New feature</span>">
+    <div data-body>
+      <div class="tabsrow"><a>Catalog · 37</a><a class="on">Switches · 2 not on</a></div>
+      <div class="kpis k5"><div class="kpi"><small>Features</small><b>37</b><div class="d">4 archived</div></div><div class="kpi"><small>Modules</small><b>9</b><div class="d">—</div></div><div class="kpi"><small>In no plan or add-on</small><b>3</b><div class="d">nobody can buy them</div></div><div class="kpi"><small>Switched off</small><b>1</b><div class="d">for everyone</div></div><div class="kpi"><small>In beta</small><b>1</b><div class="d">3 agencies</div></div></div>
+      <div class="card" style="flex:1;min-height:0"><div class="card-h"><div class="tools"><span class="input ph">Search feature or key…</span><span class="fchip">Module ▾</span><span class="fchip">State ▾ <span class="new" style="margin:0">New</span></span></div></div>
+        <table><thead><tr><th>Feature</th><th>Module</th><th>Agencies with an override</th><th>Why</th><th>State</th><th></th></tr></thead><tbody>
+          <tr class="s"><td><b>AI assistant</b></td><td>Selling</td><td>0</td><td>Provider contract not signed</td><td><span class="chip bad">Off</span></td><td class="go">›</td></tr>
+          <tr><td><b>Lead posting sandbox</b></td><td>Leads</td><td>3</td><td>Testing with three vendors</td><td><span class="chip info">Beta</span></td><td class="go">›</td></tr>
+          <tr><td><b>Carrier sync</b></td><td>Book</td><td>0</td><td>—</td><td><span class="chip ok">On</span></td><td class="go">›</td></tr>
+        </tbody></table></div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet">
+      <div class="sheet-h"><div><b>AI assistant</b><div class="small muted">ai_assistant · Selling</div></div><span class="chip bad">Off</span><span class="x">✕</span></div>
+      <div class="stabs"><a class="on">Switch</a><a>Granted by · 3 <span class="new" style="margin:0">New</span></a><a>History <span class="new" style="margin:0">New</span></a></div>
+      <div class="sheet-b"><div class="fgrid"><div class="full"><label class="l">State</label><div class="seg"><span>On</span><span class="on">Off</span><span>Beta</span></div></div><div class="full"><label class="l">Message agents see</label><div class="input textarea">The assistant is coming soon.</div></div><div class="full"><label class="l">Why (internal)</label><div class="input">Provider contract not signed</div></div><div class="full"><label class="l">Beta agencies</label><div class="input ph">Pick agencies…</div></div></div><p class="small muted" style="margin-top:12px">Granted by: Agency v4, Agency Plus v2, add-on "AI pack". Switching off hides it from all of them now.</p></div>
+      <div class="sheet-f"><span class="btn o">Edit feature…</span><span style="flex:1"></span><span class="btn o">Cancel</span><span class="btn p">Save switch</span></div>
+    </aside>
+  </div>
+  <div class="addlist">
+    <div class="keep"><b>Kept from today</b><ul><li>Catalog | Switches tabs, opening on Switches when one is off or in beta</li><li>Tiles: Features, Modules, In no plan or add-on, Switched off, In beta (the warning card moves to the status line)</li><li>Catalog grouped by module: feature, key, description, references; search, module, archived; edit, archive/restore, new</li><li>Switches: state, beta agencies, message to agents, why; super admin toggles, platform config read-only</li></ul></div>
+    <div><b>New (needs nothing)</b><ul><li>"Granted by" lists the plans and add-ons behind the count, each opening its sheet</li><li>State filter; switch history from the audit log</li></ul></div>
+  </div>
+
+  <!-- 5 · Products + 6 Templates -->
+  <div class="sec"><h2>5 · Products</h2><span>Same tiles, columns, filters and actions; a product opens a sheet whose counts now open the rows: templates, partners, and the carriers that sell it.</span></div>
+  <div class="app bl" data-step="products" data-title="Products" data-status="ok|12 products in 4 categories · 9 used by templates · 5 approved for partners" data-acts="<span class='btn p'>New product</span>">
+    <div data-body>
+      <div class="kpis"><div class="kpi"><small>Products</small><b>12</b><div class="d">2 archived</div></div><div class="kpi"><small>Categories</small><b>4</b><div class="d">—</div></div><div class="kpi"><small>Used by templates</small><b>9</b><div class="d">of 12</div></div><div class="kpi"><small>Approved for partners</small><b>5</b><div class="d">—</div></div></div>
+      <div class="card" style="flex:1;min-height:0"><div class="card-h"><div class="tools"><span class="input ph">Search product…</span><span class="fchip">Category ▾</span><span class="fchip">Include archived</span></div></div>
+        <table><thead><tr><th>Product</th><th>Code</th><th>Category</th><th>Templates</th><th>Partners</th><th>Carriers <span class="new" style="margin:0">New</span></th><th>Status</th><th></th></tr></thead><tbody>
+          <tr><td><b>Final Expense</b></td><td>final_expense</td><td>Life</td><td>4 ›</td><td>2 ›</td><td>6 ›</td><td><span class="chip ok">Active</span></td><td class="go">›</td></tr>
+          <tr><td><b>Term Life</b></td><td>term_life</td><td>Life</td><td>2 ›</td><td>1 ›</td><td>4 ›</td><td><span class="chip ok">Active</span></td><td class="go">›</td></tr>
+        </tbody></table></div>
+    </div>
+  </div>
+  <div class="addlist">
+    <div class="keep"><b>Kept from today</b><ul><li>Tiles: Products, Categories, Used by templates, Approved for partners</li><li>Columns: product, code, category, description, sort, status; search, category, archived; paging</li><li>New / Edit, Archive, Restore</li></ul></div>
+    <div><b>New (needs nothing)</b><ul><li>Template and partner counts open the filtered lists</li><li>Carriers column: which carriers have a field map or offer this product</li></ul></div>
+  </div>
+
+  <div class="sec"><h2>6 · Templates</h2><span>Same tiles, columns, filters and editor. The editor opens as a wide sheet; Duplicate, Publish, Archive and Restore stay.</span></div>
+  <div class="app bl" data-step="templates" data-title="Templates" data-status="ok|14 templates cover 9 products · 12 published · 2 drafts · 37 applications in progress on a pinned version" data-acts="<span class='btn p'>New template</span>">
+    <div data-body>
+      <div class="kpis"><div class="kpi"><small>Templates</small><b>14</b><div class="d">9 products</div></div><div class="kpi"><small>Published</small><b>12</b><div class="d">—</div></div><div class="kpi"><small>Drafts</small><b>2</b><div class="d">1 archived</div></div><div class="kpi"><small>Applications in progress</small><b>37</b><div class="d">pinned to their version</div></div></div>
+      <div class="card" style="flex:1;min-height:0"><div class="card-h"><div class="tools"><span class="input ph">Search template…</span><span class="fchip">Product ▾</span><span class="fchip">State ▾</span></div></div>
+        <table><thead><tr><th>Template</th><th>Product</th><th>Type</th><th>Version</th><th>Size</th><th>Updated</th><th>State</th><th></th></tr></thead><tbody>
+          <tr><td><b>Final Expense · standard</b></td><td>Final Expense</td><td>Lead + application</td><td>v5</td><td>42 fields</td><td>Nov 10</td><td><span class="chip ok">Published</span></td><td class="go">›</td></tr>
+          <tr><td><b>Term Life · simplified</b></td><td>Term Life</td><td>Lead + application</td><td>v1</td><td>28 fields</td><td>Nov 16</td><td><span class="chip">Draft</span></td><td class="go">›</td></tr>
+        </tbody></table></div>
+    </div>
+  </div>
+  <div class="addlist">
+    <div class="keep"><b>Kept from today</b><ul><li>Tiles: Templates, Published, Drafts, In-progress applications</li><li>Columns and filters; editor: details, lead fields, pipeline stages, application form with show-when, agent preview, usage</li><li>New, Duplicate, Publish, Archive, Restore</li></ul></div>
+    <div><b>New (needs nothing)</b><ul><li>Editor as a wide sheet with the agent preview beside it</li><li>"What changed" between a draft and the published version</li></ul></div>
+  </div>
+
+  <!-- 7 · Carriers -->
+  <div class="sec"><h2>7 · Carriers</h2><span>Same tiles, columns and filters, plus a "set up" column that shows each carrier's eight facets at a glance. A carrier opens its record.</span></div>
+  <div class="app bl" data-step="carriers" data-title="Carriers" data-status="ok|14 active · 3 inactive · in use by 21 agencies · 423 appointments · 2 deactivations blocked" data-acts="<span class='btn p'>New carrier</span>">
+    <div data-body>
+      <div class="kpis"><div class="kpi"><small>Carriers</small><b>14</b><div class="d">3 inactive</div></div><div class="kpi"><small>In use</small><b>14</b><div class="d">21 agencies</div></div><div class="kpi"><small>Appointments recorded</small><b>423</b><div class="d">across agencies</div></div><div class="kpi"><small>Deactivations blocked</small><b>2</b><div class="d">still in use</div></div></div>
+      <div class="card" style="flex:1;min-height:0"><div class="card-h"><div class="tools"><span class="input ph">Search carrier…</span><span class="fchip">State ▾</span><span class="fchip">Usage ▾</span><span class="fchip">Missing ▾ <span class="new" style="margin:0">New</span></span></div></div>
+        <div class="scroll"><table class="cov"><thead><tr><th>Carrier</th><th>Rules</th><th>Layouts</th><th>Status words</th><th>Field maps</th><th>Portal guide</th><th>Servicing</th><th>Reports</th><th>Usage</th><th>State</th><th></th></tr></thead><tbody>
+          <tr><td><b>Americo</b></td><td><span class="dot"></span></td><td><span class="dot"></span></td><td><span class="dot w"></span></td><td><span class="dot"></span></td><td><span class="dot"></span></td><td><span class="dot no"></span></td><td>1</td><td>18 agencies</td><td><span class="chip ok">Active</span></td><td class="go">›</td></tr>
+          <tr><td><b>Aetna / CVS</b></td><td><span class="dot no"></span></td><td><span class="dot"></span></td><td><span class="dot"></span></td><td><span class="dot no"></span></td><td><span class="dot"></span></td><td><span class="dot"></span></td><td>—</td><td>21 agencies</td><td><span class="chip ok">Active</span></td><td class="go">›</td></tr>
+          <tr><td><b>Mutual of Omaha</b></td><td><span class="dot"></span></td><td><span class="dot w"></span></td><td><span class="dot"></span></td><td><span class="dot"></span></td><td><span class="dot no"></span></td><td><span class="dot no"></span></td><td>2</td><td>12 agencies</td><td><span class="chip ok">Active</span></td><td class="go">›</td></tr>
+        </tbody></table></div>
+        <div class="card-f small muted">● set up · ◐ waiting for review · ○ missing. Each dot opens that part of the carrier's record.</div>
+      </div>
+    </div>
+  </div>
+  <div class="addlist">
+    <div class="keep"><b>Kept from today</b><ul><li>Tiles: Carriers, In use, Appointments recorded, Deactivations blocked</li><li>Columns: code, carrier, state (switch), sort, usage, created; search, state, usage filters, paging</li><li>New / Edit (code, name, sort), Deactivate / Reactivate with the in-use dialog and the super-admin override with a reason</li></ul></div>
+    <div><b>New (needs nothing)</b><ul><li>Set-up dots for the eight facets and a "Missing" filter</li><li>Each carrier opens its record (next screen)</li></ul></div>
+  </div>
+
+  <!-- 8 · Carrier record (new) -->
+  <div class="sec"><h2>8 · The carrier record <span class="new">New page</span></h2><span>/admin/carriers/americo: everything about one carrier, as tabs. Each tab is the same editor the cross-carrier page uses, filtered to this carrier. Portal address, reference pattern and bank descriptor become editable here (audited).</span></div>
+  <div class="app bl tall" data-step="carriers" data-title="Americo" data-status="warn|Active · 18 agencies · 1 status word waiting · 1 fact report from an agency · no servicing instructions yet" data-acts="<span class='btn o'>Deactivate…</span><span class='btn p'>Save</span>">
+    <div data-body>
+      <div class="tabsrow"><a class="on">Overview</a><a>Rules</a><a>Files &amp; layouts</a><a>Status words · 1</a><a>Field maps</a><a>Portal guide</a><a>Servicing</a><a>Fact reports · 1</a><a>History</a></div>
+      <div class="grid2">
+        <div class="card"><div class="card-h"><b>Identity &amp; how we find them</b></div><div class="card-b"><div class="fgrid">
+          <div><label class="l">Name</label><div class="input">Americo</div></div><div><label class="l">Code</label><div class="input dis">americo</div></div>
+          <div><label class="l">Portal address</label><div class="input">https://agent.americo.com</div><div class="help">Was editable only by fixing a fact report</div></div>
+          <div><label class="l">Policy number looks like</label><div class="input">^0\d{9}$</div></div>
+          <div><label class="l">Bank descriptor</label><div class="input">AMERICO LIFE COMM</div></div><div><label class="l">Sort order</label><div class="input">10</div></div>
+        </div></div></div>
+        <div class="stack">
+          <div class="card"><div class="card-h"><b>Set up</b></div><table><tbody>
+            <tr><td>Save rules</td><td>5 of 5 · 4 verified</td><td><span class="dot"></span></td></tr>
+            <tr><td>Files &amp; layouts</td><td>Policies v2 · Commissions v3</td><td><span class="dot"></span></td></tr>
+            <tr><td>Status words</td><td>1 waiting · 212 rows held</td><td><span class="dot w"></span></td></tr>
+            <tr><td>Field maps</td><td>2 products published</td><td><span class="dot"></span></td></tr>
+            <tr><td>Portal guide</td><td>Set</td><td><span class="dot"></span></td></tr>
+            <tr><td>Servicing</td><td>0 of 4</td><td><span class="dot no"></span></td></tr>
+          </tbody></table></div>
+          <div class="card"><div class="card-h"><b>Used by</b></div><table><tbody><tr><td>Agencies</td><td class="r">18</td></tr><tr><td>Appointments</td><td class="r">96</td></tr><tr><td>Policies on the books</td><td class="r">2,140</td></tr></tbody></table></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="addlist">
+    <div><b>What this page needs</b><ul><li>Every tab reuses today's editors with a carrier filter (needs nothing)</li><li>Editing portal address, reference pattern and bank descriptor directly: an audited route on the existing carrier columns (needs nothing)</li><li>Used by: agencies, appointments, policies (needs nothing)</li><li>History from the audit log, all facets together (needs nothing)</li></ul></div>
+  </div>
+
+  <!-- 9 · Carrier rules -->
+  <div class="sec"><h2>9 · Carrier rules</h2><span>Same tiles, columns and editor; the editor opens as a sheet and its "Finding its files" block links to the carrier record.</span></div>
+  <div class="app bl" data-step="rules" data-title="Carrier rules" data-status="warn|9 of 14 carriers missing a save rule · 3 rules not verified" data-acts="">
+    <div data-body>
+      <div class="kpis"><div class="kpi"><small>Carriers</small><b>14</b></div><div class="kpi"><small>Missing a rule</small><b>9</b></div><div class="kpi"><small>Rules set</small><b>31</b></div><div class="kpi"><small>Unverified</small><b>3</b></div></div>
+      <div class="card" style="flex:1;min-height:0"><div class="card-h"><div class="tools"><span class="input ph">Search carrier…</span><span class="fchip on">Only missing a rule</span></div></div>
+        <table class="cov"><thead><tr><th>Carrier</th><th>First payment</th><th>Ongoing</th><th>Reinstatement</th><th>Conservation</th><th>Cancel request</th><th>Pays</th><th>Files</th><th></th></tr></thead><tbody>
+          <tr><td><b>Aetna / CVS</b></td><td>30 days</td><td>31 days</td><td>—</td><td>—</td><td>—</td><td>Monthly</td><td>CSV</td><td class="go">›</td></tr>
+          <tr><td><b>Foresters</b></td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td class="go">›</td></tr>
+        </tbody></table></div>
+    </div>
+  </div>
+  <div class="addlist"><div class="keep"><b>Kept from today</b><ul><li>Tiles; columns for the five rule types, pays, files, missing; search and "only missing"</li><li>Editor: set/change each rule (window, grace, redrafts, interval, source, notes, effective from), mark verified, commission and files settings; the read-only "Finding its files" block (now with a link to the record)</li></ul></div></div>
+
+  <!-- 10 · Layout maps, 11 Status maps, 12 Field maps -->
+  <div class="sec"><h2>10 · Layout maps</h2><span>Unchanged in content: Layouts | Carriers tabs, the new-layout steps (still a right sheet), the layout's own page with Columns · File settings · Carriers · Versions.</span></div>
+  <div class="app bl" data-step="layouts" data-title="Layout maps" data-status="warn|21 live layouts · 2 open drafts · 2 carriers with no commission layout" data-acts="<span class='btn p'>New layout</span>">
+    <div data-body>
+      <div class="tabsrow"><a class="on">Layouts · 23</a><a>Carriers · 14</a></div>
+      <div class="kpis k5"><div class="kpi"><small>Live layouts</small><b>21</b></div><div class="kpi"><small>Open drafts</small><b>2</b></div><div class="kpi"><small>Columns listed</small><b>612</b></div><div class="kpi"><small>No policy layout</small><b>0</b></div><div class="kpi"><small>No commission layout</small><b>2</b></div></div>
+      <div class="card" style="flex:1;min-height:0"><div class="card-h"><div class="tools"><span class="input ph">Search layout…</span><span class="fchip">File type ▾</span><span class="fchip">State ▾</span></div></div><table><thead><tr><th>Layout</th><th>File type</th><th class="r">Columns</th><th>Version</th><th>Carriers</th><th>State</th><th></th></tr></thead><tbody><tr><td><b>Americo commissions</b></td><td>Commissions</td><td class="r">24</td><td>v3</td><td>Americo</td><td><span class="chip ok">Live</span></td><td class="go">›</td></tr></tbody></table></div>
+    </div>
+  </div>
+  <div class="addlist"><div class="keep"><b>Kept from today</b><ul><li>Everything: tiles, both tabs, the carrier × file-type grid with Remove, new layout from a sample file, the layout page (columns editor, file settings incl. PDF layout, row-count swing, total line), Save, Publish, Retire, next version, delete draft, delete / bring back, assign a carrier</li></ul></div><div><b>New (needs nothing)</b><ul><li>Inside the Catalog frame; carriers link to their record</li></ul></div></div>
+
+  <div class="sec"><h2>11 · Status maps</h2><span>Same two tables and actions; gains search and a carrier filter.</span></div>
+  <div class="app bl" data-step="status" data-title="Status maps" data-status="warn|4 words waiting from 3 carriers · 212 rows held · at least 3 agencies affected" data-acts="">
+    <div data-body>
+      <div class="kpis"><div class="kpi"><small>Words waiting</small><b>4</b><div class="d">3 carriers</div></div><div class="kpi"><small>Rows held</small><b>212</b></div><div class="kpi"><small>Agencies affected</small><b>3+</b></div><div class="kpi"><small>Mappings approved</small><b>148</b><div class="d">2 proposed</div></div></div>
+      <div class="card" style="flex:1;min-height:0"><div class="card-h"><b>Waiting to be mapped</b><div class="r tools"><span class="input ph">Search word… <span class="new" style="margin:0">New</span></span><span class="fchip">Carrier ▾ <span class="new" style="margin:0">New</span></span></div></div>
+        <table><thead><tr><th>Carrier</th><th>File type</th><th>Word</th><th class="r">Rows held</th><th>Agencies</th><th>First seen</th><th>Maps to</th></tr></thead><tbody><tr><td><b>Americo</b></td><td>Policies</td><td>LAPSE·PEND</td><td class="r">180</td><td>2</td><td>Nov 12</td><td><div class="input ph" style="height:30px">Pick a status…</div></td></tr></tbody></table></div>
+    </div>
+  </div>
+  <div class="addlist"><div class="keep"><b>Kept from today</b><ul><li>Tiles; Waiting to be mapped (map → approves and re-processes held rows); Status map with Approve / Discard for proposals; approved mappings stay locked by design</li></ul></div><div><b>New (needs nothing)</b><ul><li>Search and carrier filter on both tables</li></ul></div></div>
+
+  <div class="sec"><h2>12 · Field maps</h2><span>Same tiles, table and review; gains search, Reject a draft, Retire a map, and the misses that sent a map to review.</span></div>
+  <div class="app bl" data-step="fields" data-title="Field maps" data-status="warn|2 drafts in review · 1 published map needs review after misses" data-acts="<span class='btn p'>Propose a map</span>">
+    <div data-body>
+      <div class="kpis"><div class="kpi"><small>Carrier forms</small><b>11</b></div><div class="kpi"><small>Published</small><b>9</b></div><div class="kpi"><small>Drafts</small><b>2</b><div class="d">2 in review</div></div><div class="kpi"><small>Needs review</small><b>1</b></div></div>
+      <div class="card" style="flex:1;min-height:0"><div class="card-h"><div class="tools"><span class="input ph">Search carrier or product… <span class="new" style="margin:0">New</span></span><span class="fchip">Needs review</span></div></div>
+        <table><thead><tr><th>Carrier</th><th>Product</th><th>Published</th><th>Draft</th><th>Last filled</th><th>Misses · 30 days <span class="new" style="margin:0">New</span></th><th></th></tr></thead><tbody><tr><td><b>Americo</b></td><td>Final Expense</td><td>v4 <span class="chip warn">Needs review</span></td><td>v5</td><td>2 days ago</td><td>7</td><td><span class="btn o sm">Review</span></td></tr></tbody></table></div>
+    </div>
+  </div>
+  <div class="addlist"><div class="keep"><b>Kept from today</b><ul><li>Tiles; one row per carrier + product sorted drafts and needs-review first; the review editor (risky entries first, confidence, verified, add field, page patterns, open the carrier form), Save draft, Publish (blocked while sensitive entries are unverified), Start next version, Propose a map; the sample preview mode</li></ul></div><div><b>New</b><ul><li>Search and filter (needs nothing)</li><li>Misses in the last 30 days, from the map-miss records (needs nothing)</li><li>Reject a draft, Retire a map <span class="tag-mig">needs a migration</span> if the map status can't express them today</li></ul></div></div>
+
+  <!-- 13 · Portal guidance + Servicing -->
+  <div class="sec"><h2>13 · Portal guidance and Servicing instructions</h2><span>Both stay as inline-editable tables. Servicing gains a cross-carrier grid (carriers × the four request types), search and "missing only", instead of one carrier at a time from a dropdown.</span></div>
+  <div class="app bl" data-step="servicing" data-title="Servicing instructions" data-status="warn|5 of 14 carriers have instructions for all four requests · 7 have none" data-acts="">
+    <div data-body>
+      <div class="card" style="flex:1;min-height:0"><div class="card-h"><div class="tools"><span class="input ph">Search carrier… <span class="new" style="margin:0">New</span></span><span class="fchip on">Missing only <span class="new" style="margin:0">New</span></span></div></div>
+        <table class="cov"><thead><tr><th>Carrier</th><th>Draft date</th><th>Payment method</th><th>Bill to draft</th><th>Address</th><th></th></tr></thead><tbody>
+          <tr><td><b>Americo</b></td><td><span class="dot no"></span></td><td><span class="dot no"></span></td><td><span class="dot no"></span></td><td><span class="dot no"></span></td><td class="go">›</td></tr>
+          <tr><td><b>Mutual of Omaha</b></td><td><span class="dot"></span></td><td><span class="dot"></span></td><td><span class="dot no"></span></td><td><span class="dot no"></span></td><td class="go">›</td></tr>
+        </tbody></table>
+        <div class="card-f small muted">A carrier opens the same four-row editor as today (how, where, they ask for, client authorises, form, notes), in a sheet.</div>
+      </div>
+    </div>
+  </div>
+  <div class="addlist"><div class="keep"><b>Kept from today</b><ul><li>Portal guidance: tiles, the inline table (where in the portal, report name, format, notes), per-row Save, search, "only missing"</li><li>Servicing: tiles; the four request types per carrier with how / where / they ask for / client authorises / form / notes and Save</li></ul></div><div><b>New (needs nothing)</b><ul><li>Servicing coverage grid, search, missing only; the editor as a sheet</li></ul></div></div>
+
+  <!-- 14 · Fact reports -->
+  <div class="sec"><h2>14 · Fact reports</h2><span>Same two tables and review. A report opens a sheet; "Fix it" now also links to the carrier record where the fact can be edited any time.</span></div>
+  <div class="app bl" data-step="reports" data-title="Fact reports" data-status="warn|3 waiting from 2 agencies · oldest 6 days" data-acts="">
+    <div data-body>
+      <div class="kpis"><div class="kpi"><small>Waiting</small><b>3</b><div class="d">2 carriers</div></div><div class="kpi"><small>Agencies waiting</small><b>2</b></div><div class="kpi"><small>Oldest waiting</small><b>6 days</b></div><div class="kpi"><small>Closed</small><b>41</b><div class="d">latest 100</div></div></div>
+      <div class="card" style="flex:1;min-height:0"><div class="card-h"><div class="tools"><span class="fchip on">Waiting · 3</span><span class="fchip">Closed · 41</span><span class="input ph">Search carrier… <span class="new" style="margin:0">New</span></span></div></div>
+        <table><thead><tr><th>Carrier</th><th>Fact</th><th>Insurvas has</th><th>They say</th><th>Agency</th><th>Reported</th><th></th></tr></thead><tbody><tr><td><b>Americo</b></td><td>Portal address</td><td>agent.americo.com</td><td>agentportal.americo.com</td><td>Ellery &amp; Fields</td><td>6 days ago</td><td><span class="btn o sm">Review</span></td></tr></tbody></table></div>
+    </div>
+  </div>
+  <div class="addlist"><div class="keep"><b>Kept from today</b><ul><li>Tiles; Waiting (oldest first) and Closed tables; review: Fix it / Decline, new value for the three editable facts, note the agency sees</li></ul></div><div><b>New (needs nothing)</b><ul><li>Lenses and search; report opens a sheet; link to the carrier record</li></ul></div></div>
+
+  <div class="sec"><h2>15 · Roles, loading, empty, error</h2><span>Each page streams on its own; the rail and title show at once.</span></div>
+  <div class="states">
+    <div class="card"><div class="card-h"><b>Rail · platform config</b></div><div class="card-b small">Workspace · Features (switches read-only) · Products · Templates · every Carrier page<br><span class="muted">No Plans, no Add-ons (as today). Billing ops and support: no Catalog.</span></div></div>
+    <div class="card"><div class="card-h"><b>Status maps</b></div><div class="empty"><span class="ic">✓</span><b>No words waiting</b><p>New status words from carrier files appear here before any row is held for long.</p></div></div>
+    <div class="card"><div class="card-h"><b>Carrier record</b></div><div class="empty"><b>Couldn't load this carrier's layouts</b><p>The other tabs still work.</p><span class="btn o sm">Try again</span></div></div>
+  </div>
+
+  </div>
+
+  <div class="sec"><h2>What gets built</h2><span>Nothing until you say so</span></div>
+  <div class="pick"><div class="rec"><b>Catalog area as drawn</b><ul><li>Hover menu, rail and a Catalog workspace, like Billing</li><li>All 13 pages kept, same content and actions, in the new frame; records as sheets</li><li>New: the carrier record page gathering the eight carrier facets, with portal address, reference pattern and bank descriptor editable</li><li>New: plan versions with what changed and who's on each, compare plans, "granted by" for features, links behind every count, search where it's missing, servicing coverage grid</li><li>Only Reject / Retire for field maps may need a migration (paste script for you)</li></ul></div></div>
+</div>
+<script>
+// Board-only: draw the shared shell (top bar, icon menu, crumb, title, status, step rail) around each screen's body.
+(function(){
+  const STEPS=[["h","Overview"],["overview","Workspace","18","w"],["h","What we sell"],["plans","Plans","",""],["addons","Add-ons","",""],["features","Features","1","b"],["h","Insurance"],["products","Products","",""],["templates","Templates","2",""],["h","Carriers"],["carriers","Carriers","",""],["rules","Carrier rules","9",""],["layouts","Layout maps","",""],["status","Status maps","4","w"],["fields","Field maps","2","w"],["guide","Portal guidance","",""],["servicing","Servicing instructions","",""],["reports","Fact reports","3","w"]];
+  document.querySelectorAll(".app.bl").forEach(app=>{
+    const step=app.dataset.step, body=app.querySelector("[data-body]");
+    const title=app.dataset.title||"Catalog", st=(app.dataset.status||"ok|").split("|");
+    const rail=STEPS.map(s=>{ if(s[0]==="h") return `<h6>${s[1]}</h6>`; const c=s[2]?`<span class="c ${s[3]}">${s[2]}</span>`:""; return `<a class="${s[0]===step?"on":""}"><i>${s[1].charAt(0)}</i>${s[1]}${c}</a>`; }).join("");
+    const top=`<div class="top"><span class="logo"></span><span class="search">Search customers, users, invoices…</span><span class="sp"></span><span class="me">QA</span></div><div class="icons"><i></i><i></i><i></i><i class="on"></i><i></i><i></i></div>`;
+    const page=document.createElement("div"); page.className="page";
+    page.innerHTML=`<div class="crumb">Catalog${step==="overview"?"":" › "+title}</div><div class="head"><h3>${title}</h3><div class="acts">${app.dataset.acts||""}</div></div><div class="status ${st[0]}"><span class="dot"></span>${st[1]||""}</div><div class="frame"><nav class="steprail">${rail}</nav><div class="body2"></div></div>`;
+    page.querySelector(".body2").append(...body.childNodes); body.remove();
+    const rest=[...app.children]; app.innerHTML=top; app.append(page,...rest);
+  });
+})();
+</script>
+<!--kit-js-->
+<script>
+/* Settings round 8 board kit: option (A/B/C) and theme switching. Keys 1–3 pick an option, L / D the theme.
+   Buttons: <button data-opt="A">, <button data-theme="light">. The body carries class light|dark and data-opt. */
+(function () {
+  var body = document.body;
+  if (!body.dataset.opt) body.dataset.opt = "A";
+  if (!/\b(light|dark)\b/.test(body.className)) body.classList.add("light");
+  function sync() {
+    document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.optBtn === body.dataset.opt)); });
+    document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(body.classList.contains(b.dataset.themeBtn))); });
+  }
+  function opt(v) { body.dataset.opt = v; sync(); }
+  function theme(v) { body.classList.remove("light", "dark"); body.classList.add(v); sync(); }
+  document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.addEventListener("click", function () { opt(b.dataset.optBtn); }); });
+  document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.addEventListener("click", function () { theme(b.dataset.themeBtn); }); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "1") opt("A"); if (e.key === "2") opt("B"); if (e.key === "3") opt("C");
+    if (e.key === "l" || e.key === "L") theme("light"); if (e.key === "d" || e.key === "D") theme("dark");
+  });
+  sync();
+})();
+
+</script>
+<!--/kit-js-->
+</body>
+</html>

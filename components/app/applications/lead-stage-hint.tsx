@@ -49,7 +49,7 @@ export function LeadStageHint({ leadId, boardStageId, readOnly = false, onReconc
   }
 
   return (
-    <div role="status" className="flex flex-wrap items-center gap-2 border-b border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-2 text-sm text-[var(--warning-ink)]">
+    <div role="status" className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2 text-sm font-medium text-[var(--warning-ink)]">
       <span className="min-w-0 flex-1">Application is at {state.applicationLabel ?? "another stage"}, board says {state.boardStageName ?? "Unmapped"}</span>
       <Button type="button" variant="outline" size="sm" onClick={() => void reconcile()} disabled={readOnly || busy} title={readOnly ? "Read-only — your plan does not allow changes" : "Move the card to the application's stage"}>Reconcile</Button>
     </div>

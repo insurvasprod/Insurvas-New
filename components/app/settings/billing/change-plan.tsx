@@ -3,7 +3,7 @@
 import { ExternalLink } from "lucide-react";
 import Link from "next/link";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FactTable } from "@/components/ui/fact-table";
 import { Sheet } from "@/components/ui/sheet";
@@ -11,6 +11,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { BILLING_CYCLE_LABELS, formatCentsAsCurrency } from "@/lib/money";
 
 import { askSupportHref, day, n, short, type Impact, type View } from "./types";
+import { cn } from "@/lib/utils";
 
 /** What the subscription is billed at, besides the plan: its add-ons, named with their prices. */
 function addonLine(view: View) {
@@ -81,7 +82,7 @@ export function ImpactSheet({ view, impact, busy, onClose, onConfirm }: {
             <div key={l.key} className="flex items-center gap-3 border-b border-[var(--border)] py-2.5 text-sm last:border-b-0">
               <span className="font-medium text-[var(--ink)]">{l.label}</span>
               <span className="min-w-0 truncate text-xs text-[var(--muted)]">{n(l.used)} in use · {impact.plan.name} allows {n(l.newLimit)}</span>
-              {l.key === "max_seats" ? <Link href="/app/settings#team-access" className="ml-auto shrink-0 text-xs font-semibold text-[var(--accent-ink)] underline-offset-2 hover:underline">Team &amp; access ›</Link> : null}
+              {l.key === "max_seats" ? <Link href="/app/settings#team-access" className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline ml-auto shrink-0")}>Team &amp; Access</Link> : null}
             </div>
           ))}
         </div>

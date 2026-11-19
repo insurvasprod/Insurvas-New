@@ -29,6 +29,15 @@ export function effectiveCloser(
   return filters.closerId ?? null;
 }
 
+/**
+ * Whether the pipeline read model also keeps referrals from the partner's own tracked links, which
+ * have no submitter (20261119100000). An admin sees the organisation's leads, so yes; a partner user
+ * sees only what they submitted, so never.
+ */
+export function includeLinkReferrals(access: PartnerLeadAccess | undefined): boolean {
+  return access?.role === "partner_admin";
+}
+
 /** Whether a partner user may open this record: only one they submitted themselves. */
 export function canSeeLead(
   access: PartnerLeadAccess | undefined,

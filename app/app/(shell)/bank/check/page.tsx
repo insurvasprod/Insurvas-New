@@ -11,6 +11,7 @@ import { CheckDropZones } from "@/components/app/accounting/bank-check";
 import { RecentPayments } from "@/components/app/accounting/bank-results";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/page-states";
+import { StreamSection } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
 
 /**
@@ -26,20 +27,18 @@ export default async function BankCheckPage() {
   if (!actAsPage(guard, ["owner", "bookkeeper"])) return <RoleGateNotice featureLabel="Bank deposits" detail="Only owners and bookkeepers can see the agency's bank lines." />;
   const tenantId = guard.context.tenantId;
   const readOnly = guard.entitlement.access === "read_only";
-  let data: { accounts: Awaited<ReturnType<typeof listAccounts>>; carriers: Awaited<ReturnType<typeof fileCarrierChoices>>; recent: Awaited<ReturnType<typeof paymentResults>> } | null = null;
-  let problem: string | null = null;
-  try {
-    const today = new Date().toISOString().slice(0, 10);
-    const [accounts, carriers, recent] = await Promise.all([listAccounts(tenantId), fileCarrierChoices(tenantId), paymentResults(tenantId, { since: addDays(today, -30), today })]);
-    data = { accounts, carriers, recent };
-  } catch (error) {
-    if (!(error instanceof BankError)) throw error;
-    problem = error.message;
-  }
-  if (!data) return <AccountingPage step="bank" title="Check a carrier payment"><TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard></AccountingPage>;
-  const { accounts, carriers, recent } = data;
-  const from = paymentsFrom("30", "all");
-  const rows = [...recent.rows].sort((a, b) => b.statementDate.localeCompare(a.statementDate)).map((r) => ({ id: r.id, carrierName: r.carrierName, statementDate: r.statementDate, paidCents: r.paidCents, verdict: r.verdict, missingCents: r.missingCents, shortCents: r.shortCents, href: paymentHref(r.id, from) }));
+  // Frame first (UI-CONSISTENCY §7a): the title and See the results draw at once; the drop zones and the last 30 days
+  // stream in under them, as one block.
+  const read: CheckRead = (async () => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const [accounts, carriers, recent] = await Promise.all([listAccounts(tenantId), fileCarrierChoices(tenantId), paymentResults(tenantId, { since: addDays(today, -30), today })]);
+      return { data: { accounts, carriers, recent }, problem: null };
+    } catch (error) {
+      if (!(error instanceof BankError)) throw error;
+      return { data: null, problem: error.message };
+    }
+  })();
   return (
     <AccountingPage
       step="bank"
@@ -47,10 +46,25 @@ export default async function BankCheckPage() {
       info="Drop the carrier's commission file and your bank statement. Insurvas links what the carrier said it paid to what landed, then checks every policy against your rate card. Either file can come on its own."
       actions={<Button asChild><Link href="/app/bank?view=payments&period=30">See the results</Link></Button>}
     >
-      <div className="flex flex-col gap-4">
-        <CheckDropZones accounts={accounts} carriers={carriers} readOnly={readOnly} bankThrough={recent.bankThrough} />
-        <RecentPayments rows={rows} />
-      </div>
+      <StreamSection shape="cards">
+        <CheckBody read={read} readOnly={readOnly} />
+      </StreamSection>
     </AccountingPage>
+  );
+}
+
+type CheckRead = Promise<{ data: { accounts: Awaited<ReturnType<typeof listAccounts>>; carriers: Awaited<ReturnType<typeof fileCarrierChoices>>; recent: Awaited<ReturnType<typeof paymentResults>> } | null; problem: string | null }>;
+
+async function CheckBody({ read, readOnly }: { read: CheckRead; readOnly: boolean }) {
+  const { data, problem } = await read;
+  if (!data) return <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>;
+  const { accounts, carriers, recent } = data;
+  const from = paymentsFrom("30", "all");
+  const rows = [...recent.rows].sort((a, b) => b.statementDate.localeCompare(a.statementDate)).map((r) => ({ id: r.id, carrierName: r.carrierName, statementDate: r.statementDate, paidCents: r.paidCents, verdict: r.verdict, missingCents: r.missingCents, shortCents: r.shortCents, href: paymentHref(r.id, from) }));
+  return (
+    <div className="flex flex-col gap-4">
+      <CheckDropZones accounts={accounts} carriers={carriers} readOnly={readOnly} bankThrough={recent.bankThrough} />
+      <RecentPayments rows={rows} />
+    </div>
   );
 }

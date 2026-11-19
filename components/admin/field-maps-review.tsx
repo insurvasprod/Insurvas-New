@@ -1,53 +1,57 @@
 "use client";
 
 /**
- * /admin/field-maps — staff review of the platform field maps (board l3-ov-map-review, LA-3.13):
- * where each carrier's application form keeps each of our fields. One row per carrier and product,
- * with its published version and the draft waiting behind it; a row opens the review dialog. Reads
- * and writes /api/admin/field-maps; with `sample` (the page's `?preview=sample`) it edits the design
- * fixtures locally and saves nothing.
+ * /admin/field-maps — staff review of the platform field maps (board l3-ov-map-review, LA-3.13), inside the Catalog
+ * frame (admin round 1, catalog screen 12): where each carrier's application form keeps each of our fields. One row
+ * per carrier and product, with its published version, the draft waiting behind it, when it last filled and its
+ * misses in the last 30 days; drafts and flagged maps first. A row opens the review editor as a wide right sheet
+ * (`?map=<id>`). Search (`q`), "Needs review" (`review=1`) and a carrier (`carrier=<code>`) are in the URL. Reads
+ * and writes /api/admin/field-maps; with `sample` (the page's `?preview=sample`) it edits the design fixtures
+ * locally and saves nothing.
  *
- * Staff verify entries and publish (the approver is recorded in approved_by_admin /
- * verified_by_admin — 20260926102510; until it is applied the API refuses with a plain sentence).
- * Publishing is refused while an SSN or bank / card entry is unverified — the database's own message
- * is shown. A published map is frozen; "Start version N + 1" makes the next draft.
- *
- * Not built from the board: "Reject the draft" — the field-map API has no reject (a draft can only
- * be saved, published or superseded); see the build report.
+ * Staff verify entries and publish (the approver is recorded in approved_by_admin / verified_by_admin —
+ * 20260926102510; until it is applied the API refuses with a plain sentence). Publishing is refused while an SSN or
+ * bank / card entry is unverified — the database's own message is shown. A published map is frozen; "Start version
+ * N + 1" makes the next draft. A draft can be rejected and a published map retired: both are moves to `retired` the
+ * status rules already allow (a rejected draft is one that was never approved), so no migration was needed.
  */
 
 import { useCallback, useMemo, useState } from "react";
-import { Check, ExternalLink, Plus, X } from "lucide-react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { notify } from "@/lib/notify";
 
-import { AdminPageHeader } from "@/components/admin/page-header";
+import { FmapReviewSheet, isRejected } from "@/components/admin/catalog/fmap-review-sheet";
+import { BillingStatusLine } from "@/components/admin/billing/rev-status-line";
+import { carrierHref } from "@/components/admin/layout-maps/shared";
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
+import { ActiveFilters, DataToolbar, RefreshButton, ToolbarSearch, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { EmptyState } from "@/components/ui/page-states";
+import { patchQuery } from "@/components/admin/catalog/layout-url";
+import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
-import { Callout, control, Field } from "@/components/app/settings/primitives";
+import { control, Field } from "@/components/app/settings/primitives";
 import { WithReason } from "@/components/app/settings/sales/shared";
 import { useSampleRefresh } from "@/components/app/applications/applications-list";
-import { SampleDataNotice } from "@/components/app/applications/parts";
 import { isSensitiveKey } from "@/lib/applications/constants";
 import { EDITABLE_FIELD_MAP_STATUSES, FILLABLE_FIELD_MAP_STATUSES } from "@/lib/extension/constants";
-import { CANONICAL_OPTIONS, PAGE_LABEL, fieldLabel, listOf, mapRequest, newEntry, savePayload } from "@/lib/extension/mapEditing";
-import type { FieldMapCarrierOption, FieldMapEntryView, FieldMapView } from "@/lib/extension/types";
+import { mapRequest, savePayload } from "@/lib/extension/mapEditing";
+import type { FieldMapCarrierOption, FieldMapView } from "@/lib/extension/types";
 import { cn } from "@/lib/utils";
 
 const SAMPLE_NOTE = { detail: "Sample data — nothing is saved." };
+const MISS_WINDOW_MS = 30 * 86_400_000;
 const errorText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 const stamp = (iso: string) => new Date(iso).toLocaleString("en-US", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
-const shortDay = (iso: string) => new Date(iso).toLocaleDateString("en-US", { day: "numeric", month: "short" });
 const same = (a: FieldMapView, b: FieldMapView | undefined) => JSON.stringify(a.entries) === JSON.stringify(b?.entries) && JSON.stringify(a.steps) === JSON.stringify(b?.steps);
 
-/** One row of the board: a carrier + product, its live version and the draft behind it. */
-type Group = { key: string; carrierName: string; productLabel: string; live: FieldMapView | null; draft: FieldMapView | null; lastFilled: string | null };
+/** One row of the board: a carrier + product, its live version, the draft behind it, and its newest version of any kind. */
+type Group = { key: string; carrierId: string; carrierName: string; productLabel: string; live: FieldMapView | null; draft: FieldMapView | null; newest: FieldMapView; mapIds: string[]; lastFilled: string | null };
 
 function groups(maps: FieldMapView[], lastFilled: Record<string, string>): Group[] {
   const by = new Map<string, FieldMapView[]>();
@@ -57,25 +61,69 @@ function groups(maps: FieldMapView[], lastFilled: Record<string, string>): Group
     const live = sorted.find((m) => FILLABLE_FIELD_MAP_STATUSES.includes(m.status)) ?? null;
     const draft = sorted.find((m) => EDITABLE_FIELD_MAP_STATUSES.includes(m.status)) ?? null;
     const filled = list.map((m) => lastFilled[m.id]).filter(Boolean).sort().pop() ?? null;
-    return { key, carrierName: sorted[0].carrierName, productLabel: sorted[0].productLabel, live, draft, lastFilled: filled };
-  }).sort((a, b) => Number(Boolean(b.draft) || b.live?.status === "needs_review") - Number(Boolean(a.draft) || a.live?.status === "needs_review") || a.carrierName.localeCompare(b.carrierName));
+    return { key, carrierId: sorted[0].carrierId, carrierName: sorted[0].carrierName, productLabel: sorted[0].productLabel, live, draft, newest: sorted[0], mapIds: list.map((m) => m.id), lastFilled: filled };
+  }).sort((a, b) => Number(needsLook(b)) - Number(needsLook(a)) || a.carrierName.localeCompare(b.carrierName));
 }
+const needsLook = (g: Group) => Boolean(g.draft) || g.live?.status === "needs_review";
 
-export function FieldMapsReview({ initialMaps, carriers, sample, notice, lastFilled = {} }: { initialMaps: FieldMapView[]; carriers: FieldMapCarrierOption[]; sample: boolean; notice?: string; lastFilled?: Record<string, string> }) {
+export function FieldMapsReview({ initialMaps, carriers, sample, pending = false, lastFilled = {}, misses30, carrierCodes = {} }: {
+  initialMaps: FieldMapView[];
+  carriers: FieldMapCarrierOption[];
+  sample: boolean;
+  /** The field-map tables are not there yet. */
+  pending?: boolean;
+  lastFilled?: Record<string, string>;
+  /** map_miss events per map in the last 30 days; null when they could not be read; undefined counts them from each map's misses. */
+  misses30?: Record<string, number> | null;
+  /** carrier id → code, for `?carrier=<code>` and the link to the carrier's record. */
+  carrierCodes?: Record<string, string>;
+}) {
+  const router = useRouter();
+  const params = useSearchParams();
   const [maps, setMaps] = useState(initialMaps);
   // What the server last said, per map: an edit is "unsaved" against this.
   const [saved, setSaved] = useState<Record<string, FieldMapView>>(() => Object.fromEntries(initialMaps.map((m) => [m.id, m])));
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [now] = useState(() => Date.now());
   const sampleRefresh = useSampleRefresh();
 
+  const query = (params.get("q") ?? "").trim().toLowerCase();
+  // `?status=review` is the Catalog workspace's spelling of the same filter.
+  const onlyReview = params.get("review") === "1" || params.get("status") === "review";
+  const carrierCode = (params.get("carrier") ?? "").toLowerCase();
+  const page = Math.max(1, Number(params.get("page")) || 1);
+  const selectedId = params.get("map");
+  const creating = params.get("propose") === "1";
+  const set = (patch: Record<string, string | null>) => patchQuery(patch);
+  const select = (id: string | null) => set({ map: id, propose: null });
+
   const rows = useMemo(() => groups(maps, lastFilled), [maps, lastFilled]);
+  const codeOf = (carrierId: string) => carrierCodes[carrierId] ?? "";
+  const missesOf = (g: Group): number | null => {
+    if (misses30 === null) return null;
+    if (misses30) return g.mapIds.reduce((sum, id) => sum + (misses30[id] ?? 0), 0);
+    return maps.filter((m) => g.mapIds.includes(m.id)).reduce((sum, m) => sum + m.misses.filter((x) => now - Date.parse(x.at) <= MISS_WINDOW_MS).length, 0);
+  };
+  const focusName = carrierCode ? rows.find((g) => codeOf(g.carrierId).toLowerCase() === carrierCode)?.carrierName ?? carriers.find((c) => codeOf(c.id).toLowerCase() === carrierCode)?.name ?? params.get("carrier") : null;
+  const filtered = rows.filter((g) => {
+    if (onlyReview && !needsLook(g)) return false;
+    if (carrierCode && codeOf(g.carrierId).toLowerCase() !== carrierCode) return false;
+    return !query || `${g.carrierName} ${g.productLabel}`.toLowerCase().includes(query);
+  });
   const pageSize = useFittingPageSize(420, 45);
-  const { current, rows: pageRows } = paginate(rows, page, pageSize);
+  const { current, rows: pageRows } = paginate(filtered, page, pageSize);
   const selected = maps.find((map) => map.id === selectedId) ?? null;
+  const selectedGroup = selected ? rows.find((g) => g.mapIds.includes(selected.id)) ?? null : null;
+
+  const figures = {
+    forms: rows.length,
+    published: rows.filter((g) => g.live).length,
+    drafts: rows.filter((g) => g.draft).length,
+    inReview: rows.filter((g) => g.draft?.status === "in_review").length,
+    flagged: rows.filter((g) => g.live?.status === "needs_review").length,
+    look: rows.filter(needsLook).length,
+  };
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -86,12 +134,14 @@ export function FieldMapsReview({ initialMaps, carriers, sample, notice, lastFil
       // Unsaved edits on the open map survive a refresh.
       setMaps((list) => (data.maps as FieldMapView[]).map((m) => list.find((x) => x.id === m.id && x.id === selectedId && !same(x, saved[x.id])) ?? m));
       setSaved(Object.fromEntries((data.maps as FieldMapView[]).map((m) => [m.id, m])));
+      // Last filled and the miss counts are the server page's.
+      router.refresh();
     } catch (e) {
       notify.block(errorText(e, "Field maps could not be loaded."));
     } finally {
       setLoading(false);
     }
-  }, [saved, selectedId]);
+  }, [saved, selectedId, router]);
 
   function accept(map: FieldMapView) {
     setMaps((list) => [map, ...list.filter((m) => m.id !== map.id)]);
@@ -124,16 +174,16 @@ export function FieldMapsReview({ initialMaps, carriers, sample, notice, lastFil
       const version = Math.max(...maps.filter((m) => m.carrierName === map.carrierName && m.productLabel === map.productLabel).map((m) => m.version)) + 1;
       const id = `${map.id.replace(/-\d+$/, "")}-${version}-${Date.now()}`;
       // Selectors carry over; every sensitive entry must be verified again before the new version publishes.
-      const next: FieldMapView = { ...map, id, version, status: "draft", misses: [], updatedAt: new Date().toISOString(), entries: map.entries.map((entry, i) => ({ ...entry, id: `${id}-e${i + 1}`, verified: isSensitiveKey(entry.fieldKey) ? false : entry.verified })) };
+      const next: FieldMapView = { ...map, id, version, status: "draft", approvedAt: null, misses: [], updatedAt: new Date().toISOString(), entries: map.entries.map((entry, i) => ({ ...entry, id: `${id}-e${i + 1}`, verified: isSensitiveKey(entry.fieldKey) ? false : entry.verified })) };
       accept(next);
-      setSelectedId(id);
+      select(id);
       return notify.done(`Draft v${version} started.`, SAMPLE_NOTE);
     }
     setBusy(true);
     try {
       const next = await mapRequest(`/api/admin/field-maps/${map.id}/versions`, { method: "POST" });
       accept(next);
-      setSelectedId(next.id);
+      select(next.id);
       notify.done(`Draft v${next.version} started.`);
     } catch (e) {
       notify.block(errorText(e, "Couldn't start a new version."));
@@ -165,299 +215,156 @@ export function FieldMapsReview({ initialMaps, carriers, sample, notice, lastFil
     }
   }
 
+  /** Reject a draft or retire a live map: both end in `retired` (a rejected one was never approved). */
+  async function close(map: FieldMapView, how: "reject" | "retire", reason: string): Promise<boolean> {
+    const what = how === "reject" ? `Draft v${map.version} rejected.` : `${map.carrierName} · ${map.productLabel} v${map.version} retired.`;
+    if (sample) {
+      patchMap(map.id, (m) => ({ ...m, status: "retired", ...(how === "reject" ? { approvedAt: null } : {}) }));
+      notify.done(what, SAMPLE_NOTE);
+      return true;
+    }
+    setBusy(true);
+    try {
+      accept(await mapRequest(`/api/admin/field-maps/${map.id}/${how}`, { method: "POST", body: JSON.stringify({ reason: reason || null }) }));
+      notify.done(what);
+      void reload();
+      return true;
+    } catch (e) {
+      notify.block(errorText(e, how === "reject" ? "Couldn't reject the draft." : "Couldn't retire the map."));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function create(input: { carrierId: string; productId: string | null; origin: string }) {
     if (sample) {
       const carrier = carriers.find((c) => c.id === input.carrierId);
       const id = `fm-new-${Date.now()}`;
       accept({ id, carrierId: input.carrierId, carrierName: carrier?.name ?? input.carrierId, productId: input.productId, productLabel: input.productId ?? "All products", version: 1, status: "draft", origin: input.origin, platform: true, proposalSource: "manual", steps: [], entries: [], misses: [], updatedAt: new Date().toISOString(), approvedAt: null });
-      setSelectedId(id);
-      setCreating(false);
+      select(id);
       return;
     }
     try {
       const map = await mapRequest("/api/admin/field-maps", { method: "POST", body: JSON.stringify({ carrier_id: input.carrierId, carrier_product_id: input.productId, origin: input.origin }) });
       accept(map);
-      setSelectedId(map.id);
-      setCreating(false);
+      select(map.id);
     } catch (e) {
       notify.block(errorText(e, "Couldn't create the map."));
     }
   }
 
+  const carrierFilter: ActiveFilter[] = carrierCode ? [{ key: "carrier", label: "Carrier", value: focusName ?? carrierCode, onRemove: () => set({ carrier: null, page: null }) }] : [];
+  const proposeFor = carrierCode ? carriers.find((c) => codeOf(c.id).toLowerCase() === carrierCode)?.id : undefined;
+
   return (
-    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <AdminPageHeader
-        title="Field maps"
-        subtitle="One published map per carrier and product. A draft never fills anything."
-        actions={
-          <WithReason reason={notice ? "Field maps aren't set up yet." : null}>
-            <Button type="button" variant="outline" onClick={() => setCreating(true)} disabled={Boolean(notice)}><Plus aria-hidden="true" />Propose a map</Button>
-          </WithReason>
-        }
-      />
-      {sample && <SampleDataNotice />}
-      {notice && <Callout tone="warning" title={notice} />}
-      {!notice && (
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-4">
+      {pending ? (
+        <BillingStatusLine tone="bad" lead={{ text: "Field maps need a database update" }} parts={["apply the latest migrations to review them"]} />
+      ) : misses30 === null || sample ? (
+        <BillingStatusLine
+          tone={misses30 === null ? "bad" : "warn"}
+          lead={{ text: misses30 === null ? "The misses could not be read" : "Sample data — nothing is saved" }}
+          parts={[misses30 === null && sample ? "sample data — nothing is saved" : null]}
+        />
+      ) : null}
+
+      {!pending && (
         <StatStrip label="Field maps">
-          <StatTile label="Carrier forms" value={rows.length.toLocaleString("en-US")} footnote="carrier and product pairs" />
-          <StatTile label="Published" value={rows.filter((g) => g.live).length.toLocaleString("en-US")} footnote="filling applications" />
-          <StatTile
-            label="Drafts"
-            value={rows.filter((g) => g.draft).length.toLocaleString("en-US")}
-            footnote={`${rows.filter((g) => g.draft?.status === "in_review").length.toLocaleString("en-US")} in review`}
-          />
-          <StatTile
-            label="Needs review"
-            labelTitle="A published map whose fill missed a field"
-            value={rows.filter((g) => g.live?.status === "needs_review").length.toLocaleString("en-US")}
-            valueTone={rows.some((g) => g.live?.status === "needs_review") ? "warning" : undefined}
-            footnote="a fill missed a field"
-          />
+          <StatTile label="Carrier forms" value={figures.forms.toLocaleString("en-US")} footnote="carrier and product pairs" />
+          <StatTile label="Published" value={figures.published.toLocaleString("en-US")} footnote="filling applications" />
+          <StatTile label="Drafts" value={figures.drafts.toLocaleString("en-US")} footnote={`${figures.inReview.toLocaleString("en-US")} in review`} href="/admin/field-maps?review=1" />
+          <StatTile label="Needs review" labelTitle="A published map whose fill missed a field" value={figures.flagged.toLocaleString("en-US")} footnote="a fill missed a field" href="/admin/field-maps?review=1" />
         </StatStrip>
       )}
 
       <TableCard
-        toolbar={<DataToolbar actions={<RefreshButton onClick={sample ? sampleRefresh.refresh : reload} refreshing={sample ? sampleRefresh.refreshing : loading} />} />}
-        footer={<Pager page={current} pageSize={pageSize} total={rows.length} noun="carrier forms" onPage={setPage} suffix="drafts first" />}
+        className="min-w-0"
+        toolbar={
+          <DataToolbar actions={<RefreshButton onClick={sample ? sampleRefresh.refresh : () => void reload()} refreshing={sample ? sampleRefresh.refreshing : loading} />}>
+            <ToolbarSearch value={params.get("q") ?? ""} onChange={(next) => set({ q: next || null, page: null })} placeholder="Search carrier or product" />
+            <ToggleChip selected={onlyReview} count={figures.look} onClick={() => set({ review: onlyReview ? null : "1", status: null, page: null })}>Needs review</ToggleChip>
+            <ActiveFilters inline filters={carrierFilter} onClear={() => set({ carrier: null, q: null, review: null, status: null, page: null })} />
+          </DataToolbar>
+        }
+        footer={filtered.length > 0 ? <Pager page={current} pageSize={pageSize} total={filtered.length} noun="carrier forms" onPage={(next) => set({ page: next > 1 ? String(next) : null })} suffix="drafts and flagged first" /> : undefined}
       >
         {rows.length === 0
-          ? <EmptyState title="No field maps yet" hint="A map tells the extension which box on a carrier's form takes each of our fields. Start one with Propose a map." />
-          : <table className="portal-lead-table w-full min-w-[860px] text-left text-sm">
-              <thead>
-                <tr>
-                  <th>Carrier</th>
-                  <th className="w-[190px]">Product</th>
-                  <th className="w-[140px]">Published</th>
-                  <th className="w-[150px]">Draft</th>
-                  <th className="w-[140px]">Last filled</th>
-                  <th className="w-[100px] text-right"><span className="sr-only">Review</span></th>
-                </tr>
-              </thead>
-              <tbody className="m-seq">
-                {pageRows.map((g) => {
-                  const target = g.draft ?? g.live;
-                  return (
-                    <tr key={g.key} className={cn("m-row", target && target.id === selectedId && "bg-[var(--primary-soft)]")}>
-                      <td className="font-semibold text-[var(--ink)]">{g.carrierName}</td>
-                      <td>{g.productLabel}</td>
-                      <td>
-                        {g.live
-                          ? <span className="inline-flex flex-wrap items-center gap-2">v{g.live.version}{g.live.status === "needs_review" && <StatusChip tone="action">Needs review</StatusChip>}</span>
-                          : <StatusChip tone="neutral">None</StatusChip>}
-                      </td>
-                      <td>{g.draft ? <StatusChip tone="warning">v{g.draft.version} {g.draft.status === "in_review" ? "in review" : "proposed"}</StatusChip> : "—"}</td>
-                      <td>{g.lastFilled ? stamp(g.lastFilled) : "—"}</td>
-                      <td className="text-right">
-                        <WithReason reason={target ? null : "Every version of this map is retired."}>
-                          <Button type="button" variant="outline" size="sm" disabled={!target} onClick={() => target && setSelectedId(target.id)} aria-label={`Review ${g.carrierName} ${g.productLabel}`}>Review</Button>
-                        </WithReason>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>}
-      </TableCard>
-
-      {selected && (
-        <ReviewDialog
-          key={selected.id}
-          map={selected}
-          busy={busy}
-          dirty={!same(selected, saved[selected.id])}
-          onClose={() => setSelectedId(null)}
-          onChange={(patch) => patchMap(selected.id, patch)}
-          onSave={() => saveDraft(selected)}
-          onPublish={() => publish(selected)}
-          onNewVersion={() => newVersion(selected)}
-        />
-      )}
-
-      {creating && <NewMapDialog carriers={carriers} onClose={() => setCreating(false)} onCreate={create} />}
-    </div>
-  );
-}
-
-function Confidence({ value }: { value: number | null }) {
-  if (value === null) return <span className="text-muted-foreground" title="Not used for a fill yet">—</span>;
-  return <StatusChip tone={value >= 0.7 ? "good" : "warning"}>{value >= 0.7 ? "High" : "Low"}</StatusChip>;
-}
-
-function ReviewDialog({ map, busy, dirty, onClose, onChange, onSave, onPublish, onNewVersion }: {
-  map: FieldMapView;
-  busy: boolean;
-  dirty: boolean;
-  onClose: () => void;
-  onChange: (patch: (map: FieldMapView) => FieldMapView) => void;
-  onSave: () => void;
-  onPublish: () => void;
-  onNewVersion: () => void;
-}) {
-  const [showAll, setShowAll] = useState(false);
-  const [adding, setAdding] = useState("");
-  const editable = EDITABLE_FIELD_MAP_STATUSES.includes(map.status);
-  const unverified = map.entries.filter((e) => !e.verified);
-  const blocked = map.entries.filter((e) => isSensitiveKey(e.fieldKey) && !e.verified);
-  const emptySelectors = map.entries.filter((e) => !e.selector.trim()).length;
-  // The ones a wrong selector would cost most: sensitive, unverified, or low-confidence.
-  const risky = map.entries.filter((e) => isSensitiveKey(e.fieldKey) || !e.verified || (e.confidence !== null && e.confidence < 0.7));
-  const shown = showAll || risky.length === 0 ? map.entries : risky;
-  const publishBlock = !editable ? undefined : map.entries.length === 0 ? "Add a field first." : blocked.length ? `Verify ${listOf(blocked.map((e) => e.fieldKey))} first.` : emptySelectors ? "Give every field a selector first." : undefined;
-  const unmapped = CANONICAL_OPTIONS.filter((option) => !map.entries.some((entry) => entry.fieldKey === option.key));
-  const pages = [...new Set([...map.steps.map((s) => s.pageKey), ...map.entries.map((e) => e.pageKey)])];
-
-  const setEntry = (id: string, patch: Partial<FieldMapEntryView>) => onChange((m) => ({ ...m, entries: m.entries.map((e) => (e.id === id ? { ...e, ...patch } : e)) }));
-  const urlPattern = (pageKey: string) => map.steps.find((s) => s.pageKey === pageKey)?.urlPattern ?? "*";
-  const setUrlPattern = (pageKey: string, value: string) => onChange((m) => {
-    const exists = m.steps.some((s) => s.pageKey === pageKey);
-    return { ...m, steps: exists ? m.steps.map((s) => (s.pageKey === pageKey ? { ...s, urlPattern: value } : s)) : [...m.steps, { pageKey, urlPattern: value, sortOrder: m.steps.length }] };
-  });
-
-  const sub = editable
-    ? `Draft map v${map.version} · proposed ${shortDay(map.updatedAt)} · not published`
-    : map.status === "retired" ? `Map v${map.version} · retired — no longer used for fills`
-    : `Map v${map.version} · published${map.approvedAt ? ` ${shortDay(map.approvedAt)}` : ""}${map.status === "needs_review" ? " · a fill missed a field" : ""}`;
-
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent showCloseButton={false} className="max-h-[88vh] gap-0 overflow-y-auto p-0 sm:max-w-[920px]">
-        <DialogHeader className="flex-row items-start justify-between gap-4 border-b border-[var(--border)] px-[22px] py-[18px] text-left">
-          <div className="min-w-0">
-            <DialogTitle className="text-title-sm leading-[1.28] font-semibold tracking-[-0.015em]">{map.carrierName} · {map.productLabel} application</DialogTitle>
-            <DialogDescription className="mt-1 text-sm">{sub}</DialogDescription>
-          </div>
-          <span className="flex shrink-0 items-center gap-3.5">
-            {unverified.length > 0 && <StatusChip tone="warning">{unverified.length} unverified</StatusChip>}
-            <Button type="button" variant="outline" size="icon" aria-label="Close" onClick={onClose}><X aria-hidden="true" /></Button>
-          </span>
-        </DialogHeader>
-
-        <div className="flex flex-col gap-[18px] p-[22px]">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <span className="text-sm text-[var(--body)]">
-              {map.entries.length === 0 ? "No fields in this map yet." : shown === risky && !showAll ? `${map.entries.length} fields in the ${editable ? "draft" : "map"}. These ${risky.length} are the ones a wrong selector would cost most.` : `All ${map.entries.length} fields in the ${editable ? "draft" : "map"}.`}
-            </span>
-            <span className="flex flex-wrap gap-2">
-              {map.origin && (
-                <Button asChild variant="outline">
-                  <a href={map.origin} target="_blank" rel="noopener noreferrer"><ExternalLink aria-hidden="true" />Open the carrier form</a>
-                </Button>
-              )}
-              {risky.length > 0 && risky.length < map.entries.length && (
-                <Button type="button" variant="ghost" onClick={() => setShowAll((v) => !v)}>{showAll ? `Show the ${risky.length} to check` : `Show all ${map.entries.length}`}</Button>
-              )}
-            </span>
-          </div>
-
-          {map.entries.length > 0 && (
-            <TableCard>
-              <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
+          ? <EmptyState title={pending ? "Field maps are not set up yet" : "No field maps yet"} hint={pending ? "The database update in the status line comes first." : "A map tells the extension which box on a carrier's form takes each of our fields. Start one with Propose a map."} />
+          : filtered.length === 0
+            ? <NoMatches noun="carrier forms" onClear={() => set({ q: null, review: null, status: null, carrier: null, page: null })} />
+            : <table className="portal-lead-table w-full min-w-[960px] text-left text-sm">
                 <thead>
                   <tr>
-                    <th className="w-[210px]">Our field</th>
-                    <th>{map.proposalSource === "ai" ? "Proposed selector" : "Selector"}</th>
-                    <th className="w-[120px]">Confidence</th>
-                    <th className="w-[90px] text-center">Verified</th>
+                    <th className="min-w-[160px]">Carrier</th>
+                    <th className="min-w-[150px]">Product</th>
+                    <th className="w-[170px]">Published</th>
+                    <th className="w-[150px]">Draft</th>
+                    <th className="w-[150px]">Last filled</th>
+                    <th className="w-[120px] text-right">Misses · 30 days</th>
+                    <th className="w-[100px] text-right"><span className="sr-only">Review</span></th>
                   </tr>
                 </thead>
                 <tbody className="m-seq">
-                  {shown.map((entry) => {
-                    const label = fieldLabel(entry.fieldKey);
-                    const sensitive = isSensitiveKey(entry.fieldKey);
+                  {pageRows.map((g) => {
+                    const target = g.draft ?? g.live ?? g.newest;
+                    const code = codeOf(g.carrierId);
+                    const missed = missesOf(g);
+                    const flagged = g.live?.status === "needs_review";
                     return (
-                      <tr key={entry.id} className={cn("m-row", sensitive && !entry.verified && "bg-[var(--warning-surface)]")}>
-                        <td>
-                          <span className="block font-mono text-xs text-[var(--ink)]">{entry.fieldKey}</span>
-                          <span className="block text-xs text-muted-foreground">{label}{pages.length > 1 ? ` · ${PAGE_LABEL[entry.pageKey] ?? entry.pageKey}` : ""}</span>
+                      <tr key={g.key} className={cn("m-row", g.mapIds.includes(selectedId ?? "") && "bg-[var(--primary-soft)]")}>
+                        <td className="max-w-[220px] truncate font-semibold">{code ? <Link href={carrierHref(code)} className="text-[var(--ink)] hover:underline">{g.carrierName}</Link> : <span className="text-[var(--ink)]">{g.carrierName}</span>}</td>
+                        <td className="max-w-[220px] truncate">{g.productLabel}</td>
+                        <td className="whitespace-nowrap">
+                          {g.live
+                            ? <span className="inline-flex items-center gap-2 tabular-nums">v{g.live.version}{flagged && <StatusChip tone="warning">Needs review</StatusChip>}</span>
+                            : <span className="text-muted-foreground">{isRejected(g.newest) ? "None · last draft rejected" : g.newest.status === "retired" ? "None · retired" : "None"}</span>}
                         </td>
-                        <td>
-                          {editable
-                            ? <input aria-label={`Selector for ${label}`} className={cn(control, "mt-0 font-mono text-xs md:text-xs")} value={entry.selector} placeholder="#field-id or [name=…]" spellCheck={false}
-                                // A changed selector is a new claim: it has to be checked again.
-                                onChange={(event) => setEntry(entry.id, { selector: event.target.value, verified: false })} />
-                            : <code className="font-mono text-xs">{entry.selector}</code>}
+                        <td className="whitespace-nowrap">
+                          {g.draft
+                            ? (flagged ? <span className="tabular-nums">v{g.draft.version} {g.draft.status === "in_review" ? "in review" : "proposed"}</span> : <StatusChip tone={g.draft.status === "in_review" ? "info" : "action"}>v{g.draft.version} {g.draft.status === "in_review" ? "in review" : "proposed"}</StatusChip>)
+                            : <span className="text-muted-foreground">—</span>}
                         </td>
-                        <td><Confidence value={entry.confidence} /></td>
-                        <td className="text-center">
-                          <button
-                            type="button"
-                            role="checkbox"
-                            aria-checked={entry.verified}
-                            aria-label={`${label} verified`}
-                            disabled={!editable || !entry.selector.trim()}
-                            title={!editable ? "A published map can't change — start a new version." : !entry.selector.trim() ? "Give it a selector first." : entry.verified ? "Verified — click to undo" : "Click once you've checked it on the carrier's form"}
-                            onClick={() => setEntry(entry.id, { verified: !entry.verified })}
-                            className={cn("inline-flex size-5 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed", entry.verified ? "bg-[var(--success)] text-[var(--surface)]" : "border-[1.5px] border-[var(--border-strong)]")}
-                          >
-                            {entry.verified && <Check aria-hidden="true" className="size-3.5" />}
-                          </button>
+                        <td className="whitespace-nowrap tabular-nums">{g.lastFilled ? stamp(g.lastFilled) : <span className="text-muted-foreground">—</span>}</td>
+                        <td className="text-right tabular-nums">{missed === null ? <span className="text-muted-foreground">—</span> : missed > 0 ? <button type="button" className="text-foreground underline underline-offset-2 hover:text-[var(--accent-ink)]" onClick={() => select((g.live ?? target).id)}>{missed.toLocaleString("en-US")}</button> : <span className="text-muted-foreground">0</span>}</td>
+                        <td className="text-right">
+                          <Button type="button" variant="outline" size="sm" onClick={() => select(target.id)} aria-label={`Review ${g.carrierName} ${g.productLabel}`}>{EDITABLE_FIELD_MAP_STATUSES.includes(target.status) || flagged ? "Review" : "Open"}</Button>
                         </td>
                       </tr>
                     );
                   })}
                 </tbody>
-              </table>
-            </TableCard>
-          )}
+              </table>}
+      </TableCard>
 
-          {editable && (
-            <div className="flex flex-wrap items-center gap-2">
-              <label htmlFor="fm-add-field" className="sr-only">Field to add</label>
-              <select id="fm-add-field" className={toolbarControl} value={adding} onChange={(event) => setAdding(event.target.value)}>
-                <option value="">Add a field…</option>
-                {[...new Set(unmapped.map((option) => option.group))].map((group) => (
-                  <optgroup key={group} label={group}>
-                    {unmapped.filter((option) => option.group === group).map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
-                  </optgroup>
-                ))}
-              </select>
-              <WithReason reason={adding ? null : "Choose a field to add first."}>
-                <Button type="button" variant="outline" disabled={!adding} onClick={() => { onChange((m) => ({ ...m, entries: [...m.entries, newEntry(adding)] })); setAdding(""); setShowAll(true); }}><Plus aria-hidden="true" />Add field</Button>
-              </WithReason>
-            </div>
-          )}
+      {selected && (
+        <FmapReviewSheet
+          key={selected.id}
+          map={selected}
+          liveMisses={selectedGroup?.live && selectedGroup.live.id !== selected.id ? { version: selectedGroup.live.version, misses: selectedGroup.live.misses } : null}
+          busy={busy}
+          dirty={!same(selected, saved[selected.id])}
+          onClose={() => select(null)}
+          onChange={(patch) => patchMap(selected.id, patch)}
+          onSave={() => saveDraft(selected)}
+          onPublish={() => publish(selected)}
+          onNewVersion={() => newVersion(selected)}
+          onReject={(reason) => close(selected, "reject", reason)}
+          onRetire={(reason) => close(selected, "retire", reason)}
+        />
+      )}
 
-          {editable && showAll && pages.length > 0 && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {pages.map((p) => (
-                <Field key={p} label={`${PAGE_LABEL[p] ?? p} page address`} htmlFor={`fm-page-${p}`} hint="A path like /eapp/applicant, or * for anywhere on the portal (its misses are not reported).">
-                  <input id={`fm-page-${p}`} className={cn(control, "font-mono text-xs md:text-xs")} value={urlPattern(p)} spellCheck={false} onChange={(event) => setUrlPattern(p, event.target.value)} />
-                </Field>
-              ))}
-            </div>
-          )}
-
-          {editable && blocked.length > 0 && (
-            <Callout tone="error" title={`Publishing is blocked until every sensitive entry is verified — ${listOf(blocked.map((e) => e.fieldKey))} ${blocked.length === 1 ? "is" : "are"} unverified.`} />
-          )}
-        </div>
-
-        <DialogFooter className="flex-row flex-wrap items-center justify-between gap-4 border-t border-[var(--border)] bg-[var(--canvas)] px-[22px] py-3.5 sm:justify-between">
-          <span className="text-xs text-muted-foreground">{editable ? (dirty ? "Unsaved changes to this draft" : "Draft saved — not published") : map.status === "retired" ? "Retired — no longer used for fills" : "Published — edits go into a new version"}</span>
-          <span className="flex flex-wrap gap-2.5">
-            {!editable && map.status !== "retired" && <Button type="button" variant={map.status === "needs_review" ? "default" : "outline"} disabled={busy} onClick={onNewVersion}>Start version {map.version + 1}</Button>}
-            {editable && (
-              <WithReason reason={emptySelectors > 0 ? "Give every field a selector first." : !dirty ? "No changes to save." : null}>
-                <Button type="button" variant="outline" disabled={!dirty || busy || emptySelectors > 0} onClick={onSave}>Save draft</Button>
-              </WithReason>
-            )}
-            {editable && (
-              <WithReason reason={publishBlock}>
-                <Button type="button" disabled={Boolean(publishBlock) || busy} onClick={onPublish}>Publish the map</Button>
-              </WithReason>
-            )}
-          </span>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      {creating && !pending && <NewMapDialog carriers={carriers} initialCarrierId={proposeFor} onClose={() => set({ propose: null })} onCreate={create} />}
+    </div>
   );
 }
 
-function NewMapDialog({ carriers, onClose, onCreate }: { carriers: FieldMapCarrierOption[]; onClose: () => void; onCreate: (input: { carrierId: string; productId: string | null; origin: string }) => Promise<void> | void }) {
-  const [carrierId, setCarrierId] = useState<string>(carriers[0]?.id ?? "");
+function NewMapDialog({ carriers, initialCarrierId, onClose, onCreate }: { carriers: FieldMapCarrierOption[]; initialCarrierId?: string; onClose: () => void; onCreate: (input: { carrierId: string; productId: string | null; origin: string }) => Promise<void> | void }) {
+  const first = carriers.find((c) => c.id === initialCarrierId) ?? carriers[0];
+  const [carrierId, setCarrierId] = useState<string>(first?.id ?? "");
   const carrier = carriers.find((c) => c.id === carrierId);
   const [productId, setProductId] = useState("");
-  const [origin, setOrigin] = useState(carriers[0]?.portalOrigin ?? "");
+  const [origin, setOrigin] = useState(first?.portalOrigin ?? "");
   const [tried, setTried] = useState(false);
   const [busy, setBusy] = useState(false);
   const validOrigin = /^https:\/\/[^\s/]+\.[^\s]+$/.test(origin.trim());

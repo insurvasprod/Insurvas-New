@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 
 import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
@@ -9,6 +10,8 @@ import { LettersList, type LetterRow } from "@/components/app/commissions/pay-is
 import { CheckNowButton } from "@/components/app/commissions/pay-issues/check-now";
 import { Button } from "@/components/ui/button";
 import { ViewTabs } from "@/components/ui/view-tabs";
+import { StreamSection } from "@/components/ui/stream-section";
+import { afterFrame, Part } from "@/components/app/commissions/frame-parts";
 import { loadPayTimingGaps } from "@/lib/ingestion/carrierRulesStore";
 import { loadPayIssues } from "@/lib/discrepancies/payIssues";
 import { LETTER_OUT_STATUSES, LETTER_SETTLED_STATUSES, groupPayIssues, orderPayIssues, payIssueCarrierKey, payIssueHref } from "@/lib/commissions/payIssueGroups";
@@ -45,47 +48,43 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
   const tab: Tab = view === "letters" ? "letters" : view === "settled" ? "settled" : view === "closed" ? "closed" : "open";
   const readOnly = guard.entitlement.access === "read_only";
   const lists = tab === "open" || tab === "closed";
-  const [read, untimed] = await Promise.all([
-    loadPayIssues(tenantId, { names: lists }),
-    // Carriers missing commission is not checked for (no pay trigger or lag): a count on a chip, never assumed.
-    tab === "open" ? loadPayTimingGaps(tenantId).catch((error) => { console.error("[pay-issues] pay timing could not be read", error); return null; }) : null,
-  ]);
+  const tabsOf = (counts: { open: number; letters: number; settled: number; closed: number } | null) => (
+    <ViewTabs
+      label="Pay issue views"
+      value={tab}
+      tabs={[
+        { key: "open", label: "Open", count: counts?.open ?? null, href: "/app/discrepancies" },
+        { key: "letters", label: "Letters out", count: counts?.letters ?? null, href: "/app/discrepancies?view=letters" },
+        { key: "settled", label: "Settled", count: counts?.settled ?? null, href: "/app/discrepancies?view=settled" },
+        { key: "closed", label: "Closed", count: counts?.closed ?? null, href: "/app/discrepancies?view=closed" },
+      ]}
+    />
+  );
 
-  const working = read.issues.filter((i) => i.status !== "closed");
-  const closed = read.issues.filter((i) => i.status === "closed");
-  const letters: LetterRow[] = read.disputes.map((d) => ({ id: d.id, carrierId: d.carrierId, carrierName: d.carrierName, createdAt: d.createdAt, items: d.discrepancyIds.length, totalCents: d.totalCents, status: d.status, sentVia: d.sentVia, sentAt: d.sentAt, outcomeCents: d.outcomeCents, resolvedAt: d.resolvedAt }));
-  const out = letters.filter((l) => LETTER_OUT_STATUSES.has(l.status));
-  const settled = letters.filter((l) => LETTER_SETTLED_STATUSES.has(l.status));
+  // Frame first (§7a): the title, the views and Check now draw at once; the counts, Work the largest and the list
+  // stream in.
+  const parts = afterFrame(async () => {
+    const [read, untimed] = await Promise.all([
+      loadPayIssues(tenantId, { names: lists }),
+      // Carriers missing commission is not checked for (no pay trigger or lag): a count on a chip, never assumed.
+      tab === "open" ? loadPayTimingGaps(tenantId).catch((error) => { console.error("[pay-issues] pay timing could not be read", error); return null; }) : null,
+    ]);
 
-  // The primary: the largest group's first issue, in the group's own order (its ‹ › walk the group).
-  const largest = groupPayIssues(working)[0];
-  const first = largest ? orderPayIssues(working.filter((i) => i.type === largest.type && payIssueCarrierKey(i) === largest.carrierKey))[0] : undefined;
+    const working = read.issues.filter((i) => i.status !== "closed");
+    const closed = read.issues.filter((i) => i.status === "closed");
+    const letters: LetterRow[] = read.disputes.map((d) => ({ id: d.id, carrierId: d.carrierId, carrierName: d.carrierName, createdAt: d.createdAt, items: d.discrepancyIds.length, totalCents: d.totalCents, status: d.status, sentVia: d.sentVia, sentAt: d.sentAt, outcomeCents: d.outcomeCents, resolvedAt: d.resolvedAt }));
+    const out = letters.filter((l) => LETTER_OUT_STATUSES.has(l.status));
+    const settled = letters.filter((l) => LETTER_SETTLED_STATUSES.has(l.status));
 
-  const initialSource = view === "statements" || source === "hand" ? "hand" : source === "carrier" ? "carrier" : "";
-  return (
-    <CommissionsPage
-      step="discrepancies"
-      info={<>What each carrier paid against what your contract says it owes. A group is one carrier and one kind of issue: open it to see each policy and to draft its letter. Insurvas never sends a letter; you send it, then record what the carrier did.</>}
-      tabs={
-        <ViewTabs
-          label="Pay issue views"
-          value={tab}
-          tabs={[
-            { key: "open", label: "Open", count: working.length, href: "/app/discrepancies" },
-            { key: "letters", label: "Letters out", count: out.length, href: "/app/discrepancies?view=letters" },
-            { key: "settled", label: "Settled", count: settled.length, href: "/app/discrepancies?view=settled" },
-            { key: "closed", label: "Closed", count: closed.length, href: "/app/discrepancies?view=closed" },
-          ]}
-        />
-      }
-      actions={
-        <span className="inline-flex flex-wrap gap-2">
-          {tab === "open" && <CheckNowButton readOnly={readOnly} />}
-          {first && <Button asChild type="button"><Link href={payIssueHref(first)}>Work the largest</Link></Button>}
-        </span>
-      }
-    >
-      {tab === "letters" || tab === "settled" ? (
+    // The primary: the largest group's first issue, in the group's own order (its ‹ › walk the group).
+    const largest = groupPayIssues(working)[0];
+    const first = largest ? orderPayIssues(working.filter((i) => i.type === largest.type && payIssueCarrierKey(i) === largest.carrierKey))[0] : undefined;
+
+    const initialSource = view === "statements" || source === "hand" ? "hand" : source === "carrier" ? "carrier" : "";
+    return {
+      tabs: tabsOf({ open: working.length, letters: out.length, settled: settled.length, closed: closed.length }),
+      actions: first ? <Button asChild type="button"><Link href={payIssueHref(first)}>Work the largest</Link></Button> : null,
+      body: tab === "letters" || tab === "settled" ? (
         <LettersList letters={tab === "letters" ? out : settled} settled={settled} tab={tab === "letters" ? "out" : "settled"} initialCarrier={carrier ?? ""} />
       ) : (
         <PayIssuesList
@@ -97,7 +96,23 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
           today={read.today}
           unavailable={!read.available}
         />
-      )}
+      ),
+    };
+  });
+
+  return (
+    <CommissionsPage
+      step="discrepancies"
+      info={<>What each carrier paid against what your contract says it owes. A group is one carrier and one kind of issue: open it to see each policy and to draft its letter. Insurvas never sends a letter; you send it, then record what the carrier did.</>}
+      tabs={<Suspense fallback={tabsOf(null)}><Part read={parts} part="tabs" /></Suspense>}
+      actions={
+        <span className="inline-flex flex-wrap gap-2">
+          {tab === "open" && <CheckNowButton readOnly={readOnly} />}
+          <Suspense fallback={null}><Part read={parts} part="actions" /></Suspense>
+        </span>
+      }
+    >
+      <StreamSection shape={tab === "open" ? "strip+table" : "table"}><Part read={parts} part="body" /></StreamSection>
     </CommissionsPage>
   );
 }

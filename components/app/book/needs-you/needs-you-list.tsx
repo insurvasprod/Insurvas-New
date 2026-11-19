@@ -12,6 +12,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
+import { useRowExit } from "@/components/ui/use-row-exit";
 import { fileDay } from "@/lib/ingestion/constants";
 import { ageShort, GROUP_LABELS, groupCounts, KIND_META, NEEDS_YOU_GROUPS, searchItems, searchParam, type NeedsYouGroup, type NeedsYouItem, type NeedsYouKind, type NeedsYouView } from "@/lib/needsYou/kinds";
 
@@ -43,7 +44,7 @@ const FOLD_AT = 3;
 type Fold = { key: string; items: NeedsYouItem[]; label: string; where: string };
 type Line = { item: NeedsYouItem; fold?: undefined } | { item?: undefined; fold: Fold };
 
-const keyOf = (item: NeedsYouItem) => `${item.kind}:${item.id}`;
+const keyOf = (item: Pick<NeedsYouItem, "kind" | "id">) => `${item.kind}:${item.id}`;
 
 /**
  * Round 4 (owner 2026-11-02): items alike — one kind from one file — are one line. "Policy with no sale" items
@@ -94,6 +95,8 @@ function linesOf(items: NeedsYouItem[], fold: boolean): Line[] {
 export function NeedsYouList({ items: every, view, fromFile = null, readOnly = false, initialGroup = "all", initialQuery = "" }: { items: NeedsYouItem[]; view: NeedsYouView; fromFile?: { name: string; clearHref: string } | null; readOnly?: boolean; initialGroup?: "all" | NeedsYouGroup; initialQuery?: string }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
+  // Tier 1 motion (2026-11-17): the items "Confirm all" saves leave together before the refresh takes them.
+  const leave = useRowExit(every);
   const [group, setGroup] = useState<"all" | NeedsYouGroup>(initialGroup);
   const [page, setPage] = useState(1);
   const [alike, setAlike] = useState(true);
@@ -143,7 +146,7 @@ export function NeedsYouList({ items: every, view, fromFile = null, readOnly = f
 
   const toolbar = (
     <DataToolbar actions={<>
-      {fold && !readOnly && noSaleIds(fold.items).length > 0 && <BulkResolve ids={noSaleIds(fold.items)} resolution="confirm_client" noun="clients" size="default" />}
+      {fold && !readOnly && noSaleIds(fold.items).length > 0 && <BulkResolve ids={noSaleIds(fold.items)} resolution="confirm_client" noun="clients" size="default" exitRows={(ids, then) => leave.exit(ids.map((id) => keyOf({ kind: "no-sale", id })), then)} />}
       <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
     </>}>
       {every.length > 0 && <ToolbarSearch value={query} onChange={search} placeholder="Policy, client, agent code or file" label="Search Needs you" />}
@@ -202,7 +205,7 @@ export function NeedsYouList({ items: every, view, fromFile = null, readOnly = f
                 const key = keyOf(item);
                 const go = closed ? href(item) : reviewItem(item);
                 return (
-                  <tr key={key} className="cursor-pointer" onClick={() => router.push(go)}>
+                  <tr key={key} {...leave.rowProps(key)} className="cursor-pointer" onClick={() => router.push(go)}>
                     <td className="whitespace-nowrap font-medium text-foreground">{item.about}</td>
                     {/* One chip: the kind, turned danger and saying so when the item is escalated. */}
                     <td><StatusChip tone={item.escalated && !closed ? "danger" : item.tone}>{item.escalated && !closed ? `${KIND_META[item.kind].label} · escalated` : KIND_META[item.kind].label}</StatusChip></td>

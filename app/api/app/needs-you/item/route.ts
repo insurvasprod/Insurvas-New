@@ -3,7 +3,6 @@ import { z } from "zod";
 
 import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 import { audit } from "@/lib/audit/log";
-import { getEntitlement } from "@/lib/entitlements/get";
 import { hasFeature } from "@/lib/entitlements/types";
 import { QueueError } from "@/lib/ingestion/exceptionQueuesStore";
 import { isItemId, isNeedsYouKind } from "@/lib/needsYou/kinds";
@@ -32,7 +31,8 @@ export async function GET(request: NextRequest) {
 
   const { tenantId, userId, role } = auth.context;
   const keeper = role === "owner" || role === "bookkeeper";
-  const entitlement = await getEntitlement(tenantId).catch(() => null);
+  // The feature check already read the plan: no second trip for it.
+  const entitlement = auth.entitlement;
   const scope = { tenantId, userId, keeper, money: Boolean(keeper && entitlement && hasFeature(entitlement, "discrepancy_report")), credit: Boolean(keeper && entitlement && hasFeature(entitlement, "producer_payouts")) };
   if ((kind === "money" && !scope.money) || (kind === "credit" && !scope.credit)) return NextResponse.json({ error: "This kind of item isn't on your plan." }, { status: 403 });
 

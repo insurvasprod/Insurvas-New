@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Role Dashboards and Partner Portals</title>
+<!--kit-css-->
+<style>
+/*
+ * Settings round 8 — shared mockup kit. Every board links this file so all boards share one look.
+ * Tokens = the live app: light "C · White + olive lines" + gold third colour; dark = the live dark theme.
+ * Text 12 / 14 / 16 only; page title 24. Theme: <body class="light|dark">. Option: <body data-opt="A|B|C">.
+ */
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--board);color:var(--ink)}
+body.light{--board:#e9ecea;--board-ink:#0d4037;--board-line:#cdd6d1;--board-card:#fff;
+  --canvas:#fbfcfb;--card:#fff;--card-border:#cbd8d2;--band:#e9f2ee;--tile:#fff;--tile-edge:#d9e5df;--hover:#f1f7f4;--rule:#dbe6e1;
+  --border:#cbd8d2;--border-strong:#6d7f77;--ink:#0d4037;--body:#26332e;--muted:#4d5f58;
+  --primary:#07d6a0;--primary-hover:#08bf8b;--on-primary:#0d4037;--primary-soft:#dcfaf0;--accent-ink:#00735a;--ring:#008769;
+  --ok:#0c6633;--ok-s:#e0f3e7;--warn:#9a3d00;--warn-s:#fde8dc;--bad:#ab1f1f;--bad-s:#fdeaea;--info:#1d4f9a;--info-s:#e3edfa;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#8a5a00;--hl-soft:#fdf2d9;--hl-mark:#c98a12;
+  --backdrop:rgba(13,40,34,.38);--shadow:0 1px 0 rgba(13,64,55,.04);--overlay:0 2px 6px rgba(13,64,55,.08),0 28px 60px -12px rgba(13,64,55,.28);--code:#f4f8f6}
+body.dark{--board:#050b09;--board-ink:#f2f7f5;--board-line:#1d2b26;--board-card:#0d1714;
+  --canvas:#08110f;--card:#0d1714;--card-border:rgba(255,255,255,.09);--band:rgba(255,255,255,.04);--tile:rgba(255,255,255,.035);--tile-edge:rgba(255,255,255,.06);--hover:rgba(255,255,255,.04);--rule:#1b2a25;
+  --border:#22342e;--border-strong:#5f7a71;--ink:#f2f7f5;--body:#c9d6d1;--muted:#93a69f;
+  --primary:#07d6a0;--primary-hover:#2fe0b0;--on-primary:#0d4037;--primary-soft:#0f3a30;--accent-ink:#4fe3bb;--ring:#07d6a0;
+  --ok:#45c07d;--ok-s:#11291d;--warn:#f08a4b;--warn-s:#2e180c;--bad:#f0837c;--bad-s:#2d1412;--info:#7fb0ff;--info-s:#10203a;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#f5c562;--hl-soft:#2b2210;--hl-mark:#f2b33d;
+  --backdrop:rgba(0,0,0,.6);--shadow:none;--overlay:0 24px 64px rgba(0,0,0,.7);--code:#0a1412}
+body{--nav:#0d4037;--nav-ink:#eaf6f2;--nav-muted:#9fc4b8;--nav-line:#1d5649}
+
+/* ── Board chrome ───────────────────────────────────────────── */
+.board{max-width:1520px;margin:0 auto;padding:24px 16px 120px;color:var(--board-ink)}
+.board > h1{font-size:24px;margin:0;letter-spacing:-.02em}
+.lead{max-width:1100px;margin:8px 0 0;color:var(--board-ink);opacity:.85}
+.bar{position:sticky;top:0;z-index:80;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 0;margin:16px 0;background:var(--board);border-bottom:1px solid var(--board-line)}
+.bar .grp{display:flex;gap:6px;align-items:center;margin-right:10px}
+.bar .grp > span{font-size:12px;font-weight:600;opacity:.75;margin-right:2px}
+.bar button{font:600 14px Inter,system-ui,sans-serif;border:1px solid var(--board-line);background:var(--board-card);color:var(--board-ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+.bar button[aria-pressed=true]{background:#0d4037;color:#fff;border-color:#0d4037}
+.bar .hint{font-size:12px;opacity:.7;margin-left:auto}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin:14px 0}
+.notes > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px;font-size:14px}
+.notes b{display:block;margin-bottom:3px}
+.sec{display:flex;align-items:baseline;gap:12px;margin:30px 0 10px}
+.sec h2{font-size:16px;margin:0}
+.sec span{font-size:12px;opacity:.75}
+.opt{display:none}
+body[data-opt=A] .opt.A, body[data-opt=B] .opt.B, body[data-opt=C] .opt.C{display:block}
+.pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px}
+.pick > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:14px;font-size:14px}
+.pick > div.rec{border:2px solid #07d6a0}
+.pick b{font-size:16px;display:block;margin-bottom:4px}
+.pick ul{margin:6px 0 0;padding-left:18px}
+.tag-mig{display:inline-block;font-size:12px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink);margin-left:6px;vertical-align:middle}
+
+/* ── App shell ──────────────────────────────────────────────── */
+.app{display:grid;grid-template-columns:56px 232px 1fr;grid-template-rows:52px 1fr;height:760px;background:var(--canvas);border-radius:14px;overflow:hidden;border:1px solid var(--board-line);margin-bottom:20px;color:var(--ink);position:relative}
+.app.tall{height:880px}
+.app.norail{grid-template-columns:56px 1fr}
+.top{grid-column:1/-1;background:var(--nav);display:flex;align-items:center;gap:12px;padding:0 16px}
+.top .logo{width:22px;height:22px;border-radius:6px;background:var(--primary)}
+.top .search{flex:0 0 280px;height:32px;border-radius:8px;background:rgba(234,246,242,.08);color:var(--nav-muted);display:flex;align-items:center;padding:0 12px;font-size:12px}
+.top .sp{flex:1}
+.top .me{width:30px;height:30px;border-radius:50%;background:var(--hl);color:var(--on-hl);display:grid;place-items:center;font-size:12px;font-weight:700}
+.icons{background:var(--nav);display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0}
+.icons i{display:block;width:22px;height:22px;border-radius:6px;border:1.5px solid var(--nav-muted);opacity:.85}
+.icons i.on{border-color:var(--primary);background:rgba(7,214,160,.16)}
+/* settings rail */
+.srail{border-right:1px solid var(--border);background:var(--card);padding:12px 10px;overflow:auto}
+.srail .find{height:32px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--muted);margin-bottom:10px}
+.srail h5{font-size:12px;font-weight:600;color:var(--muted);margin:12px 6px 4px}
+.srail a{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:8px;font-size:14px;color:var(--body);text-decoration:none}
+.srail a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.srail a small{font-size:12px;color:var(--muted)}
+.srail a .cnt{font-size:12px;font-weight:700;padding:0 6px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink)}
+/* main */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px 24px 20px}
+.crumb{font-size:12px;color:var(--muted)}
+.head{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;margin:2px 0 4px}
+.head h3{font-size:24px;font-weight:600;letter-spacing:-.025em;margin:0}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--border);flex:1;min-width:200px}
+.tabs a{font-size:14px;color:var(--muted);padding:6px 0 8px;border-bottom:2px solid transparent;text-decoration:none;white-space:nowrap}
+.tabs a.on{color:var(--ink);border-color:var(--primary);font-weight:500}
+.tabs a .c{font-size:12px;margin-left:4px;padding:0 5px;border-radius:5px;background:var(--band);color:var(--muted)}
+.head .acts{display:flex;gap:8px;margin-left:auto;padding-bottom:6px}
+.status{font-size:12px;color:var(--muted);margin:2px 0 12px;display:flex;align-items:center;gap:6px}
+.status .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.status.bad .dot{background:var(--bad)}
+.status.warn .dot{background:var(--warn)}
+.body{flex:1;min-height:0;display:flex;gap:12px}
+/* cards */
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--shadow);min-width:0;display:flex;flex-direction:column;min-height:0}
+.card.flex1{flex:1}
+.card-h{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--rule);background:var(--band);border-radius:16px 16px 0 0}
+.card-h b{font-size:14px;font-weight:600}
+.card-h .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.card-b{padding:14px 16px}
+.scroll{overflow:auto;min-height:0;flex:1}
+.card-f{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule)}
+.card-f .sp{flex:1}
+.savebar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule);background:var(--hl-soft);border-radius:0 0 16px 16px;font-size:14px;color:var(--hl-ink);font-weight:500}
+.savebar .sp{flex:1}
+/* form */
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+.fgrid .full{grid-column:1/-1}
+label.l{display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:5px}
+.help{font-size:12px;color:var(--muted);margin-top:4px}
+.err{font-size:12px;color:var(--bad);margin-top:4px}
+.input{height:36px;border-radius:8px;border:1px solid var(--border-strong);background:var(--card);color:var(--ink);padding:0 12px;font-size:14px;display:flex;align-items:center;gap:8px;min-width:0}
+.input.ph{color:var(--muted)}
+.input.focus{outline:2px solid var(--ring);outline-offset:2px}
+.input.bad{border-color:var(--bad)}
+.input.dis{background:var(--band);color:var(--muted);border-color:var(--border)}
+.input .end{margin-left:auto;color:var(--muted);font-size:12px}
+.textarea{min-height:72px;align-items:flex-start;padding:8px 12px;height:auto}
+.fsec{padding:16px 0;border-top:1px solid var(--rule)}
+.fsec:first-child{border-top:0;padding-top:4px}
+.fsec > h4{font-size:16px;margin:0 0 2px}
+.fsec > p{font-size:12px;color:var(--muted);margin:0 0 12px}
+/* controls */
+.btn{font:500 14px Inter,system-ui,sans-serif;height:36px;padding:0 14px;border-radius:8px;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;cursor:default}
+.btn.sm{height:30px;padding:0 10px;font-size:12px}
+.btn.p{background:var(--primary);color:var(--on-primary)}
+.btn.o{background:var(--card);border-color:var(--border);color:var(--ink)}
+.btn.g{background:transparent;color:var(--body)}
+.btn.hl{background:var(--hl);color:var(--on-hl);font-weight:600}
+.btn.danger{background:var(--bad-s);color:var(--bad)}
+.btn.d{opacity:.5}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:500;background:var(--card);color:var(--body);border:1px solid var(--tile-edge);white-space:nowrap}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.n::before{display:none}
+.chip.ok{background:var(--ok-s);color:var(--ok);border-color:transparent}
+.chip.warn{background:var(--warn-s);color:var(--warn);border-color:transparent}
+.chip.bad{background:var(--bad-s);color:var(--bad);border-color:transparent}
+.chip.info{background:var(--info-s);color:var(--info);border-color:transparent}
+.chip.act{background:var(--primary-soft);color:var(--accent-ink);border-color:transparent}
+.chip.hl{background:var(--hl-soft);color:var(--hl-ink);border-color:transparent;font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg span{padding:6px 12px;font-size:14px;color:var(--body);border-left:1px solid var(--border)}
+.seg span:first-child{border-left:0}
+.seg span.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.tog{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);font-size:14px;color:var(--body)}
+.tog.on{background:var(--primary-soft);border-color:transparent;color:var(--accent-ink);font-weight:500}
+.switch{width:36px;height:20px;border-radius:999px;background:var(--border-strong);position:relative;display:inline-block;vertical-align:middle;flex:none}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(13,64,55,.25)}
+.switch.on{background:var(--primary)}
+.switch.on::after{left:18px}
+.check{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.check.on{background:var(--primary);border-color:var(--primary)}
+.radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.radio.on{border:5px solid var(--primary)}
+.av{width:28px;height:28px;border-radius:50%;display:inline-grid;place-items:center;font-size:12px;font-weight:700;background:var(--hl-soft);color:var(--hl-ink);flex:none}
+.ic{width:32px;height:32px;border-radius:9px;display:inline-grid;place-items:center;background:var(--primary-soft);color:var(--accent-ink);font-weight:700;flex:none}
+.muted{color:var(--muted)}
+small{font-size:12px}
+.small{font-size:12px}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--code);border:1px solid var(--tile-edge);border-radius:10px;padding:10px 12px;color:var(--body);white-space:pre;overflow:auto}
+.copy{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:0 4px 0 12px;height:36px;background:var(--card)}
+.copy .v{flex:1;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile{background:var(--tile);box-shadow:inset 0 0 0 1px var(--tile-edge);border-radius:12px;padding:10px 12px}
+.tile small{display:block;font-size:12px;color:var(--muted)}
+.tile b{font-size:16px}
+.list a,.li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--rule);color:var(--body);text-decoration:none}
+.li.on{background:var(--primary-soft);box-shadow:inset 2px 0 0 var(--primary)}
+.li b{font-size:14px;color:var(--ink);display:block}
+.li small{font-size:12px;color:var(--muted)}
+.li .end{margin-left:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+thead th{background:var(--band);color:var(--muted);font-weight:500;font-size:12px;text-align:left;padding:8px 14px;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:9px 14px;border-bottom:1px solid var(--rule);color:var(--body);white-space:nowrap}
+tbody tr.h td{background:var(--hover)}
+tbody tr.s td{background:var(--primary-soft)}
+.strip{display:grid;grid-auto-flow:column;grid-auto-columns:1fr}
+.strip > div{padding:10px 16px;border-left:1px solid var(--rule)}
+.strip > div:first-child{border-left:0}
+.strip small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.strip b{display:block;font-size:24px;font-weight:600;letter-spacing:-.02em}
+.steps{display:flex;gap:8px;align-items:center}
+.steps span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.steps span i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;background:var(--band);color:var(--muted)}
+.steps span.on{color:var(--ink);font-weight:600}
+.steps span.on i{background:var(--primary);color:var(--on-primary)}
+.steps span.done i{background:var(--primary-soft);color:var(--accent-ink)}
+.steps em{flex:1;height:1px;background:var(--border);min-width:16px}
+/* overlays */
+.scrim{position:absolute;inset:52px 0 0 0;background:var(--backdrop);z-index:5}
+.sheet{position:absolute;top:52px;right:0;bottom:0;width:480px;background:var(--card);border-left:1px solid var(--border);box-shadow:var(--overlay);z-index:6;display:flex;flex-direction:column}
+.sheet.wide{width:640px}
+.sheet-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--rule)}
+.sheet-h b{font-size:16px}
+.sheet-h .x{margin-left:auto;color:var(--muted);font-size:16px}
+.sheet-b{padding:16px 18px;overflow:auto;flex:1}
+.sheet-f{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--rule)}
+.dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:440px;background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--overlay);z-index:6;padding:18px}
+.dialog h4{margin:0 0 6px;font-size:16px}
+.dialog p{margin:0 0 12px;font-size:14px;color:var(--body)}
+.menu{background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:var(--overlay);padding:4px;width:220px}
+.menu div{padding:8px 10px;border-radius:6px;font-size:14px;color:var(--body);display:flex;justify-content:space-between}
+.menu div.h{background:var(--hover);color:var(--ink)}
+.menu hr{border:0;border-top:1px solid var(--rule);margin:4px 0}
+.toast{display:inline-flex;align-items:center;gap:10px;background:#0d4037;color:#f2f7f5;border-radius:999px;padding:10px 16px;font-size:14px}
+body.dark .toast{background:#f2f7f5;color:#0d4037}
+.toast i{width:8px;height:8px;border-radius:50%;background:#07d6a0}
+.skel{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--band),var(--hover),var(--band));margin:8px 0}
+.empty{text-align:center;padding:28px 16px}
+.empty .ic{margin:0 auto 10px}
+.empty b{display:block;font-size:16px}
+.empty p{font-size:14px;color:var(--muted);margin:4px 0 12px}
+/* state strip under a board section: loading / empty / error side by side */
+.states{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.states > .card{min-height:180px}
+@media (max-width:1100px){.app{grid-template-columns:56px 1fr}.srail{display:none}.states{grid-template-columns:1fr}.fgrid{grid-template-columns:1fr}}
+
+</style>
+<!--/kit-css-->
+<style>
+/* Role homes + partner portals (2026-11-18). Built from the kit tokens only. */
+.app.rd{grid-template-columns:64px 1fr;height:840px}
+.rd .icons{gap:14px}
+.rd .page{display:flex;flex-direction:column;gap:10px;min-width:0;min-height:0;padding:14px 22px 16px;overflow:hidden}
+.rd .titleline{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.rd .titleline h3{font-size:24px;font-weight:600;letter-spacing:-.025em;margin:0}
+.rd .titleline .rc{font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--hl-soft);color:var(--hl-ink)}
+.rd .titleline .acts{margin-left:auto;display:flex;gap:8px}
+.rd .vt{display:flex;gap:16px;border-bottom:1px solid var(--rule)}
+.rd .vt a{font-size:14px;color:var(--muted);padding:4px 0 7px;border-bottom:2px solid transparent}
+.rd .vt a.on{color:var(--ink);border-color:var(--primary);font-weight:500}
+.needs{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px}
+.need{background:var(--card);border:1px solid var(--card-border);border-radius:12px;padding:8px 12px;display:flex;align-items:center;gap:10px;min-width:0}
+.need b{font-size:20px;color:var(--ink);font-weight:600}
+.need span{font-size:12px;color:var(--muted);line-height:1.3}
+.need.w b{color:var(--warn)}
+.nums{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:10px}
+.num{background:var(--card);border:1px solid var(--card-border);border-radius:14px;padding:10px 14px;min-width:0;box-shadow:var(--shadow)}
+.num small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.num b{font-size:22px;font-weight:600;color:var(--ink);letter-spacing:-.02em}
+.num .bd{font-size:12px;font-weight:600;margin-left:6px;padding:1px 6px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink)}
+.num .bd.dn{background:var(--warn-s);color:var(--warn)}
+.num .sub{font-size:12px;color:var(--muted)}
+.num svg{width:100%;height:20px;margin-top:2px}
+.dgrid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px;flex:1;min-height:0}
+.dmain{display:grid;grid-template-rows:minmax(0,1.15fr) minmax(0,1fr);gap:12px;min-height:0}
+.drow{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:12px;min-height:0}
+.drow.even{grid-template-columns:1fr 1fr}
+.dright{display:grid;grid-template-rows:auto minmax(0,1fr);gap:12px;min-height:0}
+.dc{background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--shadow);padding:12px 14px;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.dc .h{display:flex;align-items:baseline;gap:8px}
+.dc .h b{font-size:14px;font-weight:600;color:var(--ink)}
+.dc .h small{margin-left:auto;font-size:12px;color:var(--muted)}
+.dc .v{font-size:22px;font-weight:600;color:var(--ink);margin-top:2px}
+.dc .s{font-size:12px;color:var(--muted)}
+.dc svg.ch{width:100%;flex:1;min-height:60px;margin-top:6px}
+.ln{fill:none;stroke:var(--primary);stroke-width:2}
+.ln.c{stroke:var(--hl-mark);stroke-dasharray:4 3;stroke-width:1.5}
+.ar{fill:var(--primary);opacity:.12}
+.gl{stroke:var(--rule)}
+.ring{display:flex;align-items:center;justify-content:center;flex:1}
+.ring svg{width:120px;height:120px}
+.ring .bg{fill:none;stroke:var(--band);stroke-width:12}
+.ring .fg{fill:none;stroke:var(--primary);stroke-width:12;stroke-linecap:round}
+.ring .fg.hl{stroke:var(--hl)}
+.ring text{fill:var(--ink);font-size:18px;font-weight:600}
+.ring text.t{fill:var(--muted);font-size:11px;font-weight:500}
+.fn{display:flex;flex-direction:column;gap:6px;margin-top:6px;flex:1;justify-content:center}
+.fn div{display:grid;grid-template-columns:90px 1fr 40px;gap:8px;align-items:center;font-size:12px;color:var(--body)}
+.fn i{display:block;height:12px;border-radius:4px;background:var(--primary)}
+.fn em{font-style:normal;text-align:right;color:var(--ink);font-weight:600}
+.ls{list-style:none;margin:6px 0 0;padding:0;flex:1;overflow:hidden}
+.ls li{display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--rule);font-size:13px;color:var(--body)}
+.ls li span.r{margin-left:auto;font-size:12px;color:var(--muted);white-space:nowrap}
+.ls li .av{width:22px;height:22px;font-size:11px}
+.hero{background:var(--nav);color:var(--nav-ink);border-color:transparent}
+.hero .h b,.hero .v{color:#fff}
+.hero .s{color:var(--nav-muted)}
+.hero .bar{height:8px;border-radius:4px;background:rgba(255,255,255,.12);margin-top:10px;overflow:hidden}
+.hero .bar i{display:block;height:100%;background:var(--primary)}
+.mods{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px;flex:1}
+.mods div{border:1px solid var(--tile-edge);border-radius:10px;padding:8px;font-size:12px;color:var(--body)}
+.mods div b{display:block;font-size:16px;color:var(--ink)}
+.newtag{display:inline-block;font-size:11px;font-weight:600;padding:0 6px;border-radius:6px;background:var(--info-s);color:var(--info);margin-left:6px;vertical-align:1px}
+.fix{display:inline-block;font-size:11px;font-weight:600;padding:0 6px;border-radius:6px;background:var(--bad-s);color:var(--bad);margin-left:6px;vertical-align:1px}
+.pside{background:var(--nav);padding:12px 10px;display:flex;flex-direction:column;gap:2px;grid-row:2}
+.pside a{font-size:14px;color:var(--nav-ink);padding:7px 10px;border-radius:8px;display:flex;justify-content:space-between}
+.pside a.on{background:rgba(7,214,160,.18);font-weight:600}
+.pside h6{font-size:12px;color:var(--nav-muted);margin:10px 10px 2px;font-weight:600}
+.app.pp{grid-template-columns:210px 1fr;height:780px}
+.linkcard{display:flex;align-items:center;gap:8px;border:1px dashed var(--border-strong);border-radius:10px;padding:8px 10px;margin-top:8px;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink)}
+.linkcard .btn{margin-left:auto}
+table.mini{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+table.mini th{font-weight:500;color:var(--muted);text-align:left;padding:4px 6px;border-bottom:1px solid var(--rule)}
+table.mini td{padding:5px 6px;border-bottom:1px solid var(--rule);color:var(--body)}
+table.mini td.r,table.mini th.r{text-align:right}
+.report{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:10px;margin:10px 0 18px}
+.report > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px;font-size:14px;color:var(--board-ink)}
+.report b{display:block;margin-bottom:4px}
+.report ol,.report ul{margin:4px 0 0;padding-left:18px}
+.report li{margin:3px 0}
+</style>
+</head>
+<body class="light" data-opt="A">
+<div class="board">
+  <h1>Dashboards by role, partner portals by type, and what's left for premium</h1>
+  <p class="lead">Three audits from the code and Notion (Nov 18): every role's dashboard and access, the partner portal against the Notion partner spec (LA-1.1/1.2/1.8/1.9/1.17/1.19/7.4), and an app-wide premium review. The findings come first, then one compact dashboard per role in the agency-dashboard style (no page scroll, numbers with change badges, one big chart, every figure a link), then one portal per partner type. Marked <span class="newtag">New</span> = data or a feature that doesn't exist yet; <span class="fix">Fix</span> = a bug found in the audit.</p>
+
+  <div class="sec"><h2>What the audits found</h2><span>Ranked inside each column</span></div>
+  <div class="report">
+    <div><b>Role dashboards (app)</b><ol>
+      <li><b style="display:inline">Money leaks</b>: managers see $/mo on "My recent business" and +$/yr in the agency's Recent activity; retention reps get a whole money view ("$ saved", $/mo column) though their role has no money permission. <span class="fix">Fix</span></li>
+      <li>The dashboard ignores agency narrowing: setters and assistants get an empty Compliance tab; the assistant's "Import a list" leads to "owners only".</li>
+      <li>"My numbers" is computed for every role (setter booked/shown/show rate, producer close-out, bookkeeper money strip) but never drawn.</li>
+      <li>One layout for all roles: dead cards ("Calls show here once…") for assistant and retention, an empty right column for retention, and the Home page scrolls.</li>
+      <li>Daily pages never surfaced: producer My pay/ledger, bookkeeper Statements/Payouts, retention Scorecard, manager Producers/Hierarchy.</li>
+      <li>No stored goals: producer goal + Set goal, setter weekly target, retention monthly target. <span class="newtag">New</span></li>
+    </ol></div>
+    <div><b>Partner portal</b><ol>
+      <li>The portal doesn't know the partner's type, so publishers, marketing partners and affiliates get the identical call-centre portal.</li>
+      <li>Affiliates can't see their own tracked link, campaign or clicks; links live only on the agency side.</li>
+      <li>Everyone submits the full six-section application; the affiliate short form exists only on the public link page.</li>
+      <li>The pipeline picker lists every pipeline the agency has, so a marketing partner sees the publisher and affiliate pipeline names.</li>
+      <li>Deal flow, Team performance and Team access are shown to a one-person affiliate; marketing has no campaign view and no "what is owed".</li>
+      <li>The board shows 4 shared lanes, not the type's own stages (an owner decision on Oct 30 that reversed LA-1.17; asks for a fresh decision).</li>
+    </ol></div>
+    <div><b>What's left for "premium"</b><ol>
+      <li>Production jobs are failing (16 of 19: the app refuses the database's scheduled calls) → no digests, reminders or licence warnings reach anyone. Config, small.</li>
+      <li>Production config: payments still on sandbox IDs, Google sign-in has no redirect address, staff console served on customer hosts.</li>
+      <li>Built features waiting on database pastes: about 32 screens can say "needs a database update".</li>
+      <li>Security items open from the Nov review (unmasked SSN/bank until its paste lands, 2FA brute force, security headers, public live channels…).</li>
+      <li>No SMS or push for money-losing events (draft failed, callback due), as the spec promises.</li>
+      <li>AI assistant is a placeholder until a provider with health-data terms is chosen.</li>
+      <li>No built-in calling (click-to-call only), no call recording.</li>
+      <li>Saved views only per browser; no scheduled emailed reports; @mentions not working; no QuickBooks/Xero; owner can't require 2FA for the team.</li>
+    </ol></div>
+  </div>
+
+  <div class="bar" role="toolbar">
+    <div class="grp"><span>Theme</span><button data-theme-btn="light">Light</button><button data-theme-btn="dark">Dark</button></div>
+    <span class="hint">L / D theme · scroll for every role</span>
+  </div>
+
+  <div class="opt A" id="roles"></div>
+
+  <div class="sec"><h2>Partner portals by type</h2><span>Same portal and one intake path (the spec's rule), but the menu, the home and the lead form follow the partner's job. Nothing ever shows other partners, the agency's commission, or unmasked personal data.</span></div>
+  <div id="partners"></div>
+
+  <div class="sec"><h2>What gets built</h2><span>Nothing until you say so</span></div>
+  <div class="pick">
+    <div class="rec"><b>1 · Fix the leaks now</b>Small, no design question: money hidden from managers and retention reps by permission (not by role name); no empty Compliance tab; no "Import a list" for assistants inside an agency.</div>
+    <div class="rec"><b>2 · Compact dashboard per role, as drawn</b>8 homes on one shared layout, no page scroll; My numbers drawn for every role; dead cards removed; each role's daily pages linked. Stored goals and targets <span class="newtag">New</span> need one small table (paste script).</div>
+    <div class="rec"><b>3 · Partner portal by type, as drawn</b>The portal learns the partner's type; menu, home and lead form per type; affiliates get My links (read-only) and the short form; the pipeline picker shows only their own pipelines. Decide: the board's columns (own stages vs shared lanes).</div>
+    <div><b>4 · Premium groundwork (separate)</b>Production jobs + config, database pastes, security items, then SMS/push, AI provider and calling as the headline upgrades. Most of it is config and pastes for you rather than design.</div>
+  </div>
+</div>
+<script>
+(function(){
+  const NAV=`<div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">SR</span></div><div class="icons"><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i></div>`;
+  const spark=(pts)=>`<svg viewBox="0 0 120 20"><polyline class="ln" points="${pts.map((v,i)=>`${i*20},${20-v}`).join(" ")}"/></svg>`;
+  const area=(a,c)=>{const W=400,H=120;const max=Math.max(...a,...(c||[]))*1.15;const p=(arr)=>arr.map((v,i)=>[i*W/(arr.length-1),H-v/max*H]);const pa=p(a);return `<svg class="ch" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><line class="gl" x1="0" x2="${W}" y1="${H*.5}" y2="${H*.5}"/><polygon class="ar" points="0,${H} ${pa.map(q=>q.join(",")).join(" ")} ${W},${H}"/>${c?`<polyline class="ln c" points="${p(c).map(q=>q.join(",")).join(" ")}"/>`:""}<polyline class="ln" points="${pa.map(q=>q.join(",")).join(" ")}"/></svg>`;};
+  const ring=(pct,label,hl)=>{const r=48,C=2*Math.PI*r;return `<div class="ring"><svg viewBox="0 0 120 120"><circle class="bg" cx="60" cy="60" r="${r}"/><circle class="fg ${hl?"hl":""}" cx="60" cy="60" r="${r}" stroke-dasharray="${C*pct/100} ${C}" transform="rotate(-90 60 60)"/><text x="60" y="62" text-anchor="middle">${pct}%</text><text class="t" x="60" y="80" text-anchor="middle">${label}</text></svg></div>`;};
+  const card=(c)=>{
+    const tag=c.tag==="new"?'<span class="newtag">New</span>':c.tag==="fix"?'<span class="fix">Fix</span>':"";
+    let body="";
+    if(c.t==="chart") body=`<div class="v">${c.v}</div><div class="s">${c.s}</div>${area(c.a,c.c)}`;
+    if(c.t==="ring") body=ring(c.p,c.l,c.hl)+`<div class="s" style="text-align:center">${c.s||""}</div>`;
+    if(c.t==="funnel") body=`<div class="fn">${c.rows.map(([k,v,w])=>`<div><span>${k}</span><i style="width:${w}%"></i><em>${v}</em></div>`).join("")}</div>`;
+    if(c.t==="list") body=`<ul class="ls">${c.rows.map(([a,b,av])=>`<li>${av?`<span class="av">${av}</span>`:""}${a}<span class="r">${b}</span></li>`).join("")}</ul>`;
+    if(c.t==="table") body=`<table class="mini"><thead><tr>${c.head.map((h,i)=>`<th class="${i?"r":""}">${h}</th>`).join("")}</tr></thead><tbody>${c.rows.map(r=>`<tr>${r.map((d,i)=>`<td class="${i?"r":""}">${d}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+    if(c.t==="hero") body=`<div class="v">${c.v}</div><div class="s">${c.s}</div>${c.bar?`<div class="bar"><i style="width:${c.bar}%"></i></div>`:""}${c.extra||""}`;
+    if(c.t==="mods") body=`<div class="mods">${c.rows.map(([k,v])=>`<div><b>${v}</b>${k}</div>`).join("")}</div>`;
+    if(c.t==="html") body=c.html;
+    return `<div class="dc ${c.t==="hero"?"hero":""}"><div class="h"><b>${c.title}</b>${tag}<small>${c.link||"›"}</small></div>${body}</div>`;
+  };
+  const ROLES=[
+   {name:"Owner · agency",who:"Sofia Ramirez",role:"Owner",tabs:["Home","Leads","Sales","Retention","Book","Accounting","Compliance"],acts:'<span class="btn o">Agency dashboard</span><span class="btn hl">Invite producer</span>',
+    note:"Home answers \"what do I do today\"; the full agency picture (producer goals, carriers, states, Business health) stays on the Agency dashboard. Every figure opens its filtered page.",
+    needs:[[3,"cases pending > 7 days","w"],[2,"pay issues to resolve"],[5,"callbacks overdue","w"],[1,"licence ends in 30 days"],[4,"close-outs to decide"]],
+    nums:[["Issued premium","$48.2k","▲ 12%",[4,6,8,7,10,12,15]],["Policies issued","31","▲ 4",[3,5,6,6,8,9,11]],["Placement","64%","▲ 3 pts",[8,9,9,10,11,11,12]],["13-mo persistency","87%","",[12,12,13,13,13,14,14]],["Chargeback rate","2.1%","▼ 0.4",[9,8,8,7,7,6,6],"dn"]],
+    big:{t:"chart",title:"Premium submitted vs issued",v:"$61.4k submitted",s:"this month · issued $48.2k",a:[20,28,25,34,40,38,46,52,49,58,61],c:[18,22,24,26,30,32,35,38,40,44,48],link:"Book ›"},
+    side:{t:"ring",title:"November goal",p:78,l:"of $62k",s:"set by you · $13.8k to go",tag:"new",link:"Set goal"},
+    l1:{t:"funnel",title:"Lead to policy",rows:[["Leads","1,240",100],["Called","812",66],["Quoted","301",24],["Apps","118",10],["Issued","31",3]],link:"Leads ›"},
+    l2:{t:"mods",title:"Your modules",rows:[["Leads new","42"],["Apps pending","18"],["Retention cases","9"],["Files to review","3"],["Bills to approve","2"],["Compliance gaps","1"]]},
+    hero:{t:"hero",title:"Commission in",v:"$22,480",s:"of $24,900 expected this month",bar:90,link:"Accounting ›"},
+    today:{t:"list",title:"Today",rows:[["Team stand-up","9:00"],["Callback · M. Lee","10:30"],["Carrier call · Americo","2:00"],["Close-out review","4:30"]]}},
+   {name:"Owner · solo agent",who:"Ray Collins",role:"Solo",tabs:["Home","Leads","Sales","Book","Accounting"],acts:'<span class="btn p">Start dialing</span>',
+    note:"One person: no team cards. Their own production, goal, and money in.",
+    needs:[[6,"callbacks due today","w"],[2,"apps pending"],[1,"draft failed","w"],[3,"leads not called"]],
+    nums:[["Issued premium","$9.8k","▲ 18%",[3,4,6,5,8,9,11]],["Apps submitted","14","▲ 3",[4,5,5,6,7,8,9]],["Placement","71%","",[9,10,10,11,11,12,12]],["Contact rate","38%","▼ 2 pts",[10,10,9,9,8,8,8],"dn"],["Commission in","$4.1k","▲ 9%",[5,6,6,7,8,8,9]]],
+    big:{t:"chart",title:"My premium, submitted vs issued",v:"$12.6k submitted",s:"this month · issued $9.8k",a:[8,12,10,15,18,17,22,24,23,27,30],c:[6,9,10,11,13,14,16,17,19,21,23]},
+    side:{t:"ring",title:"My goal",p:65,l:"of $15k",s:"$5.2k to go",tag:"new",link:"Set goal"},
+    l1:{t:"list",title:"On the phone today",rows:[["Dials","84"],["Contacts","32"],["Quotes","9"],["Best hour","10–11 am"]]},
+    l2:{t:"list",title:"My recent business",rows:[["M. Lee · Final expense","Issued"],["J. Ortiz · Term","Pending"],["A. Shah · Final expense","Submitted"],["K. Brown · Term","Declined"]]},
+    hero:{t:"hero",title:"Commission in",v:"$4,120",s:"of $4,600 expected",bar:89},
+    today:{t:"list",title:"Today",rows:[["Callback · M. Lee","10:30"],["Appointment · J. Ortiz","1:00"],["Draft date · A. Shah","—"]]}},
+   {name:"Manager",who:"Devon Okafor",role:"Manager · no money",tabs:["Home","Leads","Sales","Book"],acts:'<span class="btn o">My team</span>',
+    note:"Counts only, never dollars. Team needs first: reports' overdue callbacks and stuck cases. Fixes the two money leaks the audit found.",
+    needs:[[7,"team callbacks overdue","w"],[4,"reports' cases stuck","w"],[2,"close-outs to decide"],[1,"producer licence ending"]],
+    nums:[["Team policies issued","22","▲ 5",[3,4,5,6,7,8,10]],["Apps submitted","61","▲ 8",[5,6,7,7,9,10,11]],["Placement","58%","",[9,9,10,10,10,11,11]],["Dials today","1,120","▲ 140",[6,8,7,9,10,11,12]]],
+    big:{t:"chart",title:"Team policies issued per week",v:"22 this month",s:"counts only",a:[2,4,3,5,6,5,7,8,6,9,10]},
+    side:{t:"ring",title:"Team goal",p:73,l:"of 30 policies",s:"by count",tag:"new"},
+    l1:{t:"funnel",title:"Team lead to policy",rows:[["Leads","860",100],["Called","602",70],["Quoted","210",24],["Apps","61",7],["Issued","22",3]]},
+    l2:{t:"table",title:"My producers",head:["Producer","Apps","Issued"],rows:[["Leah Kim","18","7"],["Marisol Vance","15","6"],["Sofia R.","12","5"],["Devon O.","9","4"]],link:"Producers ›"},
+    hero:{t:"hero",title:"Team on the phone",v:"6 of 8",s:"dialing now · 2 on break"},
+    today:{t:"list",title:"Team activity",rows:[["Leah issued a policy","10:12","LK"],["Marisol booked an app","9:48","MV"],["Sofia closed a case","9:20","SR"]],tag:"fix"}},
+   {name:"Producer",who:"Leah Kim",role:"Producer",tabs:["Home","Leads","Sales","Retention","Book"],acts:'<span class="btn p">Start dialing</span>',
+    note:"Their own work: goal with Set goal, close-out drawn, and My pay as the hero (today never linked from Home).",
+    needs:[[2,"transfers waiting","w"],[5,"callbacks due"],[3,"apps pending"],[1,"close-out to decide"],[1,"policy lapsing","w"]],
+    nums:[["Issued premium","$11.2k","▲ 14%",[4,5,6,6,8,9,10]],["Apps","18","▲ 2",[5,5,6,7,7,8,9]],["Placement","68%","",[10,10,11,11,11,12,12]],["Contact rate","41%","▲ 3 pts",[8,9,9,10,10,11,11]],["Close-out","92%","",[12,12,12,13,13,13,13]]],
+    big:{t:"chart",title:"My premium, submitted vs issued",v:"$14.9k submitted",s:"this month · issued $11.2k",a:[9,12,11,16,19,18,22,25,24,28,31],c:[7,9,10,12,13,15,16,18,19,21,22]},
+    side:{t:"ring",title:"My goal",p:72,l:"of $15.5k",s:"$4.3k to go",tag:"new",link:"Set goal"},
+    l1:{t:"list",title:"On the phone today",rows:[["Dials","96"],["Contacts","38"],["Quotes","11"],["Apps","3"]]},
+    l2:{t:"list",title:"My recent business",rows:[["M. Lee · Final expense","Issued"],["J. Ortiz · Term","Pending"],["A. Shah · Final expense","Submitted"],["K. Brown · Term","Declined"]]},
+    hero:{t:"hero",title:"My pay this period",v:"$3,840",s:"advance + as-earned · paid Nov 30",link:"My pay ›"},
+    today:{t:"list",title:"Today",rows:[["Callback · M. Lee","10:30"],["Appointment · J. Ortiz","1:00"],["Follow-up · A. Shah","3:15"]]}},
+   {name:"Setter",who:"Jordan Pike",role:"Setter · no money",tabs:["Home","Leads"],acts:'<span class="btn p">Start dialing</span>',
+    note:"Booked, shown and show rate are already computed but never drawn. A weekly target is new. No money, no empty Compliance tab.",
+    needs:[[42,"leads ready to dial"],[3,"shows to confirm today","w"],[2,"no-shows to rebook"]],
+    nums:[["Booked this week","19","▲ 4",[3,4,5,6,7,8,9]],["Shown","14","",[2,3,4,5,6,6,7]],["Show rate","74%","▲ 6 pts",[9,10,10,11,11,12,12]],["Dials today","210","",[6,7,8,8,9,10,11]],["Contact rate","22%","▼ 1 pt",[9,9,8,8,8,7,7],"dn"]],
+    big:{t:"chart",title:"Booked per day vs target",v:"19 booked",s:"this week · target 25",a:[2,3,5,4,5,0,0],c:[5,5,5,5,5,0,0]},
+    side:{t:"ring",title:"Weekly target",p:76,l:"19 of 25",s:"6 to go by Friday",tag:"new",link:"Set target"},
+    l1:{t:"list",title:"How calls ended today",rows:[["No answer","118"],["Booked","4"],["Callback","22"],["Not interested","31"]]},
+    l2:{t:"list",title:"Best hours",rows:[["10–11 am","9 contacts"],["4–5 pm","7 contacts"],["1–2 pm","3 contacts"]]},
+    hero:{t:"hero",title:"Ready to dial",v:"42 leads",s:"in your queue · next: M. Lee",link:"Dialer ›"},
+    today:{t:"list",title:"Appointments set today",rows:[["J. Ortiz → Leah","1:00"],["K. Brown → Marisol","2:30"],["T. Diaz → Sofia","4:00"]]}},
+   {name:"Assistant (buffer agent)",who:"Priya Castellanos",role:"Assistant",tabs:["Home","Leads"],acts:'<span class="btn o">Inbound floor</span>',
+    note:"Built for inbound: transfers waiting and speed to answer. Removes the dead \"Calls show here…\" card and the Import button that leads to a gate.",
+    needs:[[2,"transfers waiting","w"],[1,"past the wait limit","w"],[4,"callbacks overdue"]],
+    nums:[["Transfers taken","23","▲ 5",[4,5,6,6,7,8,9]],["Answer time","14s","▼ 3s",[10,9,9,8,8,7,7]],["Callbacks done","11","",[3,4,5,6,6,7,8]],["Appointments booked","6","▲ 2",[2,3,3,4,4,5,6]]],
+    big:{t:"chart",title:"Inbound per hour today",v:"23 transfers",s:"busiest 11 am",a:[1,3,5,6,4,3,2,4,3,2,1],tag:"new"},
+    side:{t:"list",title:"Waiting now",rows:[["Transfer · Apex Health","0:42"],["Transfer · Harbor","0:18"]]},
+    l1:{t:"list",title:"Callbacks due",rows:[["M. Lee","10:30"],["S. Park","11:00"],["T. Diaz","11:45"]]},
+    l2:{t:"list",title:"Recent leads",rows:[["J. Ortiz","Transferred"],["A. Shah","Booked"],["K. Brown","Callback"]]},
+    hero:{t:"hero",title:"Floor",v:"3 agents free",s:"2 on calls · 1 on break",link:"Inbound ›"},
+    today:{t:"list",title:"Today",rows:[["Callback · M. Lee","10:30"],["Appointment · T. Diaz","2:00"]]}},
+   {name:"Bookkeeper",who:"Nora Blake",role:"Bookkeeper",tabs:["Home","Book","Accounting"],acts:'<span class="btn o">Export month</span>',
+    note:"The money strip that exists but isn't drawn today. Client names only, never phone or email.",
+    needs:[[3,"statements to review","w"],[2,"pay issues"],[4,"bills to approve"],[1,"W-9 missing"]],
+    nums:[["Received","$22.5k","▲ 6%",[6,7,8,8,9,10,11]],["Expected","$24.9k","",[7,8,8,9,10,10,11]],["Owed, not paid","$2.4k","▼ $0.6k",[10,9,9,8,8,7,7],"dn"],["Chargeback exposure","$1.1k","",[5,5,6,6,5,5,5]],["Payouts due","$6.3k","",[4,5,5,6,6,7,7]]],
+    big:{t:"chart",title:"Received vs expected by month",v:"90% received",s:"Nov · $22.5k of $24.9k",a:[18,20,22,21,24,23,22],c:[19,21,23,23,25,24,25]},
+    side:{t:"hero",title:"Profit this month",v:"$9,870",s:"after expenses $12.6k"},
+    l1:{t:"table",title:"Payouts due",head:["Payee","Amount"],rows:[["Leah Kim","$1,920"],["Apex Health","$2,400"],["Harbor Marketing","$1,150"],["Marisol Vance","$830"]]},
+    l2:{t:"list",title:"Carrier files to review",rows:[["Americo · commissions","3 rows"],["Mutual of Omaha · policies","new layout"],["Aetna · commissions","bad math"]]},
+    hero:{t:"hero",title:"Next payout run",v:"Nov 30",s:"8 payees · $6.3k"},
+    today:{t:"list",title:"Recent money in",rows:[["Americo deposit","$8,420"],["Aetna deposit","$5,110"],["Foresters deposit","$2,960"]]}},
+   {name:"Retention",who:"Tomas Reyes",role:"Retention · no money",tabs:["Home","Retention"],acts:'<span class="btn o">My cases</span>',
+    note:"Counts, never dollars: the audit found this role sees \"$ saved\" today without the money permission. Adds a monthly target and the scorecard.",
+    needs:[[4,"cases past deadline","w"],[9,"cases due today"],[3,"new lapse signals"]],
+    nums:[["Saved this month","17","▲ 4",[3,4,5,6,7,8,9]],["Save rate","62%","▲ 5 pts",[9,10,10,11,11,12,12]],["Open cases","21","",[10,10,9,9,9,8,8]],["Won back","5","",[2,2,3,3,4,4,5]]],
+    big:{t:"chart",title:"Saved vs lost per month",v:"17 saved · 6 lost",s:"policies, counts",a:[9,11,10,13,14,17],c:[7,8,6,7,6,6],tag:"fix"},
+    side:{t:"ring",title:"Monthly target",p:68,l:"17 of 25 saves",tag:"new",link:"Set target"},
+    l1:{t:"table",title:"Cases by deadline",head:["Client","Step","Due"],rows:[["M. Lee","Payment problem","Today"],["S. Park","Pending lapse","Tomorrow"],["T. Diaz","Paperwork","Nov 21"],["K. Brown","Lapsed","Nov 22"]]},
+    l2:{t:"list",title:"Waiting on the carrier",rows:[["Americo · bank change","2 days"],["Aetna · reinstatement","5 days"]]},
+    hero:{t:"hero",title:"My scorecard",v:"#2 of 4",s:"save rate this month",link:"Scorecard ›"},
+    today:{t:"list",title:"Cases due today",rows:[["M. Lee · call","10:00"],["J. Ortiz · email","—"],["R. Diaz · carrier","2:00"]]}}
+  ];
+  const roleBox=document.getElementById("roles");
+  ROLES.forEach((r,i)=>{
+    roleBox.insertAdjacentHTML("beforeend",`<div class="sec"><h2>${i+1} · ${r.name}</h2><span>${r.note}</span></div>
+    <div class="app rd">${NAV}<div class="page">
+      <div class="titleline"><h3>Good morning, ${r.who.split(" ")[0]}</h3><span class="rc">${r.role}</span><nav class="vt">${r.tabs.map((t,j)=>`<a class="${j?"":"on"}">${t}</a>`).join("")}</nav><div class="acts">${r.acts}</div></div>
+      <div class="needs">${r.needs.map(([n,t,w])=>`<div class="need ${w||""}"><b>${n}</b><span>${t}</span></div>`).join("")}</div>
+      <div class="nums">${r.nums.map(([k,v,b,s,dn])=>`<div class="num"><small>${k}</small><b>${v}</b>${b?`<span class="bd ${dn||""}">${b}</span>`:""}${spark(s)}</div>`).join("")}</div>
+      <div class="dgrid"><div class="dmain"><div class="drow">${card(r.big)}${card(r.side)}</div><div class="drow even">${card(r.l1)}${card(r.l2)}</div></div>
+      <div class="dright">${card(r.hero)}${card(r.today)}</div></div>
+    </div></div>`);
+  });
+  const PARTNERS=[
+   {name:"Publisher (call centre)",org:"Apex Health · Dana Whitfield",menu:[["Workspace",""],["Overview","on"],["Submit transfer",""],["Lead pipeline",""],["Daily deal flow",""],["Messages","3"],["Organization",""],["Statements",""],["Team performance",""],["Team access",""]],
+    note:"Mostly today's portal, in its own words: transfers, accepted transfers, compliance rejects as a count, the closer leaderboard.",
+    nums:[["Transfers today","38","▲ 6"],["Claimed / on a call","9",""],["Accepted this month","412","▲ 31"],["Est. payout","$12,360","at $30 / accepted"],["Compliance rejects","7","count only"]],
+    big:{t:"chart",title:"Transfers per day",v:"412 accepted",s:"this month · 463 sent",a:[20,24,22,28,30,27,33,35,31,38]},
+    side:{t:"table",title:"Closer leaderboard",head:["Closer","Sent","Accepted"],rows:[["Maria L.","88","81"],["Ken T.","76","70"],["Ava R.","61","52"],["Sam P.","58","49"]]},
+    l1:{t:"list",title:"Oldest unclaimed",rows:[["J. Ortiz · sent 4m ago","New transfer"],["A. Shah · sent 2m ago","New transfer"]]},
+    l2:{t:"hero",title:"Latest statement",v:"$11,220 · Oct",s:"374 accepted × $30 · 2 credits · 1 open dispute"}},
+   {name:"Marketing partner",org:"Harbor Marketing Co · Tara Quinn",menu:[["Workspace",""],["Overview","on"],["Submit lead",""],["Lead pipeline",""],["Campaigns <span class='newtag'>New</span>",""],["Messages",""],["Organization",""],["Statements",""],["Team access",""]],
+    note:"Campaign-first: form vs call leads, what happened to each, what's owed. Revenue share shows the rate, never the agency's commission. Short lead form; full application optional.",
+    nums:[["Leads this month","286","▲ 40"],["Form / call","201 / 85",""],["Contacted","71%","▲ 4 pts"],["Converted","38","▲ 7"],["Owed so far","rate 18%","rev share · on statement"]],
+    big:{t:"chart",title:"Leads and conversions per week",v:"286 leads · 38 converted",s:"this month",a:[50,62,58,70,72,80],c:[6,7,6,9,10,11]},
+    side:{t:"table",title:"By campaign",head:["Campaign","Leads","Conv."],rows:[["FE Facebook Nov","142","21"],["Term Google","88","11"],["Seniors radio","56","6"]],tag:"new"},
+    l1:{t:"funnel",title:"Your pipeline",rows:[["Form lead","201",100],["Call lead","85",42],["Needs callback","44",22],["Qualified","61",30],["Converted","38",19]]},
+    l2:{t:"list",title:"Recent outcomes",rows:[["M. Lee · FE Facebook","Converted"],["S. Park · Term Google","Needs callback"],["T. Diaz · radio","Disqualified"]]}},
+   {name:"Affiliate",org:"SeniorSavers · Grace Holt",menu:[["Overview","on"],["My links <span class='newtag'>New</span>",""],["Referrals",""],["Refer someone",""],["Messages",""],["Statements",""]],
+    note:"Lighter: my link, clicks, referrals and outcomes, the short \"Refer someone\" form. No deal flow, no team pages for a one-person affiliate.",
+    nums:[["Clicks","1,204","▲ 210"],["Referrals","96","▲ 18"],["Qualified","41",""],["Submitted","19","▲ 5"],["Est. payout","$950","$50 per sale"]],
+    big:{t:"funnel",title:"Clicks to sales",rows:[["Clicks","1,204",100],["Referrals","96",42],["Contacted","70",30],["Qualified","41",18],["Submitted","19",8]]},
+    side:{t:"html",title:"My link",tag:"new",html:`<div class="linkcard">insurvas.com/a/seniorsavers<span class="btn o sm">Copy</span></div><div class="linkcard">…/a/seniorsavers-fb-nov<span class="btn o sm">Copy</span></div><div class="s" style="margin-top:8px">2 links active · 1,204 clicks this month</div>`},
+    l1:{t:"list",title:"Recent referrals",rows:[["M. Lee","Contacted"],["S. Park","Qualified"],["T. Diaz","Not interested"],["K. Brown","Submitted"]]},
+    l2:{t:"hero",title:"Latest statement",v:"$850 · Oct",s:"17 sales × $50"}}
+  ];
+  const pBox=document.getElementById("partners");
+  PARTNERS.forEach((p,i)=>{
+    pBox.insertAdjacentHTML("beforeend",`<div class="sec"><h2>P${i+1} · ${p.name}</h2><span>${p.note}</span></div>
+    <div class="app pp"><div class="top" style="grid-column:1/-1"><span class="logo"></span><span class="search">Search your leads…</span><span class="sp"></span><span class="me">${p.org.split("· ")[1].split(" ").map(w=>w[0]).join("")}</span></div>
+    <nav class="pside">${p.menu.map(([t,c])=>t==="Workspace"||t==="Organization"?`<h6>${t}</h6>`:`<a class="${c==="on"?"on":""}">${t}${c&&c!=="on"?`<span>${c}</span>`:""}</a>`).join("")}</nav>
+    <div class="rd" style="display:contents"><div class="page">
+      <div class="titleline"><h3>Overview</h3><span class="rc">${p.org}</span><div class="acts"><span class="btn p">${i===2?"Refer someone":i===1?"Submit lead":"Submit transfer"}</span></div></div>
+      <div class="nums">${p.nums.map(([k,v,b])=>`<div class="num"><small>${k}</small><b>${v}</b>${b?`<div class="sub">${b}</div>`:""}</div>`).join("")}</div>
+      <div class="dmain" style="flex:1"><div class="drow">${card(p.big)}${card(p.side)}</div><div class="drow even">${card(p.l1)}${card(p.l2)}</div></div>
+    </div></div></div>`);
+  });
+})();
+</script>
+<!--kit-js-->
+<script>
+/* Settings round 8 board kit: option (A/B/C) and theme switching. Keys 1–3 pick an option, L / D the theme.
+   Buttons: <button data-opt="A">, <button data-theme="light">. The body carries class light|dark and data-opt. */
+(function () {
+  var body = document.body;
+  if (!body.dataset.opt) body.dataset.opt = "A";
+  if (!/\b(light|dark)\b/.test(body.className)) body.classList.add("light");
+  function sync() {
+    document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.optBtn === body.dataset.opt)); });
+    document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(body.classList.contains(b.dataset.themeBtn))); });
+  }
+  function opt(v) { body.dataset.opt = v; sync(); }
+  function theme(v) { body.classList.remove("light", "dark"); body.classList.add(v); sync(); }
+  document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.addEventListener("click", function () { opt(b.dataset.optBtn); }); });
+  document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.addEventListener("click", function () { theme(b.dataset.themeBtn); }); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "1") opt("A"); if (e.key === "2") opt("B"); if (e.key === "3") opt("C");
+    if (e.key === "l" || e.key === "L") theme("light"); if (e.key === "d" || e.key === "D") theme("dark");
+  });
+  sync();
+})();
+
+</script>
+<!--/kit-js-->
+</body>
+</html>

@@ -186,8 +186,6 @@ export function PartnerDealFlow({
     filters.submitted_by && { key: "submitted", label: "Submitted by", value: data?.facets.submitters.find((item) => item.id === filters.submitted_by)?.name ?? "Someone", onRemove: () => applyFilter({ submitted_by: "" }) },
   ].filter(Boolean) as ActiveFilter[];
 
-  if (firstLoad) return <PageLoading />;
-
   const columns = isAdmin ? 6 : 5;
 
   // The period: a few quick ranges, or two dates. The default is today, where the partner is.
@@ -212,33 +210,45 @@ export function PartnerDealFlow({
   const rangeDays = spanDays(range.from, range.to);
   const dayList = rangeDays > 1 && rangeDays <= 92 ? Array.from({ length: rangeDays }, (_, index) => shiftDay(range.from, index)) : [];
   const perDay = (match: (row: (typeof rows)[number]) => boolean) => (dayList.length ? dayList.map((day) => rows.filter((row) => row.day === day && match(row)).length) : undefined);
+  const header = (
+    <PageHeader
+      title="Daily Deal Flow"
+      description="What the agency did with the leads you sent. Published statements show what is paid."
+      hideTitle
+      breadcrumbs={[{ label: "Leads" }, { label: "Daily Deal Flow" }]}
+      actions={
+        <div className="flex flex-wrap items-center gap-2" aria-label="Deals worked date range">
+          <SelectMenu
+            label="Period"
+            value={customRange ? "custom" : activePreset!}
+            onChange={choosePeriod}
+            className="w-40"
+            panelClassName="w-48"
+            panelAlign="end"
+            options={[...presets.map((preset) => ({ value: preset.key, label: preset.label })), { value: "custom", label: "Custom range" }]}
+          />
+          {customRange && <>
+            <input type="date" aria-label="Worked from" className={toolbarControl} value={range.from} max={range.to || ceiling} onChange={(event) => setDate("from", event.target.value)} />
+            <span className="text-xs text-muted-foreground" aria-hidden="true">to</span>
+            <input type="date" aria-label="Worked to" className={toolbarControl} value={range.to} min={range.from || undefined} max={ceiling} onChange={(event) => setDate("to", event.target.value)} />
+          </>}
+        </div>
+      }
+    />
+  );
+  // Frame first (UI-CONSISTENCY §7a): the title and its buttons draw at once; the page loads under them.
+  if (firstLoad) {
+    return (
+      <div className="m-stagger flex min-h-[calc(100dvh_-_7rem)] w-full min-w-0 flex-col gap-6">
+        {header}
+        <PageLoading header={false} />
+      </div>
+    );
+  }
 
   return (
     <div className="m-stagger flex min-h-[calc(100dvh_-_7rem)] w-full min-w-0 flex-col gap-6">
-      <PageHeader
-        title="Daily Deal Flow"
-        description="What the agency did with the leads you sent. Published statements show what is paid."
-        hideTitle
-        breadcrumbs={[{ label: "Leads" }, { label: "Daily Deal Flow" }]}
-        actions={
-          <div className="flex flex-wrap items-center gap-2" aria-label="Deals worked date range">
-            <SelectMenu
-              label="Period"
-              value={customRange ? "custom" : activePreset!}
-              onChange={choosePeriod}
-              className="w-40"
-              panelClassName="w-48"
-              panelAlign="end"
-              options={[...presets.map((preset) => ({ value: preset.key, label: preset.label })), { value: "custom", label: "Custom range" }]}
-            />
-            {customRange && <>
-              <input type="date" aria-label="Worked from" className={toolbarControl} value={range.from} max={range.to || ceiling} onChange={(event) => setDate("from", event.target.value)} />
-              <span className="text-xs text-muted-foreground" aria-hidden="true">to</span>
-              <input type="date" aria-label="Worked to" className={toolbarControl} value={range.to} min={range.from || undefined} max={ceiling} onChange={(event) => setDate("to", event.target.value)} />
-            </>}
-          </div>
-        }
-      />
+      {header}
 
       {data?.capped && <Alert tone="warning">Narrow the range to see every deal — showing the first 5,000.</Alert>}
       {error && data && (

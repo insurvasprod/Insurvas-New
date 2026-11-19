@@ -3,8 +3,11 @@ import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { SalesPerformance } from "@/components/app/applications/sales-performance";
-import { SetupPending } from "@/components/app/applications/setup-pending";
+import { Await } from "@/components/app/reports/await";
+import { EmptyState } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
+import { StreamSection } from "@/components/ui/stream-section";
+import { TableCard } from "@/components/ui/table-card";
 import { ApplicationError } from "@/lib/applications/db";
 import { loadSalesReport } from "@/lib/applications/report";
 import { sampleReportInput } from "@/lib/applications/reportFixtures";
@@ -46,7 +49,18 @@ export default async function SalesPerformancePage({ searchParams }: { searchPar
     const window = period ?? defaultWindow(now, "UTC");
     return <ReportsPage view="sales" info={INFO} show="chart" chip={<StatusChip tone="info">Sample</StatusChip>}><SalesPerformance key={readKey} report={buildSalesReport(sampleReportInput(now), { ...window, ...scoped })} initialFilters={filters} sample framed /></ReportsPage>;
   }
-  const loaded = await orPending(scopeFor(guard.context).then((scope) => loadSalesReport(guard.context.tenantId, { ...(period ?? {}), ...scoped }, undefined, scope)));
-  if (!loaded) return <SetupPending title="Sales performance" />;
-  return <ReportsPage view="sales" info={INFO} show="chart"><SalesPerformance key={readKey} report={loaded.report} initialFilters={filters} timeZone={loaded.timeZone} framed periodFromAddress={Boolean(period)} /></ReportsPage>;
+  // Frame first (§7a): the report is started here and streams in under the title, the rail and the switch.
+  const loaded = orPending(scopeFor(guard.context).then((scope) => loadSalesReport(guard.context.tenantId, { ...(period ?? {}), ...scoped }, undefined, scope)));
+  return (
+    <ReportsPage view="sales" info={INFO} show="chart">
+      <StreamSection shape="strip+table">
+        <Await read={loaded}>
+          {(read) => (read
+            ? <SalesPerformance key={readKey} report={read.report} initialFilters={filters} timeZone={read.timeZone} framed periodFromAddress={Boolean(period)} />
+            // Its tables do not exist yet: the LA-3 migrations are not applied.
+            : <TableCard><EmptyState title="This isn't set up yet" hint="Its database update has not been applied. Ask your Insurvas admin to apply the LA-3 migrations." /></TableCard>)}
+        </Await>
+      </StreamSection>
+    </ReportsPage>
+  );
 }

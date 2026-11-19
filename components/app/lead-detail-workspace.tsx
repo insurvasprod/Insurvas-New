@@ -21,7 +21,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { control } from "@/components/ui/field";
 import { ActivityStream, NextStepCard, PersonCard, StagePath, phoneText, type PersonRow, type StreamItem } from "@/components/app/lead-detail-parts";
 import { callPathOnly, durationLabel } from "@/components/app/pipeline-views";
-import { readResource } from "@/lib/client/resource-cache";
+import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
+import { TitleShape } from "@/components/ui/stream-section";
 import type { PipelineViewContext } from "@/lib/pipelines/views";
 import { ErrorState } from "@/components/ui/page-states";
 import type { LeadLineage, LeadNextAction } from "@/lib/leadWorkspace/lineage";
@@ -32,6 +33,7 @@ import { LeadApplicationEntry } from "@/components/app/applications/lead-applica
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { Segmented, UnderlineTabs } from "@/components/ui/view-tabs";
 
+import { CheckBox } from "@/components/ui/check-box";
 type Template = { product_name: string; definition_version?: number; fields: Array<{ field_key: string; label: string; type: string; is_required: boolean; options: string[]; help_text?: string | null }>; form_definition: { sections: Array<{ section_key: string; label: string; fields: Array<{ field_key: string; is_required: boolean; show_when: { field_key: string; equals: string } | null; conditional_on?: { field_key: string; equals: string } | null }> }> } };
 type Event = { id: string; label: string; at: string; actor: string; detail: string | null; immutable: boolean };
 type Note = { id: string; leadId: string; body: string | null; visibility: "internal" | "shared"; author: { id: string; name: string }; createdAt: string; editedAt: string | null; deletedAt: string | null; mentions: string[]; history: Array<{ id: string; action: string; old_body: string; old_visibility: string; new_body: string | null; new_visibility: string | null; created_at: string; actor: { id: string; name: string } }> };
@@ -150,7 +152,7 @@ function NotesTab({ data, refresh }: { data: Workspace; refresh: () => Promise<v
         {data.teammates.length > 1 && (
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
             <span className="text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">Mention</span>
-            {data.teammates.filter((user) => user.id !== data.currentUserId).map((user) => <label key={user.id} className="inline-flex items-center gap-2 text-sm text-[var(--body)]"><input type="checkbox" checked={mentions.includes(user.id)} onChange={() => toggleMention(user.id)} disabled={!canWrite || busy} className="size-4 accent-primary" />{user.name}{user.role ? ` (${user.role})` : ""}</label>)}
+            {data.teammates.filter((user) => user.id !== data.currentUserId).map((user) => <label key={user.id} className="inline-flex items-center gap-2 text-sm text-[var(--body)]"><CheckBox checked={mentions.includes(user.id)} onChange={() => toggleMention(user.id)} disabled={!canWrite || busy} />{user.name}{user.role ? ` (${user.role})` : ""}</label>)}
           </div>
         )}
       </div>
@@ -253,8 +255,22 @@ function LiveCallStatus({ startedAt, agentName }: { startedAt: string; agentName
 
 type TabKey = "details" | "activity" | "notes" | "nurture" | "verification" | "application";
 
+/** The lead's read, as the app's cache keys it (lib/client/resource-cache.ts): a repeat visit draws it at once. */
+const leadKey = (leadId: string) => `/api/app/leads/${encodeURIComponent(leadId)}`;
+/** The board's first page, as the Leads workspace keys it (lead-workspace.tsx `leadsKey("")`). */
+const BOARD_KEY = "/api/app/leads";
+/** The lead's name from the board's kept page, when the person came from it: the title draws with the frame. */
+function nameOnBoard(leadId: string): string | null {
+  const board = seed<{ leads?: Array<{ id: string; values?: Record<string, unknown> }> }>(BOARD_KEY, true)?.data;
+  const values = board?.leads?.find((lead) => lead.id === leadId)?.values;
+  if (!values) return null;
+  const name = [values.full_name, values.name, [values.first_name, values.last_name].filter(Boolean).join(" ")].find((part): part is string => typeof part === "string" && part.trim() !== "");
+  return name ?? null;
+}
+
 export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
-  const [data, setData] = useState<Workspace | null>(null);
+  const [data, setData] = useState<Workspace | null>(() => seed<Workspace>(leadKey(leadId))?.data ?? null);
+  const [boardName] = useState(() => nameOnBoard(leadId));
   const [tab, setTab] = useState<TabKey>("details");
   const [activityView, setActivityView] = useState<"timeline" | "attempts" | "callbacks">("timeline");
   const [handoffOpen, setHandoffOpen] = useState(false);
@@ -267,10 +283,23 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
   const [handoffTarget, setHandoffTarget] = useState("");
   const [outcomeOpen, setOutcomeOpen] = useState(false);
 
-  const load = useCallback(async () => { const response = await fetch(`/api/app/leads/${encodeURIComponent(leadId)}`, { cache: "no-store" }); const body = await response.json().catch(() => null); if (!response.ok) { setError(body?.error ?? "Could not load this lead"); return; } setData(body); setError(""); }, [leadId]);
-  // This is the server-backed detail snapshot and intentionally hydrates the client workspace.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { void load(); }, [load]);
+  // Through the app's cache: `fresh` (every call but the first) after a change, so it is never the old answer.
+  const load = useCallback(async (fresh = true) => {
+    try {
+      setData(await (fresh ? loadResource<Workspace>(leadKey(leadId)) : readResource<Workspace>(leadKey(leadId))));
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error && cause.message ? cause.message : "Could not load this lead");
+    }
+  }, [leadId]);
+  // This is the server-backed detail snapshot and intentionally hydrates the client workspace. A fresh document
+  // starts from the kept answer once it has hydrated, then asks again.
+  useEffect(() => {
+    const kept = peek<Workspace>(leadKey(leadId));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the kept answer, drawn before the network's
+    if (kept?.data) setData((current) => current ?? kept.data ?? null);
+    void load(false);
+  }, [leadId, load]);
 
   // The button stays busy until the lead is read again: clearing it first showed the old state, with the
   // same button live again, for as long as the reload took (E2E 2026-11-02, after Claim).
@@ -326,7 +355,20 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
       </TableCard>
     );
 
-  if (!data) return <PageLoading strip={false} rows={6} />;
+  // Frame first (UI-CONSISTENCY §7a): the trail, the name (from the board when the person came from it, else its
+  // shape) and the sections draw at once; the lead's columns load under them.
+  if (!data) {
+    return (
+      <div className="m-stagger flex flex-col gap-4">
+        <PageHeader
+          title={boardName ?? <TitleShape />}
+          breadcrumbs={[{ label: "Leads" }, { label: "Lead workspace", href: "/app/leads" }, { label: boardName ?? "Lead" }]}
+          tabs={<UnderlineTabs label="Lead sections" tabs={[{ key: "details", label: "Details" }, { key: "activity", label: "Activity" }, { key: "notes", label: "Conversation" }, { key: "nurture", label: "Nurture" }, { key: "verification", label: "Verification" }, { key: "application", label: "Application" }]} value={tab} onChange={setTab} />}
+        />
+        <PageLoading header={false} strip={false} rows={6} />
+      </div>
+    );
+  }
 
   const readOnly = data.readOnly;
   // Owner pick 2026-11-10 (mockup docs/uiux-mockups/lead-page/index.html): C's title line and stage path over B's

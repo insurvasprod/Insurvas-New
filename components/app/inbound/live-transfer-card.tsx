@@ -6,10 +6,10 @@ import { usePathname, useRouter } from "next/navigation";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import { Button } from "@/components/ui/button";
+import { motionMs, reducedMotion } from "@/components/ui/motion-tokens";
 import { productLineLabel } from "@/lib/format/productLine";
 import { isTypingTarget } from "@/lib/keyboard/listNavigation";
 import { notify } from "@/lib/notify";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { claimedMessage } from "@/lib/transferInbox/constants";
 import { cn } from "@/lib/utils";
 
@@ -82,12 +82,20 @@ export function LiveTransferCard() {
   const topic = data?.realtimeTopic;
   useEffect(() => {
     if (!topic || off) return;
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) return;
     let pending: number | null = null;
+    let channel: RealtimeChannel | null = null;
+    let stopped = false;
+    let remove: ((channel: RealtimeChannel) => unknown) | null = null;
     const reloadSoon = () => { if (pending === null) pending = window.setTimeout(() => { pending = null; void load(); }, 800); };
-    let channel: RealtimeChannel | null = supabase.channel(topic).on("broadcast", { event: "floor_changed" }, reloadSoon).subscribe();
-    return () => { if (pending !== null) window.clearTimeout(pending); if (channel) void supabase.removeChannel(channel); channel = null; };
+    // The Realtime client (all of supabase-js, ~230 kB) loads here, after the card's first read, not with the shell
+    // every page downloads (speed pass 2026-11-12). The 30 s read above covers the moment before it is subscribed.
+    void import("@/lib/supabase/browser").then(({ getSupabaseBrowserClient }) => {
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase || stopped) return;
+      remove = (c) => supabase.removeChannel(c);
+      channel = supabase.channel(topic).on("broadcast", { event: "floor_changed" }, reloadSoon).subscribe();
+    }).catch(() => undefined);
+    return () => { stopped = true; if (pending !== null) window.clearTimeout(pending); if (channel && remove) void remove(channel); channel = null; };
   }, [topic, load, off]);
 
   // The wait counts up between reads.
@@ -146,8 +154,25 @@ export function LiveTransferCard() {
     return () => document.removeEventListener("keydown", onKey);
   }, [visible, claim]);
 
-  if (!visible || !data) return null;
+  // The card leaves as it came (Wave C motion, 2026-11-18): when it stops being shown (Not now, the call taken, or
+  // nobody left waiting) it plays out over --t-float-out — quicker than its entrance — still showing what it showed.
+  const [held, setHeld] = useState<{ data: Data; leaving: boolean } | null>(null);
+  if (visible && data && (held?.data !== data || held.leaving)) setHeld({ data, leaving: false });
+  if (!visible && held && !held.leaving) setHeld({ ...held, leaving: true });
+  const leaving = Boolean(held?.leaving);
+  useEffect(() => {
+    if (!leaving) return;
+    const timer = window.setTimeout(() => setHeld(null), reducedMotion() ? 0 : motionMs("--t-float-out", 120));
+    return () => window.clearTimeout(timer);
+  }, [leaving]);
 
+  if (!visible && !leaving) return null;
+  return held ? <TransferCardBody data={held.data} leaving={leaving} now={now} loadedAt={loadedAt} busy={busy} problem={leaving ? null : problem} onClaim={() => void claim()} onDismiss={() => setDismissed(front)} /> : null;
+}
+
+function TransferCardBody({ data, leaving, now, loadedAt, busy, problem, onClaim, onDismiss }: { data: Data; leaving: boolean; now: number; loadedAt: number; busy: boolean; problem: string | null; onClaim: () => void; onDismiss: () => void }) {
+  const handoff = data.handoffs[0] ?? null;
+  const next = data.items[0] ?? null;
   const elapsed = Math.max(0, Math.round(((now || loadedAt) - loadedAt) / 1000));
   const wait = next ? next.waitSeconds + elapsed : 0;
   const sla = data.sla;
@@ -157,6 +182,8 @@ export function LiveTransferCard() {
   return (
     <section
       data-live-transfer=""
+      data-state={leaving ? "closed" : "open"}
+      inert={leaving || undefined}
       data-print-hide
       aria-label={handoff ? "Handoff offered to you" : "Live transfer waiting"}
       aria-live="polite"
@@ -164,7 +191,8 @@ export function LiveTransferCard() {
     >
       <div className="flex items-center gap-2 text-xs leading-[1.5] font-semibold">
         <span className="relative inline-flex size-2.5" aria-hidden="true">
-          <span className="absolute inline-flex size-full rounded-full bg-[var(--primary)] opacity-60 motion-safe:animate-ping" />
+          {/* One attention ring once the card has landed (data-transfer-ping, never a loop); then the dot rests. */}
+          <span data-transfer-ping="" className="absolute inline-flex size-full rounded-full bg-[var(--primary)]" />
           <span className="relative inline-flex size-2.5 rounded-full bg-[var(--primary)]" />
         </span>
         <span className="text-[var(--accent-ink)]">{handoff ? "Handoff for you" : "Live transfer"}</span>
@@ -186,13 +214,13 @@ export function LiveTransferCard() {
 
       {problem && <p role="alert" className="m-0 text-xs leading-[1.5] font-semibold text-[var(--error-ink)]">{problem}</p>}
 
-      <Button type="button" onClick={() => void claim()} disabled={busy || data.readOnly} className="mt-1 w-full" aria-keyshortcuts="Enter">
+      <Button type="button" onClick={onClaim} disabled={busy || data.readOnly} className="mt-1 w-full" aria-keyshortcuts="Enter">
         {data.readOnly ? "Read-only account" : busy ? "Taking…" : handoff ? "Take over the call" : "Take this call"}
         {!data.readOnly && !busy && <kbd className="rounded-[4px] border border-current px-1.5 font-sans text-xs leading-[1.4] opacity-70">Enter</kbd>}
       </Button>
       <div className="flex items-center justify-between gap-3 text-xs leading-[1.5] text-muted-foreground">
         <span>{others > 0 ? <Link href="/app/inbound" className="font-semibold text-foreground hover:underline">{others} more waiting</Link> : "First to claim gets the call"}</span>
-        <button type="button" onClick={() => setDismissed(front)} className="font-semibold hover:text-foreground">Not now</button>
+        <button type="button" onClick={onDismiss} className="font-semibold hover:text-foreground">Not now</button>
       </div>
     </section>
   );

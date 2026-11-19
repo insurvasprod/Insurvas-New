@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Download } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { BarList, BarSeries, LineSeries, type BarListRow, type LinePoint } from "@/components/ui/chart";
 import { ActiveFilters, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
@@ -563,8 +563,13 @@ export function ActivityLogWorkspace({ initialView = "agents", role = "", framed
     ? <Button asChild variant="outline"><a href={`/api/app/activity?${exportQuery}`}><Download aria-hidden="true" />Export</a></Button>
     : <Button type="button" variant="outline" onClick={exportTable} disabled={tab === "agents" ? !report?.scorecard.length : !setterLines.length}><Download aria-hidden="true" />Export</Button>;
 
-  // First read of the page: the one loading look, header and all.
-  if (loading && !report && !error) return framed ? <FramedLoading /> : <PageLoading />;
+  // First read of the page. Frame first (UI-CONSISTENCY §7a): standalone, the title and its buttons draw at once and the report loads under them.
+  if (loading && !report && !error) return framed ? <FramedLoading /> : (
+    <div className="m-stagger flex flex-col gap-6">
+      <PageHeader title="Team activity" description="What each agent did, and how it turned out." actions={exportButton} />
+      <PageLoading header={false} />
+    </div>
+  );
 
   const flagged = reviewsZeroClick ? now_?.zeroClick ?? 0 : 0;
 
@@ -895,7 +900,7 @@ function AgentsCharts({ scorecard, weeks, totals: t, loading, windowLabel, solo,
         <ActivityChartCard
           title="Outcomes logged without a dial, by agent"
           period={[windowLabel, `${count(flagTotal)} to review`].filter(Boolean).join(" · ")}
-          action={<Link href={tableHref("review")} className="whitespace-nowrap text-sm font-medium text-[var(--accent-ink)] hover:underline">Review the oldest ›</Link>}
+          action={<Link href={tableHref("review")} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "no-underline whitespace-nowrap")}>Review the Oldest</Link>}
         >
           <BarList
             rows={flags.map((row) => ({ key: row.agent_user_id!, label: row.agent_name ?? "Unknown agent", value: Number(row.zero_click ?? 0), caption: row.clicked > 0 ? `${percent(Number(row.zero_click ?? 0), row.clicked)}% of dials` : undefined, tone: "warning" as const, href: tableHref("review", { agent: row.agent_user_id }) }))}

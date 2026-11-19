@@ -9,15 +9,16 @@
 import Link from "next/link";
 
 import { SheetSection, WIDE_SHEET } from "@/components/app/settings/sales-process/parts";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Switch } from "@/components/ui/field";
 import { Sheet } from "@/components/ui/sheet";
 import { StatusChip } from "@/components/ui/status-chip";
 import type { Need, Readiness } from "@/lib/products/readiness";
 import { cn } from "@/lib/utils";
 
-import { lineOf, linkClass, type ProductRow } from "./parts";
+import { lineOf, type ProductRow } from "./parts";
 
+import { titleCaseNode } from "@/components/ui/title-case";
 const FIX: Record<Need["key"], string> = { form: "Set up its form", carriers: "Add a carrier", health: "Set up health questions", quote: "Set up quote inputs" };
 
 function Step({ need, index, sold }: { need: Need; index: number; sold: boolean }) {
@@ -40,7 +41,7 @@ function Step({ need, index, sold }: { need: Need; index: number; sold: boolean 
       {need.state === "missing" && sold ? (
         <Button asChild size="sm"><Link href={need.href}>{FIX[need.key]}</Link></Button>
       ) : need.state !== "na" ? (
-        <Link href={need.href} className={cn("shrink-0 text-xs", linkClass)}>{need.page} ›</Link>
+        <Link href={need.href} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>{titleCaseNode(<>{need.page}</>)}</Link>
       ) : null}
     </li>
   );
@@ -82,7 +83,7 @@ export function ProductSheet({ row, needs, ready, busy, onToggle, onClose }: {
         <SheetSection title="Partners who may send it" sub="Set on each partner; shown here so you see who's affected.">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-[var(--body)]">
             <span>{row.partners.length ? row.partners.join(", ") : "No partner may send it yet"}</span>
-            <Link href="/app/publishers" className={cn("text-xs", linkClass)}>Manage partners ›</Link>
+            <Link href="/app/publishers" className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Manage Partners</Link>
           </div>
         </SheetSection>
         <SheetSection title="Where it shows up">

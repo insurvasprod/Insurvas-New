@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InfoTip } from "@/components/ui/info-tip";
 import { PageHeader } from "@/components/ui/page-header";
-import { PageLoading } from "@/components/ui/page-loading";
+import { StreamFallback } from "@/components/ui/stream-section";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -106,7 +106,15 @@ export function PartnerSettingsWorkspace({ role, partnerStatus, partnerId, partn
   const contactName = settings?.partner.contactName ?? settings?.user.name ?? "Not provided";
   const contactEmail = settings?.partner.contactEmail ?? settings?.user.email ?? "Not provided";
 
-  if (loading && !settings && !error) return <PageLoading strip={false} rows={4} />;
+  // Frame first (UI-CONSISTENCY §7a): the title draws at once and the settings load as one block under it.
+  if (loading && !settings && !error) {
+    return (
+      <div className="m-stagger flex w-full flex-1 flex-col gap-6 lg:min-h-[calc(100dvh-var(--top-bar-h,56px)-3.5rem)]">
+        <PageHeader title="Settings" description="Manage your account, notifications, and security." hideTitle breadcrumbs={[{ label: "Settings" }, { label: SECTION_LABELS[activeSettings] ?? "Account" }]} />
+        <StreamFallback shape="form" rows={4} />
+      </div>
+    );
+  }
 
   const detailRow = "grid grid-cols-[8.5rem_minmax(0,1fr)] items-center gap-3 border-b border-border py-3 text-sm last:border-0";
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word[0]!.toUpperCase()).join("") || "P";

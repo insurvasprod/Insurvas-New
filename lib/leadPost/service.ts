@@ -31,6 +31,7 @@ import { autoRoutePostedLead } from "@/lib/assignment/autoRoute";
 import { linkScreeningAuditToLead, screenPartnerPhone } from "@/lib/compliance/screening";
 import { captureConsentFromValues } from "@/lib/consent/capture";
 import { applyFieldMap } from "./fieldMap";
+import { sealLeadValues } from "@/lib/leadValues/seal";
 import { isMissingSchema } from "./schemaGap";
 import { consentIpOf, consentTextOf, LEGACY_LOG_CODE, parseUsDateOfBirth, type ValidationReasonCode } from "./validation";
 import { describeHours, readPostingHours, startOfDayIn, withinPostingHours } from "./board";
@@ -548,13 +549,14 @@ export async function acceptPostedLead(input: {
       screening_warning: screening.warning,
       screening_checked_at: screening.checkedAt,
       ...(postedStage ? { pipeline_id: postedStage.pipelineId, stage_id: postedStage.stageId } : {}),
-      values: {
+      // A posted SSN or bank number is stored sealed (lib/leadValues/seal.ts), never as the vendor sent it.
+      values: sealLeadValues(keyRow.tenant_id, {
         ...values,
         phone,
         state,
         consent_ip: consentIp,
         ...(dateOfBirth.status === "ok" ? { date_of_birth: dateOfBirth.iso } : {}),
-      },
+      }),
     // The insert is cast because `values` is jsonb and the generated Json type does not accept a
     // bare Record<string, unknown>. Widening the column's declared type to satisfy the compiler
     // would make every other reader of it less safe, so the cast is kept local to this one write.

@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+
 import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { FilesInBucketActions } from "@/components/app/book/setup/files-in-bucket-actions";
 import { FilesInTabs, filesInCrumbs } from "@/components/app/book/setup/files-in-tabs";
@@ -6,6 +8,7 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState } from "@/components/ui/page-states";
+import { StreamSection } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
 import { actAsPage, actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { fileCarrierChoices } from "@/lib/carriers/agency";
@@ -27,22 +30,51 @@ export default async function FilesInBucketPage({ searchParams }: { searchParams
   const tenantId = guard.context.tenantId;
   const readOnly = guard.entitlement.access === "read_only";
   const { date } = await searchParams;
-  const [list, carriers] = await Promise.all([listCarrierFiles(tenantId, 1), fileCarrierChoices(tenantId)]);
-  const [zone, senders] = list.available ? await Promise.all([agencyTimezone(tenantId), listSenders(tenantId)]) : [null, null];
-  const day = date && isoDate(date) ? date : new Date().toLocaleDateString("en-CA", { timeZone: zone ?? "America/New_York" });
-  const bucket = zone ? await loadBucketView(tenantId, day) : null;
-  const blocked = !list.available ? CARRIER_FILES_PENDING_MESSAGE : !bucket?.available ? BUCKET_PENDING_MESSAGE : readOnly ? "Receiving files is paused while the account is read-only." : null;
+  // Frame first (UI-CONSISTENCY §7a): the title line, the tabs and Copy the folder draw at once; the counts, Check now
+  // and the day's files stream in. The reads are today's, in today's order, only started before the frame returns.
+  const read = (async () => {
+    const [list, carriers] = await Promise.all([listCarrierFiles(tenantId, 1), fileCarrierChoices(tenantId)]);
+    const [zone, senders] = list.available ? await Promise.all([agencyTimezone(tenantId), listSenders(tenantId)]) : [null, null];
+    const day = date && isoDate(date) ? date : new Date().toLocaleDateString("en-CA", { timeZone: zone ?? "America/New_York" });
+    const bucket = zone ? await loadBucketView(tenantId, day) : null;
+    const blocked = !list.available ? CARRIER_FILES_PENDING_MESSAGE : !bucket?.available ? BUCKET_PENDING_MESSAGE : readOnly ? "Receiving files is paused while the account is read-only." : null;
+    return { list, carriers, senders, bucket, blocked };
+  })();
   return (
     <DataInPage
       step="files-in"
-      tabs={<FilesInTabs active="bucket" counts={{ carriers: null, email: senders ? senders.senders.length : null, bucket: bucket?.available ? bucket.missing.length : null }} />}
-      actions={<FilesInBucketActions tenantId={tenantId} blocked={blocked} />}
+      tabs={<Suspense fallback={<FilesInTabs active="bucket" counts={{ carriers: null, email: null, bucket: null }} />}><Tabs read={read} /></Suspense>}
+      actions={<Suspense fallback={<FilesInBucketActions tenantId={tenantId} blocked="" />}><Actions read={read} tenantId={tenantId} /></Suspense>}
       chip={<InfoTip label="About the bucket" side="right">A folder your own scripts drop carrier files into, by day, agency, carrier and kind. Insurvas reads it on a schedule; Check now reads it at once. Pick a day to see what arrived; the files that day was expected to bring but didn&apos;t are the red rows at the top.</InfoTip>}
       breadcrumbs={filesInCrumbs("Bucket")}
     >
-      {!list.available ? <TableCard><EmptyState title="Receiving files needs a database update" hint={CARRIER_FILES_PENDING_MESSAGE} /></TableCard>
-        : bucket?.available ? <CarrierBucket initial={bucket} tenantId={tenantId} carriers={carriers} readOnly={readOnly} />
-        : <TableCard><EmptyState title="The bucket needs a database update" hint={BUCKET_PENDING_MESSAGE} /></TableCard>}
+      <StreamSection shape="table"><Bucket read={read} tenantId={tenantId} readOnly={readOnly} /></StreamSection>
     </DataInPage>
   );
+}
+
+type Read = Promise<{
+  list: Awaited<ReturnType<typeof listCarrierFiles>>;
+  carriers: Awaited<ReturnType<typeof fileCarrierChoices>>;
+  senders: Awaited<ReturnType<typeof listSenders>> | null;
+  bucket: Awaited<ReturnType<typeof loadBucketView>> | null;
+  blocked: string | null;
+}>;
+
+/** The tabs with their counts; until they are known, the same tabs without them. */
+async function Tabs({ read }: { read: Read }) {
+  const { senders, bucket } = await read;
+  return <FilesInTabs active="bucket" counts={{ carriers: null, email: senders ? senders.senders.length : null, bucket: bucket?.available ? bucket.missing.length : null }} />;
+}
+
+async function Actions({ read, tenantId }: { read: Read; tenantId: string }) {
+  const { blocked } = await read;
+  return <FilesInBucketActions tenantId={tenantId} blocked={blocked} />;
+}
+
+async function Bucket({ read, tenantId, readOnly }: { read: Read; tenantId: string; readOnly: boolean }) {
+  const { list, carriers, bucket } = await read;
+  if (!list.available) return <TableCard><EmptyState title="Receiving files needs a database update" hint={CARRIER_FILES_PENDING_MESSAGE} /></TableCard>;
+  if (bucket?.available) return <CarrierBucket initial={bucket} tenantId={tenantId} carriers={carriers} readOnly={readOnly} />;
+  return <TableCard><EmptyState title="The bucket needs a database update" hint={BUCKET_PENDING_MESSAGE} /></TableCard>;
 }

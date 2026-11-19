@@ -16,6 +16,7 @@ import { InfoTip } from "@/components/ui/info-tip";
 import { PageHeader } from "@/components/ui/page-header";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 import { PageLoading } from "@/components/ui/page-loading";
+import { TitleShape } from "@/components/ui/stream-section";
 import { withFrom } from "@/lib/applications/backLink";
 import { notify } from "@/lib/notify";
 import type { TemplateField } from "@/lib/templates/constants";
@@ -23,6 +24,7 @@ import type { VerificationState } from "@/lib/verification/progress";
 import { cn } from "@/lib/utils";
 import { useRevealReason } from "@/components/app/reveal-reason-dialog";
 
+import { CheckBox } from "@/components/ui/check-box";
 type PanelField = TemplateField & { state: VerificationState; old_value: unknown; new_value: unknown; confirmed_at: string | null };
 type PanelSection = { section_key: string; label: string; sort_order: number; fields: PanelField[] };
 type HistoryEntry = { id: string; kind: "claimed" | "confirmed" | "corrected" | "outstanding"; fieldKey: string | null; at: string; actorName: string; isYou: boolean };
@@ -78,7 +80,7 @@ function FieldEditor({ id, field, value, onChange, disabled, placeholder }: { id
       <div id={id} role="group" aria-label={field.label} className="flex flex-wrap gap-x-4 gap-y-1 px-2 py-1">
         {field.options.map((option) => (
           <label key={option} className="inline-flex items-center gap-2 text-base leading-[1.5] tracking-[-0.02em] text-[var(--ink)]">
-            <input type="checkbox" checked={Array.isArray(value) && value.includes(option)} disabled={disabled} onChange={(event) => onChange([...(Array.isArray(value) ? value : []).filter((item) => item !== option), ...(event.target.checked ? [option] : [])])} />
+            <CheckBox checked={Array.isArray(value) && value.includes(option)} disabled={disabled} onChange={(event) => onChange([...(Array.isArray(value) ? value : []).filter((item) => item !== option), ...(event.target.checked ? [option] : [])])} />
             {option}
           </label>
         ))}
@@ -292,7 +294,17 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff, onUnderwri
   /* The way back is the trail above the title (owner 2026-10-30). */
   const trail = (current: string) => [{ label: "Today" }, { label: "Inbound", href: "/app/inbound" }, { label: current }];
 
-  if (loading && !panel) return <PageLoading strip={false} />;
+  // Frame first (UI-CONSISTENCY §7a): the trail, the title's place (the caller's name comes with the read) and the step
+  // bar draw at once; the caller card and the details load where they will be.
+  if (loading && !panel) {
+    return (
+      <div className={cn("m-stagger flex w-full min-w-0 flex-col gap-4", embedded && "lg:h-full lg:min-h-0")}>
+        {!embedded && <PageHeader title={<TitleShape />} breadcrumbs={trail("Call")} />}
+        {!embedded && <InboundStepBar current={2} />}
+        <PageLoading header={false} strip={false} />
+      </div>
+    );
+  }
   if (!panel) {
     return (
       <div className="flex w-full min-w-0 flex-col gap-6">

@@ -561,6 +561,11 @@ select:not([multiple]):not([size]):disabled { cursor: not-allowed; }
   --t-data:   260ms;  /* rows, figures and chart values changing */
   --t-float-in:  170ms; /* a popover, menu, select or dialog opening */
   --t-float-out: 120ms; /* … and closing: exits are always shorter than entrances */
+  /* Change moments (Tier 1–2, 2026-11-17, § Motion): one-shots that answer something the person just did. */
+  --t-exit-row:  200ms; /* a finished row leaving its list */
+  --t-stamp:     400ms; /* a completion stamp: the check draws, the label pops */
+  --t-saved:     900ms; /* a saved cell's glow, once */
+  --t-highlight: 1200ms; /* a row new since the last load: its tint fades, once */
 }
 
 /* ---------------------------------------------------------------------------
@@ -602,21 +607,21 @@ select:not([multiple]):not([size]):disabled { cursor: not-allowed; }
 @keyframes m-rise  { from { opacity: .72; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes m-fade  { from { opacity: 0; } to { opacity: 1; } }
 @keyframes m-grow  { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-/* A slow ring round a "listening" icon (Inbound with nobody in line): grows and fades, loops; motion-safe only. */
+/* A ring round a "listening" icon (Inbound with nobody in line): grows and fades, once (.m-listen-ring, 5l). */
 @keyframes m-ring  { from { opacity: .45; transform: scale(.88); } to { opacity: 0; transform: scale(1.25); } }
 /* A chart bar rising from its baseline (the dashboard's Today chart). */
 @keyframes m-grow-y { from { transform: scaleY(0); } to { transform: scaleY(1); } }
-.m-bar { transform-origin: bottom; animation: m-grow-y 600ms var(--e-out) both; }
+.m-bar { transform-origin: bottom; animation: m-grow-y var(--t-chart) var(--e-out) both; }
 /* Dashboard: a sparkline draws itself in (pathLength="1" on the path), bars grow from the left, a
    donut ring sweeps round once. All three are one-shot and stand still under reduced motion. */
 @keyframes m-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
-.m-draw { stroke-dasharray: 1; animation: m-draw 900ms var(--e-out) both; }
+.m-draw { stroke-dasharray: 1; animation: m-draw var(--t-saved) var(--e-out) both; }
 @keyframes m-grow-x { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-.m-bar-x { transform-origin: left; animation: m-grow-x 700ms var(--e-out) both; }
+.m-bar-x { transform-origin: left; animation: m-grow-x var(--t-chart) var(--e-out) both; }
 /* A line chart reveals left to right, as time runs (2026-11-09: the whole drawing, so the line, its area and the
    comparison line arrive together). */
 @keyframes m-reveal-x { from { clip-path: inset(-8px 100% -8px 0); } to { clip-path: inset(-8px -8px -8px 0); } }
-.m-reveal-x { animation: m-reveal-x 900ms var(--e-out) both; }
+.m-reveal-x { animation: m-reveal-x var(--t-saved) var(--e-out) both; }
 /* New figures move the marks to their new values instead of redrawing them (bars, line paths, donut arcs). */
 .m-chart-tween { transition: height var(--t-data) var(--e-out), width var(--t-data) var(--e-out); }
 /* Wave 1 · the dashboard (components/app/home/dash/dash-kit.tsx DashLayout): the cards arrive one after another —
@@ -648,7 +653,7 @@ select:not([multiple]):not([size]):disabled { cursor: not-allowed; }
 .m-chart-tween path { transition: d var(--t-data) var(--e-out); }
 .m-chart-tween circle { transition: stroke-dasharray var(--t-data) var(--e-out), stroke-dashoffset var(--t-data) var(--e-out); }
 @keyframes m-sweep { from { transform: rotate(-90deg) scale(.92); opacity: 0; } to { transform: rotate(0) scale(1); opacity: 1; } }
-.m-sweep { transform-origin: center; animation: m-sweep 700ms var(--e-out) both; }
+.m-sweep { transform-origin: center; animation: m-sweep var(--t-chart) var(--e-out) both; }
 /* Chart load (Reports round 7 foundation, 2026-11-11; owner: "short animations, smooth, that seems premium"). Every
    chart in components/ui/chart.tsx and StatTile's trend animates in once, when it mounts: bars grow from their zero
    line (m-chart-y up, m-chart-y-down below it, m-chart-x across), lines draw left to right (m-chart-reveal, a clip,
@@ -740,15 +745,15 @@ select:not([multiple]):not([size]):disabled { cursor: not-allowed; }
 [data-page-turn] > *:nth-child(n + 8) { animation-delay: 112ms; }
 
 /* 3 · Connector draw, in the direction the work travels. */
-.m-track { transform-origin: left; animation: m-grow 520ms var(--e-out) both; animation-delay: 200ms; }
+.m-track { transform-origin: left; animation: m-grow var(--t-enter) var(--e-out) both; animation-delay: 200ms; }
 
 /* 4 · Meter grow. Runs once, after the page settles, so the bar reads as a
    value rather than a loader. */
-.m-meter > span { transform-origin: left; animation: m-grow 700ms var(--e-out) both; animation-delay: 280ms; }
+.m-meter > span { transform-origin: left; animation: m-grow var(--t-chart) var(--e-out) both; animation-delay: 280ms; }
 
 /* 5 · View swap. The outgoing view is cut, not faded, so the two are never on
    screen together. */
-.m-swap { animation: m-rise 260ms var(--e-out) backwards; }
+.m-swap { animation: m-rise var(--t-data) var(--e-out) backwards; }
 /* A side panel (a record's details, a create form) slides in from the edge it is attached to, and a
    tab's view fades in when the tab changes (2026-10-09). Transform and opacity only, like the rest. */
 @keyframes m-panel-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
@@ -879,6 +884,131 @@ body:has([data-nav-pending])::before {
 @keyframes m-msg-in { from { opacity: .72; transform: translateY(8px) scale(.98); } }
 .m-msg-in { transform-origin: bottom; animation: m-msg-in var(--t-data) var(--e-out) backwards; }
 
+/* 5i · Change moments (Tier 1–2, 2026-11-17): motion for the moments where something changes, not where it loads.
+   Built as shared pieces and shown on /app/motion-lab for the owner's sign-off; screens adopt them wave by wave.
+   Every one is one-shot (nothing loops), on the tokens above, and the reduce block at the top stills it. */
+
+/* Row leaving (components/ui/use-row-exit.ts): a finished row fades and slides 8px toward the end, and its height
+   closes so the rows under it move up instead of jumping when the refresh lands. The height is the kit's one layout
+   animation, sanctioned for exactly this (as a <details> fold opens by height): it runs only on a row on its way
+   out, for --t-exit-row. A table row (display: table-row) cannot close; it fades and slides, then the refresh takes it. */
+@keyframes m-row-out { to { opacity: 0; transform: translateX(8px); } }
+@keyframes m-row-collapse { to { block-size: 0; padding-block: 0; margin-block: 0; border-block-width: 0; } }
+[data-row-exit] { pointer-events: none; animation: m-row-out var(--t-exit-row) var(--e) both; }
+@supports (interpolate-size: allow-keywords) {
+  [data-row-exit]:not(tr) { interpolate-size: allow-keywords; overflow: clip; animation: m-row-out var(--t-exit-row) var(--e) both, m-row-collapse var(--t-exit-row) var(--e) both; }
+}
+/* Row arriving (components/ui/use-arrivals.ts, data-row-new): a row new since the last load wears a soft brand tint
+   that fades out over --t-highlight, once. The tint is a layer behind the row's content, so only its opacity moves. */
+@keyframes m-row-new { from { opacity: 1; } to { opacity: 0; } }
+[data-row-new] { position: relative; isolation: isolate; }
+[data-row-new]::after { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: var(--primary-soft); animation: m-row-new var(--t-highlight) var(--e) both; }
+/* Saved cell (data-saved): an inline edit that saved glows green once, behind its content, then is plain again. */
+@keyframes m-saved { 0% { opacity: 0; } 20% { opacity: 1; } 100% { opacity: 0; } }
+[data-saved] { position: relative; isolation: isolate; }
+[data-saved]::after { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; background: var(--success-surface); animation: m-saved var(--t-saved) var(--e) both; }
+
+/* Count badge (components/ui/count-badge.tsx): pops in when it appears after the page is up (one already there on the
+   first paint comes in with the calm cascade), its number rolls on a change (CountUp), and it shrinks away at 0 — the
+   exit shorter than the entrance. */
+@keyframes m-badge-in { from { opacity: 0; transform: scale(.6); } }
+@keyframes m-badge-out { to { opacity: 0; transform: scale(.6); } }
+[data-count-badge][data-state="entering"] { animation: m-badge-in var(--t-panel) var(--e-out) backwards; }
+[data-count-badge][data-state="leaving"] { animation: m-badge-out var(--t-float-out) var(--e) both; }
+
+/* Status chip cross-fade (components/ui/status-chip.tsx, every chip since Wave A): Open → Settled turns its ground,
+   ink and dot over --t-panel instead of cutting. Colour only, nothing moves. */
+.m-chip-fade, .m-chip-fade > [data-chip-dot] { transition: background-color var(--t-panel) var(--e), color var(--t-panel) var(--e); }
+
+/* Gliding highlight (useGlidePill, components/ui/tab-track.tsx) on a boxed switch or a rail: the chosen look is one
+   soft pill that slides between the options; the options sit over it with no fill of their own. */
+[data-tab-pill][data-tab-indicator="soft"] { border: 0; border-radius: 5px; background: var(--primary-soft); box-shadow: none; }
+[data-glide-track] > :not([data-tab-pill]) { position: relative; z-index: 1; }
+/* The same pill behind a rail's open step (components/app/step-frame/rail-glide.tsx): the step's own rounded ground and
+   its inset ring, sliding from step to step. The steps are links already positioned, so only their layer is set. */
+[data-tab-pill][data-tab-indicator="rail"] { border: 0; border-radius: .75rem; background: var(--primary-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 50%, transparent); }
+[data-rail-track] > li > a { z-index: 1; }
+/* And behind a page menu's open item (components/ui/menu-card.tsx: Get set up, Docs): the item's 8px ground, gliding
+   to the next step when one is done or another is opened. The items are positioned links, so only their layer is set. */
+[data-tab-pill][data-tab-indicator="menu"] { border: 0; border-radius: 8px; background: var(--primary-soft); box-shadow: none; }
+[data-menu-track] a[data-menu-item] { z-index: 1; }
+
+/* Bulk bar that stays (`persistent` on components/ui/bulk-bar.tsx): it lies over the table's top edge and slides
+   down when rows are ticked and back up when they are not, so the table under it never jumps. */
+[data-bulk-bar] { transition: opacity var(--t-panel) var(--e-out), transform var(--t-panel) var(--e-out); }
+[data-bulk-bar][data-state="closed"] { opacity: 0; transform: translateY(-8px); pointer-events: none; transition-duration: var(--t-float-out); transition-timing-function: var(--e); }
+
+/* Save status (components/ui/save-status.tsx): Saving… then ✓ Saved, the tick pops, and after 2s it fades away. */
+@keyframes m-pop { from { opacity: 0; transform: scale(.8); } }
+.m-pop { animation: m-pop var(--t-panel) var(--e-out) backwards; }
+[data-save-status][data-state="fading"] { animation: m-vt-out var(--t-float-out) var(--e) both; }
+
+/* Completion stamp (components/ui/done-stamp.tsx): "Paid", "Matched", "Done" — the check strokes in and the label
+   pops, all in --t-stamp, once. The upload bar (components/ui/upload-progress.tsx) fills by scale and ends the same way. */
+.m-stamp { animation: m-fade var(--t-micro) var(--e-out) backwards; }
+.m-stamp-check { stroke-dasharray: 1; animation: m-draw var(--t-stamp) var(--e-out) backwards; }
+.m-stamp [data-stamp-label] { animation: m-pop var(--t-panel) var(--e-out) 160ms backwards; }
+[data-upload-fill] { transform-origin: left; transition: transform var(--t-data) var(--e-out); }
+/* A drop zone lifts 2px and its ring glows while a file is held over it. */
+.m-dropzone { position: relative; transition: transform var(--t-panel) var(--e-out); }
+.m-dropzone::after { content: ""; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 30%, transparent), 0 8px 24px rgba(13, 64, 55, .12); opacity: 0; transition: opacity var(--t-panel) var(--e-out); }
+.m-dropzone[data-drag-over] { transform: translateY(-2px); }
+.m-dropzone[data-drag-over]::after { opacity: 1; }
+
+/* Errors that arrive gently (`revealError` on Field, components/ui/field.tsx): the error line opens by height (as a
+   fold does) and fades in; a submit that is refused shakes once with m-deny (`m-deny-now`, no delay). */
+@keyframes m-error-in { from { opacity: 0; transform: translateY(-4px); } }
+@keyframes m-line-open { from { block-size: 0; margin-block-start: 0; } }
+.m-error-in { animation: m-error-in var(--t-panel) var(--e-out) backwards; }
+@supports (interpolate-size: allow-keywords) {
+  .m-error-in { interpolate-size: allow-keywords; overflow-y: clip; animation: m-error-in var(--t-panel) var(--e-out) backwards, m-line-open var(--t-panel) var(--e-out) backwards; }
+}
+.m-deny-now { animation: m-deny var(--t-panel) var(--e) 1 both; }
+/* The sign-in alert (AuthAlert, components/portal/auth-controls.tsx, Wave B): it rises in under the form, and a
+   refused sign-in (an error) then shakes once, after the rise. */
+@keyframes m-alert-in { from { opacity: 0; transform: translateY(6px); } }
+.m-alert-in { animation: m-alert-in var(--t-panel) var(--e-out) backwards; }
+.m-alert-in[data-refused] { animation: m-alert-in var(--t-panel) var(--e-out) backwards, m-deny var(--t-panel) var(--e) var(--t-panel) 1 forwards; }
+
+/* 5j · Drag (Wave C, plan item 12, 2026-11-18): a card you pick up feels physical. It lifts off the page (a shadow, 1.02
+   and a 1.5° tilt) and follows the pointer in place of the browser's grey ghost (components/ui/use-drag-lift.ts); a gap
+   opens where it will land and the cards around it slide aside (components/ui/use-flip.ts, transform only, --t-panel);
+   it lands with m-drop-in (5f). `.m-lift` is the copy that follows a native drag, `.m-lifted` an element held by pointer
+   events where it stands. Under reduced motion the script marks either `data-still`: no tilt, no growth, and the reduce
+   block at the top shortens the rest. */
+@keyframes m-lift-in { from { transform: none; } }
+.m-lift { position: fixed; z-index: 1000; margin: 0; pointer-events: none; cursor: grabbing; box-shadow: var(--shadow-overlay); transform: scale(1.02) rotate(1.5deg); animation: m-lift-in var(--t-panel) var(--e-out) backwards; }
+.m-lifted { z-index: 20; cursor: grabbing; box-shadow: var(--shadow-overlay); transform: scale(1.02) rotate(1.5deg); animation: m-lift-in var(--t-panel) var(--e-out) backwards; }
+:is(.m-lift, .m-lifted)[data-still] { transform: none; }
+/* The gap where the card will land: a dashed slot in the brand's soft ground that fades in. A held item that leaves its
+   own slot hollow (a reorder list) wears it too, its content hidden. */
+.m-drop-gap { border: 1.5px dashed color-mix(in srgb, var(--primary) 55%, transparent); background: var(--primary-soft); animation: m-fade var(--t-micro) var(--e-out) backwards; }
+.m-drop-gap > * { visibility: hidden; }
+
+/* Calls (Wave C, 2026-11-18): the Dialer's call states and Inbound's live transfer. One ring goes out once and fades
+   (m-attention, transform and opacity; --m-ring-x/-y set how far): from the Dialer's status chip when a call is placed
+   (ringing) and, softer and green, when it goes live (connected); from the live transfer card's dot after the card has
+   slid in from its corner. Then everything rests: no ring repeats, and the live dot stays still (.m-live). */
+@keyframes m-attention { from { opacity: .6; transform: none; } to { opacity: 0; transform: scale(var(--m-ring-x, 1.2), var(--m-ring-y, 1.6)); } }
+[data-call-pulse] { box-shadow: 0 0 0 1.5px var(--info); opacity: 0; animation: m-attention var(--t-saved) var(--e-out) both; }
+[data-call-pulse="connected"] { --m-ring-x: 1.1; --m-ring-y: 1.35; box-shadow: 0 0 0 1.5px var(--success); }
+/* The live transfer card (components/app/inbound/live-transfer-card.tsx): in from the top-right corner over --t-enter,
+   one ring from its dot once it has landed, and out to the side over --t-float-out (Not now, taken, or gone). */
+@keyframes m-corner-in { from { opacity: 0; transform: translate(16px, -8px); } }
+@keyframes m-corner-out { to { opacity: 0; transform: translateX(16px); } }
+[data-live-transfer] { animation: m-corner-in var(--t-enter) var(--e-out) backwards; }
+[data-live-transfer][data-state="closed"] { pointer-events: none; animation: m-corner-out var(--t-float-out) var(--e) both; }
+[data-transfer-ping] { --m-ring-x: 2.6; --m-ring-y: 2.6; opacity: 0; animation: m-attention var(--t-saved) var(--e-out) var(--t-enter) both; }
+/* The Dialer's Done stamp (DoneStamp) on the lead card's edge: it plays, holds, then fades out after --t-saved. */
+.m-stamp-leave { animation: m-vt-out var(--t-float-out) var(--e) var(--t-saved) both; }
+
+/* 5k · Admin and theme (Wave D, plan items 15–16, 2026-11-18). The admin console moves as the app does: its layout
+   mounts PortalPageTransition and its rails mark each move (`nav-area`, components/portal/nav-rail.tsx), so a page
+   arrives in the calm cascade (5c); its own hover and focus easing is in app/admin/admin-plane.css. The theme switch —
+   the top bars' sun/moon and the three-way ThemeToggle — reveals the new theme as a circle from the button
+   (components/theme-reveal.ts, `html.theme-reveal` below), over --t-reveal on --e-out; the reduce block stops it. */
+:root { --t-reveal: 650ms; }
+
 /* 5e · Shell entrance (2026-11-09, components/app/shell-entrance.tsx): once per sign-in the sidebar slides in, the
    top bar drops in, then the page rises. Never from blank: each part starts at .72 over the page ground. */
 @keyframes m-shell-side { from { opacity: .72; transform: translateX(-16px); } }
@@ -898,6 +1028,20 @@ html.shell-leave .portal-agent:not(.portal-tenant-auth-shell) { opacity: .55; tr
 [data-auth-body]:has(> [data-auth-steps]) > [data-auth-steps] { animation: none; }
 [data-auth-body]:has(> [data-auth-steps]) > [data-auth-step-body] { animation: m-vt-from-right var(--t-page) var(--e-out) backwards; }
 
+/* 5l · Polish (Wave D, plan items 17–19, 2026-11-18): overlays, toggles, empty states and live dots, on the tokens.
+   A ToggleChip (components/ui/toggle-chip.tsx, every filter chip) fades its ground, ink and edge between on and off over
+   --t-panel and dips a little while pressed. The ⌘K results' highlight is one tint that glides from row to row
+   (SearchGlide in components/app/app-top-bar.tsx, useGlidePill), the rows sitting over it. A live dot (LiveStamp) rings
+   once as it mounts, with the kit's calm m-pulse, then is still. Inbound's listening ring goes out once each time you
+   become reachable. Everything is one-shot; the reduce block at the top stills it. */
+.m-chip-toggle { transition: background-color var(--t-panel) var(--e), color var(--t-panel) var(--e), border-color var(--t-panel) var(--e), transform var(--t-micro) var(--e); }
+.m-chip-toggle:active:not(:disabled) { transform: scale(.97); }
+.portal-top-panel-scroll[data-glide-track] { position: relative; isolation: isolate; }
+[data-tab-pill][data-tab-indicator="hit"] { border: 0; border-radius: 0; background: color-mix(in srgb, var(--primary), transparent 92%); box-shadow: none; }
+.portal-top-panel-search .portal-top-panel-scroll[data-glide-track] .portal-top-hit:is([data-active], :hover) { background: transparent; }
+.m-live-dot { animation: m-pulse var(--t-saved) var(--e-out) 1 backwards; }
+.m-listen-ring { animation: m-ring var(--t-saved) var(--e-out) 1 both; }
+
 /* 6 · Refusal. The only animation in the product that signals no. */
 .m-deny { animation: m-deny 200ms var(--e) 1 both; animation-delay: 760ms; }
 
@@ -907,11 +1051,19 @@ html.shell-leave .portal-agent:not(.portal-tenant-auth-shell) { opacity: .55; tr
 
 /* 8 · Skeleton. Matches the shape of the text it replaces, so nothing shifts
    when the data lands. */
+/* Frame first, no flash (UI-CONSISTENCY §7, 2026-11-12): a skeleton bar keeps its space from the first frame but shows
+   only after 180ms, so data that lands sooner looks as if it came with the frame. The card outlines around the bars
+   draw at once (the frame); only the grey bars wait. A visibility delay, not motion: the reduced-motion block shortens
+   durations and keeps delays, so it still applies there. `both` holds the hidden state through the delay (a background
+   tab, whose clock is paused, keeps the bars hidden until it is looked at); print shows them (the print block).
+   `[data-skel-wait]` gives the same delay to a placeholder that is not built from .m-skel bars. */
+@keyframes m-skel-show { from { opacity: 0; } to { opacity: 1; } }
 .m-skel {
   background: linear-gradient(90deg, var(--surface-alt) 0%, var(--canvas) 50%, var(--surface-alt) 100%);
   background-size: 640px 100%;
-  animation: m-sheen 1.4s linear infinite;
+  animation: m-sheen 1.4s linear infinite, m-skel-show 1ms 180ms both;
 }
+[data-skel-wait] { animation: m-skel-show 1ms 180ms both; }
 
 /* 9 · Hover lift. A card that contains a link-arrow is a card you can click,
    so it is the only kind that lifts. */
@@ -1141,7 +1293,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-top-settings { padding: .875rem; }
 .portal-top-settings-note { margin-bottom: .5rem; font-size: .75rem; color: var(--muted); }
 .portal-top-settings-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .3125rem 0; font-size: .875rem; color: var(--body); }
-.portal-top-settings-row input[type="checkbox"] { width: 1rem; height: 1rem; accent-color: var(--primary); }
+.portal-top-settings-row input[type="checkbox"]:not([data-check-box]) { width: 1rem; height: 1rem; accent-color: var(--primary); }
 .portal-top-settings-group { margin-top: .75rem; padding-top: .75rem; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: .5rem; }
 .portal-top-settings-range { display: block; font-size: .875rem; color: var(--body); }
 .portal-top-settings-range input { margin-top: .25rem; width: 100%; accent-color: var(--primary); }
@@ -1219,7 +1371,7 @@ a.portal-top-foot-action { text-decoration: none; }
 }
 
 .portal-sound-controls-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.portal-secondary-button { border: 1px solid var(--portal-line); border-radius: 999px; background: var(--portal-panel); padding: .5rem .75rem; font-size: .875rem; font-weight: 600; }
+.portal-secondary-button { border: 1px solid var(--portal-line); border-radius: 8px; background: var(--portal-panel); padding: .5rem .75rem; font-size: .875rem; font-weight: 600; }
 .portal-secondary-button:hover { background: var(--portal-canvas); }
 .portal-toggle { position: relative; display: inline-flex; cursor: pointer; }
 .portal-toggle input { position: absolute; opacity: 0; }
@@ -1320,12 +1472,12 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-lead-detail-page > div > [role="tablist"] + div { min-width: 0; }
 .portal-lead-detail-page [data-slot="card"] { transition: border-color 150ms ease, box-shadow 150ms ease; }
 .portal-lead-detail-page [data-slot="card"]:hover { border-color: color-mix(in srgb, var(--portal-primary), var(--portal-line) 78%); }
-.portal-lead-detail-page [data-slot="button"] { border-radius: 999px; }
+.portal-lead-detail-page [data-slot="button"] { border-radius: 8px; }
 .portal-lead-detail-page [role="tablist"] + div > div > [data-slot="card"] { border-radius: 12px; }
 .portal-lead-detail-page [role="tablist"] + div > div > [data-slot="card"] [data-slot="card-header"] { border-bottom: 1px solid var(--portal-line); }
 .portal-lead-detail-page [role="tablist"] + div > div > [data-slot="card"] [data-slot="card-title"] { font-size: 1rem; }
 .portal-lead-detail-page [role="tablist"] + div textarea,
-.portal-lead-detail-page [role="tablist"] + div input,
+.portal-lead-detail-page [role="tablist"] + div input:not([data-check-box]),
 .portal-lead-detail-page [role="tablist"] + div select { border-color: var(--portal-line); border-radius: 8px; background: var(--portal-panel); }
 .portal-lead-detail-page [role="tablist"] + div textarea:focus-visible,
 .portal-lead-detail-page [role="tablist"] + div input:focus-visible,
@@ -1348,7 +1500,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-partner-quality-page { color: var(--portal-ink); }
 .portal-partner-quality-page [data-slot="card"] { border-color: var(--portal-line); border-radius: 12px; background: var(--portal-panel); box-shadow: none; }
 .portal-partner-quality-page [data-slot="card-header"] { border-bottom: 1px solid transparent; }
-.portal-partner-quality-page [data-slot="button"] { border-radius: 999px; }
+.portal-partner-quality-page [data-slot="button"] { border-radius: 8px; }
 .portal-partner-quality-page [data-slot="button"]:focus-visible,
 .portal-partner-quality-page button:focus-visible,
 .portal-partner-quality-page input:focus-visible { outline: 2px solid var(--ring-color); outline-offset: 2px; }
@@ -1392,7 +1544,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-partners-page { color: var(--portal-ink); }
 .portal-partners-page [data-slot="card"],
 .portal-partners-page aside { border-color: var(--portal-line); border-radius: 12px; background: var(--portal-panel); box-shadow: none; }
-.portal-partners-page [data-slot="button"] { border-radius: 999px; }
+.portal-partners-page [data-slot="button"] { border-radius: 8px; }
 .portal-partners-page [data-slot="button"][data-variant="default"] { background: var(--portal-primary); color: var(--on-primary); }
 .portal-partners-page [data-slot="button"][data-variant="default"]:hover { background: var(--portal-primary-hover); }
 .portal-partners-page [data-slot="button"]:focus-visible,
@@ -1654,7 +1806,8 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-partner-dashboard-page > div > div:first-child { border-bottom: 1px solid var(--portal-line); padding-bottom: 1.25rem; }
 /* title size now comes from PageHeader — one 32px title everywhere inside the shell */
 .portal-partner-dashboard-page [data-slot="card"] { border-color: var(--portal-line); border-radius: 12px; background: var(--portal-panel); box-shadow: none; }
-.portal-partner-dashboard-page [data-slot="button"] { border-radius: 999px; }
+/* QA pass 2026-11: the kit's 8px button on the partner overview too, not a pill (UI-CONSISTENCY §5a, §17). */
+.portal-partner-dashboard-page [data-slot="button"] { border-radius: 8px; }
 .portal-partner-dashboard-page [data-slot="button"][data-variant="default"] { background: var(--portal-primary); color: var(--on-primary); }
 .portal-partner-dashboard-page [data-slot="button"][data-variant="default"]:hover { background: var(--portal-primary-hover); }
 .portal-partner-dashboard-page [data-slot="button"]:focus-visible,
@@ -1685,7 +1838,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-partner-pipeline-page [data-slot="card"] { border-color: var(--portal-line); border-radius: 12px; background: var(--portal-panel); box-shadow: none; }
 .portal-partner-pipeline-page [data-slot="card-header"] { border-bottom: 1px solid var(--portal-line); }
 .portal-partner-pipeline-page [data-slot="card-title"] { font-size: 1.35rem; letter-spacing: -.025em; }
-.portal-partner-pipeline-page [data-slot="button"] { border-radius: 999px; }
+.portal-partner-pipeline-page [data-slot="button"] { border-radius: 8px; }
 .portal-partner-pipeline-page [data-slot="button"][data-variant="default"] { background: var(--portal-primary); color: var(--on-primary); }
 .portal-partner-pipeline-page [data-slot="button"][data-variant="default"]:hover { background: var(--portal-primary-hover); }
 .portal-partner-pipeline-page [data-slot="button"]:focus-visible,
@@ -1850,7 +2003,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-partner-submit-main > .portal-partner-submit-consent > p { margin: 12px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; letter-spacing: -.01em; }
 .portal-partner-submit-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
 .portal-partner-submit-actions > span { display: flex; flex-wrap: wrap; gap: 12px; }
-.portal-partner-submit-actions [data-slot="button"] { height: 44px; padding: 0 16px; border-radius: 999px; font-size: 14px; }
+.portal-partner-submit-actions [data-slot="button"] { height: 44px; padding: 0 16px; border-radius: 8px; font-size: 14px; }
 
 /* readiness: four checks, each a chip that is green only when it is true, then the facts */
 .portal-partner-submit-readiness { position: sticky; top: calc(var(--top-bar-h) + 1rem); flex: 0 0 340px; width: 340px; padding: 20px; }
@@ -2076,7 +2229,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-partner-invite-card input { border-color: var(--portal-line); border-radius: 8px; background: var(--portal-panel); }
 /* The address the invitation is bound to: read-only, so it sits on the grey ground with a lock. */
 .portal-partner-invite-card input.portal-partner-invite-bound { height: 44px; border-color: var(--border); background: var(--surface-alt); color: var(--muted); font-size: 16px; }
-.portal-partner-invite-card [data-slot="button"] { min-height: 2.75rem; border-radius: 999px; }
+.portal-partner-invite-card [data-slot="button"] { min-height: 2.75rem; border-radius: 8px; }
 .portal-partner-invite-card [data-slot="button"][data-variant="default"] { background: var(--portal-primary); color: var(--on-primary); font-weight: 600; }
 .portal-partner-invite-card [data-slot="button"][data-variant="default"]:hover { background: var(--portal-primary-hover); }
 .portal-partner-invite-card [data-slot="button"]:focus-visible,
@@ -2247,7 +2400,7 @@ html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
 .portal-auth-footer a:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
 .portal-auth-plan-empty { color: var(--portal-muted); font-size: .8rem; }
 .portal-signout-wrap { display: grid; gap: .35rem; }
-.portal-signout-button { border-radius: 999px; transition: transform 120ms ease, background-color 150ms ease, border-color 150ms ease, color 150ms ease; }
+.portal-signout-button { border-radius: 8px; transition: transform 120ms ease, background-color 150ms ease, border-color 150ms ease, color 150ms ease; }
 .portal-signout-button:active { transform: translateY(1px) scale(.99); }
 .portal-signout-button:focus-visible { outline: 2px solid var(--ring-color); outline-offset: 2px; }
 .portal-signout-error { color: var(--error-ink); font-size: .72rem; line-height: 1.35; }
@@ -2563,8 +2716,8 @@ html { background-color: var(--color-page-bg); }
    120ms fade of every control from the old colours to the new ones. */
 html.theme-switching *, html.theme-switching *::before, html.theme-switching *::after { transition: none !important; }
 
-/* The landing nav's theme switch (components/public/theme-switch.tsx) reveals the new theme as a
-   circle growing from the button. Only while that runs: no crossfade, new frame drawn on top. */
+/* The theme switches (components/theme-reveal.ts: the landing nav, the top bars, ThemeToggle) reveal the new theme
+   as a circle growing from the button (5k). Only while that runs: no crossfade, new frame drawn on top. */
 html.theme-reveal::view-transition-old(root),
 html.theme-reveal::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
 html.theme-reveal::view-transition-new(root) { z-index: 1; }
@@ -2863,7 +3016,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-dialer-interested { border-color: var(--success) !important; background: var(--success-surface) !important; }
 .portal-dialer-interested strong { display: block; font-size: .9375rem; font-weight: 600; }
 .portal-dialer-interested small { display: block; margin-top: .2rem; max-width: 42ch; color: var(--portal-muted); font-size: .75rem; line-height: 1.5; }
-.portal-dialer-interested [data-slot="button"] { border-radius: 999px; padding-inline: 1.25rem; }
+.portal-dialer-interested [data-slot="button"] { border-radius: 8px; padding-inline: 1.25rem; }
 
 /* ==========================================================================
  * Bespoke tables, brought onto the artboard's table.
@@ -3311,7 +3464,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 /* "Keep me signed in on this device", as the sign-in boards draw it: a native 16px box in the
    action colour, beside a 14px label. */
 .portal-remember-me { display: flex; align-items: center; gap: 10px; color: var(--body); font-size: 14px; line-height: 1.5; letter-spacing: -.02em; cursor: pointer; }
-.portal-remember-me input { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); cursor: pointer; }
+.portal-remember-me input:not([data-check-box]) { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); cursor: pointer; }
 
 /* Partner pipeline lanes (p-par-pipeline): each column head tinted for what the lane means, the
    same grounds the status chips use; the count sits right. */
@@ -3367,18 +3520,19 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-gate-lead p { margin: 10px 0 0; color: var(--muted); font-size: 16px; line-height: 1.5; letter-spacing: -.02em; }
 .portal-gate-lead p strong { color: var(--ink); font-weight: 600; }
 .portal-gate-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 24px; }
-.portal-gate-actions [data-slot="button"] { height: 44px; padding: 0 16px; border-radius: 999px; font-size: 14px; }
+/* QA pass 2026-11: the kit's 8px button, not a pill (UI-CONSISTENCY §5a, §17). */
+.portal-gate-actions [data-slot="button"] { height: 36px; padding: 0 16px; border-radius: 8px; font-size: 14px; }
 .portal-gate-facts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 24px; }
 .portal-gate-facts.is-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .portal-gate-facts > section, .portal-gate-reach { box-sizing: border-box; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 20px; }
 .portal-gate-facts h2, .portal-gate-reach h2 { margin: 0; color: var(--ink); font-size: 18px; line-height: 1.28; font-weight: 600; letter-spacing: -.015em; }
 .portal-gate-facts dl { display: grid; gap: 16px; margin: 16px 0 0; }
-.portal-gate-facts dt { color: var(--muted); font-size: 12px; line-height: 1.33; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; }
+.portal-gate-facts dt { color: var(--muted); font-size: 12px; line-height: 1.33; font-weight: 600; }
 .portal-gate-facts dd { margin: 4px 0 0; color: var(--ink); font-size: 14px; line-height: 1.5; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .portal-gate-reach { margin-top: 24px; }
 .portal-gate-reach table { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 14px; line-height: 1.5; letter-spacing: -.02em; }
 .portal-gate-reach th, .portal-gate-reach td { padding: 8px 12px; border-top: 1px solid var(--rule); text-align: left; color: var(--body); font-weight: 400; }
-.portal-gate-reach thead th { height: 32px; border-top: 0; background: var(--surface-alt); color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; }
+.portal-gate-reach thead th { height: 32px; border-top: 0; background: var(--surface-alt); color: var(--muted); font-size: 13px; font-weight: 500; }
 .portal-gate-reach tbody th { color: var(--ink); font-weight: 600; }
 .portal-gate-reach tr.is-current { background: color-mix(in srgb, var(--primary) 6%, var(--surface)); }
 .portal-gate-note { margin-top: 24px; padding: 14px 16px; border: 1px solid var(--border); border-left: 3px solid var(--info); border-radius: 12px; background: var(--info-surface); text-align: left; }
@@ -3414,7 +3568,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-callbacks-who small, .portal-callbacks-when small { display: block; overflow: hidden; color: var(--muted); font-size: 12px; line-height: 1.5; letter-spacing: -.01em; text-overflow: ellipsis; white-space: nowrap; }
 .portal-callbacks-when { flex: 0 0 150px; width: 150px; font-variant-numeric: tabular-nums; }
 .portal-callbacks-actions { display: flex; flex: 0 0 auto; gap: 8px; justify-content: flex-end; }
-.portal-callbacks-actions [data-slot="button"] { height: 32px; padding: 0 16px; border-radius: 999px; font-size: 14px; }
+.portal-callbacks-actions [data-slot="button"] { height: 32px; padding: 0 16px; border-radius: 8px; font-size: 14px; }
 .portal-callbacks-link { align-self: center; color: var(--accent-ink); font-size: 14px; font-weight: 600; }
 .portal-callbacks-empty { margin: 0; padding: 24px 16px; color: var(--muted); font-size: 14px; line-height: 1.5; }
 .portal-status-chip.is-accent > span { background: var(--primary); }
@@ -3433,7 +3587,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-callbacks-checks { display: flex; flex-direction: column; gap: 10px; }
 .portal-callbacks-checks > span { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .portal-callbacks-checks small { color: var(--muted); font-size: 12px; line-height: 1.5; letter-spacing: -.01em; }
-.portal-callbacks-card [data-slot="button"] { height: 2.25rem; border-radius: 999px; font-size: .875rem; }
+.portal-callbacks-card [data-slot="button"] { height: 2.25rem; border-radius: 8px; font-size: .875rem; }
 .portal-callbacks-card-more { display: flex; flex-wrap: wrap; gap: 16px; margin-top: -4px; }
 .portal-callbacks-card-more button { border: 0; background: none; padding: 0; color: var(--accent-ink); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
 .portal-callbacks-card-more button:disabled { color: var(--muted); cursor: default; }
@@ -3584,7 +3738,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 }
 .m-stat-card:hover { box-shadow: inset 0 1px 0 var(--gloss-highlight), var(--gloss-shadow-hover); }
 @media (prefers-reduced-motion: no-preference) {
-  .m-stat-card { transition: transform .2s cubic-bezier(.2, .8, .2, 1), box-shadow .2s ease; }
+  .m-stat-card { transition: transform var(--t-panel) var(--e-out), box-shadow var(--t-panel) var(--e); }
   .m-stat-card:hover { transform: translateY(-2px); }
 }
 /* A dashboard panel (components/app/home/home-panel.tsx) is the same surface at a larger size. It
@@ -3686,7 +3840,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .m-live-dot.is-stale { background: var(--warning); }
 
 /* Ring (components/ui/ring.tsx) draws its arc once, from empty to its value. */
-.m-ring { animation: m-ring-draw 900ms var(--e-out) both; animation-delay: 200ms; }
+.m-ring { animation: m-ring-draw var(--t-saved) var(--e-out) both; animation-delay: 200ms; }
 @keyframes m-ring-draw { from { stroke-dasharray: 0 100; } }
 
 /* ═════════════════════════════════════════════════════════════════════════════════════════════
@@ -3705,20 +3859,20 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 }
 
 ::view-transition-old(root),
-::view-transition-new(root) { animation-duration: 380ms; animation-timing-function: cubic-bezier(.22, 1, .36, 1); }
+::view-transition-new(root) { animation-duration: 380ms; animation-timing-function: var(--e-out); }
 
 /* The ribbon and the logo travel from where they were to where they land. */
-::view-transition-group(.ribbon-morph) { animation-duration: 760ms; animation-timing-function: cubic-bezier(.22, 1, .36, 1); }
+::view-transition-group(.ribbon-morph) { animation-duration: 760ms; animation-timing-function: var(--e-out); }
 ::view-transition-image-pair(.ribbon-morph) { animation-name: auth-via-blur; animation-duration: 760ms; }
 @keyframes auth-via-blur { 35% { filter: blur(6px); } }
 
 /* Door to door: the form and the panel's words swap in place. */
-::view-transition-group(.auth-swap) { animation-duration: 460ms; animation-timing-function: cubic-bezier(.22, 1, .36, 1); }
-::view-transition-old(.auth-swap) { animation: auth-fade-out 200ms ease both; }
-::view-transition-new(.auth-swap) { animation: auth-rise-in 520ms cubic-bezier(.22, 1, .36, 1) 80ms both; }
+::view-transition-group(.auth-swap) { animation-duration: 460ms; animation-timing-function: var(--e-out); }
+::view-transition-old(.auth-swap) { animation: auth-fade-out 200ms var(--e) both; }
+::view-transition-new(.auth-swap) { animation: auth-rise-in 520ms var(--e-out) 80ms both; }
 /* Arriving from the landing page (no pair yet): the form rises in; leaving, it fades. */
-::view-transition-new(.auth-rise) { animation: auth-rise-in 560ms cubic-bezier(.22, 1, .36, 1) 120ms both; }
-::view-transition-old(.auth-fade) { animation: auth-fade-out 220ms ease both; }
+::view-transition-new(.auth-rise) { animation: auth-rise-in 560ms var(--e-out) 120ms both; }
+::view-transition-old(.auth-fade) { animation: auth-fade-out 220ms var(--e) both; }
 @keyframes auth-rise-in { from { opacity: 0; transform: translateY(16px); } }
 @keyframes auth-fade-out { to { opacity: 0; transform: translateY(-6px); } }
 
@@ -3732,11 +3886,11 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 ::view-transition-group(.auth-step) { animation: none; }
 ::view-transition-old(.auth-step),
 ::view-transition-new(.auth-step) { width: 100%; height: auto; object-fit: none; object-position: top; }
-::view-transition-old(.auth-step) { animation: auth-fade-out 150ms ease-in both; }
-::view-transition-new(.auth-step) { animation: auth-rise-in 340ms cubic-bezier(.22, 1, .36, 1) 90ms both; }
+::view-transition-old(.auth-step) { animation: auth-fade-out 150ms var(--e) both; }
+::view-transition-new(.auth-step) { animation: auth-rise-in 340ms var(--e-out) 90ms both; }
 ::view-transition-group(.auth-hold) { animation-duration: 320ms; }
-::view-transition-old(.auth-hold) { animation: auth-hold-out 280ms ease both; }
-::view-transition-new(.auth-hold) { animation: auth-hold-in 320ms ease both; }
+::view-transition-old(.auth-hold) { animation: auth-hold-out 280ms var(--e) both; }
+::view-transition-new(.auth-hold) { animation: auth-hold-in 320ms var(--e-out) both; }
 @keyframes auth-hold-out { to { opacity: 0; } }
 @keyframes auth-hold-in { from { opacity: 0; } }
 /* Clicks during a transition reach the page instead of the overlay (Next's view-transitions guide). */
@@ -3838,6 +3992,38 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 @media (min-width: 768px) {
   .portal-agent:has(> .portal-agent-rail-expanded.is-collapsed) > main { width: calc(100% - 76px); margin-left: 76px; }
 }
+/* Expanding and collapsing the staff and partner rail is one calm move (owner 2026-11-18: "a smoother transition"):
+   the rail's width and the page beside it glide together, the icons stay where they are (17px in on each side when
+   narrow, so a 22px icon sits centred in 76px; the row keeps its own padding), and the names, group labels and
+   chevrons fade instead of popping out. The narrow rail clips what it no longer has room for. */
+.portal-agent-rail-expanded { overflow-x: clip; transition: width var(--t-enter) var(--e-out), padding var(--t-enter) var(--e-out); }
+@media (min-width: 768px) {
+  .portal-agent:has(> .portal-agent-rail-expanded) > main { transition: margin-left var(--t-enter) var(--e-out), width var(--t-enter) var(--e-out); }
+}
+.portal-agent-rail-expanded .portal-agent-rail-scroll { transition: padding var(--t-enter) var(--e-out); }
+.portal-agent-rail-expanded .portal-agent-nav-label,
+.portal-agent-rail-expanded .portal-agent-nav-disclosure-copy > span,
+.portal-agent-rail-expanded .portal-agent-nav-chevron { transition: opacity var(--t-panel) var(--e); }
+.portal-agent-rail-expanded.is-collapsed { align-items: stretch; padding-inline: 0; }
+.portal-agent-rail-expanded.is-collapsed .portal-agent-rail-scroll { padding-inline: 17px; }
+.portal-agent-rail-expanded.is-collapsed .portal-agent-nav-link,
+.portal-agent-rail-expanded.is-collapsed .portal-agent-nav-disclosure,
+.portal-agent-rail-expanded.is-collapsed .portal-agent-rail-card { justify-content: flex-start; padding-inline: 10px; overflow: hidden; }
+.portal-agent-rail-expanded.is-collapsed .portal-agent-nav-link-copy,
+.portal-agent-rail-expanded.is-collapsed .portal-agent-nav-disclosure-copy { justify-content: flex-start; }
+.portal-agent-rail-expanded.is-collapsed .portal-agent-nav-label,
+.portal-agent-rail-expanded.is-collapsed .portal-agent-nav-disclosure-copy > span,
+.portal-agent-rail-expanded.is-collapsed .portal-agent-nav-chevron { display: revert; opacity: 0; pointer-events: none; white-space: nowrap; }
+.portal-agent-rail-expanded.is-collapsed .portal-agent-rail-brand-compact { animation: m-fade var(--t-enter) var(--e-out) both; }
+/* Narrow, the logo stays and the "show the menu" button stays at the top under it (owner 2026-11-18): the brand row
+   grows to hold both, and that growth glides with the width, so the menu below slides down instead of jumping. */
+.portal-agent-rail-expanded .portal-agent-rail-brand { height: var(--top-bar-h, 56px); transition: height var(--t-enter) var(--e-out); }
+.portal-agent-rail-expanded.is-collapsed .portal-agent-rail-brand {
+  height: 100px; flex-direction: column; justify-content: center; gap: .375rem; padding: 0;
+}
+.portal-agent-rail-expanded.is-collapsed .portal-agent-rail-toggle { animation: m-fade var(--t-enter) var(--e-out) both; }
+/* No rule over the rail's foot (owner 2026-11-18). */
+.portal-agent-rail-expanded .portal-agent-rail-foot { border-top: 0; }
 /* The account at the foot of the rail (AppTopBar portals its button and menu here). */
 .portal-agent-rail-account { display: flex; justify-content: center; width: 100%; margin-top: .25rem; }
 .portal-rail-account {
@@ -3963,7 +4149,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .m-dash-tile:hover { border-color: color-mix(in srgb, var(--ink) 22%, transparent); }
 .m-launch-arranging > * { outline: 1px dashed color-mix(in srgb, var(--ink) 30%, transparent); outline-offset: 3px; border-radius: 16px; }
 @keyframes m-bar-rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
-.m-bar-rise { transform-origin: bottom; animation: m-bar-rise .9s cubic-bezier(.2, .8, .2, 1) both; }
+.m-bar-rise { transform-origin: bottom; animation: m-bar-rise var(--t-saved) var(--e-out) both; }
 @media (prefers-reduced-motion: reduce) { .m-dash-tile { transition: none; } .m-bar-rise { animation: none; } }
 
 /* One scrollbar across the app (owner 2026-10-27): thin, a brand-green thumb on a clear track, as
@@ -4282,11 +4468,11 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
    smooth short animation"): 22px icons in 44px rows. Hovering a row lights it softly and lifts its icon;
    the row stays lit while its pages show beside the rail (CollapsedFlyout in agent-sidebar.tsx). */
 .portal-agent .portal-agent-nav.is-collapsed .portal-agent-nav-icon {
-  width: 22px; height: 22px; transition: transform .18s cubic-bezier(.2,.8,.2,1), color .18s ease;
+  width: 22px; height: 22px; transition: transform var(--t-panel) var(--e-out), color var(--t-panel) var(--e);
 }
 .portal-agent .portal-agent-nav.is-collapsed .portal-agent-nav-disclosure,
 .portal-agent .portal-agent-nav.is-collapsed .portal-agent-nav-link:not(.portal-agent-nav-link-nested) {
-  height: 44px; min-height: 44px; transition: background-color .18s ease;
+  height: 44px; min-height: 44px; transition: background-color var(--t-panel) var(--e);
 }
 .portal-agent .portal-agent-nav.is-collapsed .portal-agent-nav-disclosure:hover,
 .portal-agent .portal-agent-nav.is-collapsed .portal-agent-nav-link:not(.portal-agent-nav-link-nested):hover,
@@ -4314,9 +4500,8 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 /* A tabs row whose slot has nothing in it yet (a client screen portals its tabs in) takes no room. */
 [data-page-tabs]:not(:has([role="tab"], button, a, input, select, [role="combobox"], [data-tabs-room])) { display: none; }
 
-/* A carrier file's stages fill up in order, once (owner 2026-11-02): the bar grows from its left, the
-   step's mark pops in after the line that reaches it. Never loops (§17); off under reduced motion. */
-@keyframes m-stage-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+/* A carrier file's stages fill up in order, once (owner 2026-11-02): the bar grows from its left (the kit's connector
+   draw, `.m-track`, since Wave D), the step's mark pops in after the line that reaches it. Never loops (§17). */
 @keyframes m-stage-pop { 0% { opacity: 0; transform: scale(.4); } 70% { opacity: 1; transform: scale(1.12); } 100% { opacity: 1; transform: scale(1); } }
 @keyframes m-stage-name { from { opacity: 0; transform: translateX(-3px); } to { opacity: 1; transform: none; } }
 
@@ -4503,7 +4688,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 /* The consent is one line, the full wording behind an (i); what is still missing is a short count beside Submit. */
 .portal-partner-submit-page .portal-partner-submit-consent-line { display: flex; align-items: center; gap: 8px; padding-top: 6px; }
 .portal-partner-submit-page .portal-partner-submit-consent-line label { display: flex; align-items: center; gap: 10px; color: var(--ink); font-size: 14px; font-weight: 500; letter-spacing: -.02em; cursor: pointer; }
-.portal-partner-submit-page .portal-partner-submit-consent-line input { flex: none; width: 17px; height: 17px; margin: 0; accent-color: var(--primary); }
+.portal-partner-submit-page .portal-partner-submit-consent-line input:not([data-check-box]) { flex: none; width: 17px; height: 17px; margin: 0; accent-color: var(--primary); }
 .portal-partner-submit-page .portal-partner-submit-outstanding { color: var(--warning-ink); font-size: 13px; font-weight: 500; cursor: help; }
 
 /* Agent sign-in and sign-up: the landing page's own field, inset beside the form (owner, 12 Nov:

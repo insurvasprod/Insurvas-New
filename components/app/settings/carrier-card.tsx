@@ -20,6 +20,8 @@ import { ChevronDown } from "lucide-react";
 import { Callout, control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { InfoTip } from "@/components/ui/info-tip";
+import { SaveStatus } from "@/components/ui/save-status";
+import { useSavedFlash } from "@/components/ui/use-saved-flash";
 import { StatusChip } from "@/components/ui/status-chip";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
@@ -254,6 +256,8 @@ function ContractSection({ carrierId, carrierName, contract, canEdit, levelId, p
   // Folded until wanted (owner, 2026-10-28): it is optional, and it was the biggest thing on the card.
   const [open, setOpen] = useState(Boolean(contract));
   const levelBad = level.trim() !== "" && levelToBp(level) === null;
+  // The three fields glow once when the contract saves, beside ✓ Saved (Wave B, 2026-11-18).
+  const glow = useSavedFlash();
 
   async function save() {
     const bp = levelToBp(level);
@@ -264,6 +268,7 @@ function ContractSection({ carrierId, carrierName, contract, canEdit, levelId, p
     const result = await send("/api/app/carrier-library/tenant-carriers", "POST", { carrier_id: carrierId, contract_level_bp: bp, writing_number: writing.trim(), effective_from: from });
     if (!result.ok) { setState("idle"); setError(result.error); return; }
     setState("saved");
+    glow.flash("contract");
     await onSaved();
   }
 
@@ -280,11 +285,11 @@ function ContractSection({ carrierId, carrierName, contract, canEdit, levelId, p
     <section aria-label="Contract" className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
         <span className={cn(KICKER, "flex items-center gap-1")}>Contract{!contract && <span className="font-medium normal-case tracking-normal">· optional</span>}<InfoTip label="About the contract level">The level every commission figure is worked out from. A new level from a later date keeps the earlier one for older policies.</InfoTip></span>
-        {state === "saving" ? <span className="text-xs text-[var(--muted)]">Saving…</span> : state === "saved" ? <StatusChip tone="good">Saved</StatusChip> : null}
+        <SaveStatus state={state} />
       </div>
       {/* The three fields share the card's width (one row when it fits, the level narrower) and stack
           when it is narrow; fixed widths overflowed the card and made it scroll sideways (owner, 2026-10-28). */}
-      <div className="@container">
+      <div className="@container rounded-[8px]" {...glow.props("contract")}>
       <div className="grid grid-cols-1 gap-3.5 @xs:grid-cols-2 @md:grid-cols-[minmax(0,0.75fr)_minmax(0,1.1fr)_minmax(0,1.1fr)] [&>label:last-child]:@xs:col-span-2 [&>label:last-child]:@md:col-span-1">
         <label className={FIELD}>
           Contract level

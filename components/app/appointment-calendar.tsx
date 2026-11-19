@@ -26,6 +26,7 @@ import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
 import { cn } from "@/lib/utils";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * LA-2.11's calendar, laid out the way people already know a calendar (owner 2026-11-09: "very close
  * to Google Calendar"): Today and the arrows beside the date range, Day / Week / Month / List, a left
@@ -547,8 +548,21 @@ export function AppointmentCalendar({ highlightId, embedded = false }: { highlig
     if (node) { highlighted.current = true; node.scrollIntoView({ block: "center" }); }
   });
 
-  // The first read draws the page skeleton; a later week or a Refresh keeps the page drawn.
-  if (!error && (context == null || !loadedOnce)) return <PageLoading />;
+  // Frame first (UI-CONSISTENCY §7a): the first read draws the title at once, the options column and the calendar
+  // card loading where they will be; a later week or a Refresh keeps the page drawn.
+  if (!error && (context == null || !loadedOnce)) {
+    return (
+      <div className="m-stagger flex flex-col gap-6">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-stretch">
+          <div className="flex w-full shrink-0 flex-col gap-6 xl:w-[248px]">
+            {!embedded && <PageHeader title="Calendar" />}
+            <SectionLoading rows={4} columns={1} />
+          </div>
+          <div className="min-w-0 flex-1"><PageLoading header={false} strip={false} /></div>
+        </div>
+      </div>
+    );
+  }
 
   const refresh = () => {
     // Read the linked Google calendar first (busy time, and meetings made longer or shorter there),
@@ -656,9 +670,9 @@ export function AppointmentCalendar({ highlightId, embedded = false }: { highlig
       </section>
       <section className="flex flex-col gap-2" aria-label="Show">
         <h2 className={sectionTitle}>Show</h2>
-        <label className="flex items-center gap-2.5 text-sm"><input type="checkbox" checked disabled className="size-4 accent-[var(--primary)]" /><span className="size-2.5 rounded-sm bg-[var(--primary)]" aria-hidden="true" />Appointments</label>
-        {callbacks && <label className="flex items-center gap-2.5 text-sm"><input type="checkbox" checked={showCallbacks} onChange={(event) => setShowCallbacks(event.target.checked)} className="size-4 accent-[var(--primary)]" /><span className="size-2.5 rounded-sm bg-[var(--warning)]" aria-hidden="true" />Callbacks</label>}
-        <label className="flex items-center gap-2.5 text-sm"><input type="checkbox" checked={showBlocked} onChange={(event) => setShowBlocked(event.target.checked)} className="size-4 accent-[var(--primary)]" /><span className="size-2.5 rounded-sm border border-dashed border-[var(--border-strong)] bg-[var(--surface-alt)]" aria-hidden="true" />Blocked time</label>
+        <label className="flex items-center gap-2.5 text-sm"><CheckBox checked disabled /><span className="size-2.5 rounded-sm bg-[var(--primary)]" aria-hidden="true" />Appointments</label>
+        {callbacks && <label className="flex items-center gap-2.5 text-sm"><CheckBox checked={showCallbacks} onChange={(event) => setShowCallbacks(event.target.checked)} /><span className="size-2.5 rounded-sm bg-[var(--warning)]" aria-hidden="true" />Callbacks</label>}
+        <label className="flex items-center gap-2.5 text-sm"><CheckBox checked={showBlocked} onChange={(event) => setShowBlocked(event.target.checked)} /><span className="size-2.5 rounded-sm border border-dashed border-[var(--border-strong)] bg-[var(--surface-alt)]" aria-hidden="true" />Blocked time</label>
         <label className="mt-1 flex flex-col gap-1 text-xs font-medium text-muted-foreground">
           Status
           <select value={status} onChange={(event) => { setStatus(event.target.value); setListPage(1); }} className={cn(toolbarControl, "w-full min-w-0")}>
@@ -887,10 +901,9 @@ export function AppointmentCalendar({ highlightId, embedded = false }: { highlig
         </div>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
         {error && (
-          <div role="alert" className="rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">
-            {error}{" "}
-            <button type="button" className="font-semibold underline underline-offset-2" onClick={refresh}>Try again</button>
-          </div>
+          <section role="alert" className="m-glass overflow-hidden rounded-lg border border-border">
+            <ErrorState title="The calendar did not load" detail={error} action={<Button type="button" variant="outline" size="sm" onClick={refresh}>Try again</Button>} />
+          </section>
         )}
         <TableCard
           className={cn(FILL, "min-h-[480px] min-w-0")}
@@ -905,8 +918,8 @@ export function AppointmentCalendar({ highlightId, embedded = false }: { highlig
               <h2 className="m-0 shrink-0 whitespace-nowrap text-lg font-semibold tracking-[-0.02em] text-[var(--ink)]" aria-live="polite" title={`Times in ${zone}${context && !noHours ? ` · ${agentName}` : ""}`}>{title}</h2>
               {/* Search, the view switch and Hours follow the title; Refresh and Book sit at the far right (owner 2026-11-09).
                   The two groups wrap as one unit, so on a narrow card they move to a second line together and Book stays right. */}
-              <div className="flex flex-1 basis-[480px] items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 flex-1 basis-full flex-wrap items-center justify-between gap-3 sm:basis-[480px]">
+              <div className="flex min-w-0 flex-wrap items-center gap-3">
                 <ToolbarSearch className="sm:w-44" value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search customer" />
                 <ViewTabs
                   label="View"

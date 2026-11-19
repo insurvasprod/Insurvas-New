@@ -243,13 +243,14 @@ function buildKpi(key: KpiKey, today: HomeToday, href: string): KpiCard | null {
  * Up to four stat cards for this role, in its order, each only when its figure is in the role's home
  * (that is the gate) and was read. At most one amber card: the first that needs action keeps it.
  */
-export function kpiCards(today: HomeToday | null, figures: ReadonlyArray<{ key: HomeFigureKey; href: string }>, role: HomeRole): KpiCard[] {
+export function kpiCards(today: HomeToday | null, figures: ReadonlyArray<{ key: HomeFigureKey; href: string }>, role: HomeRole, money = role !== "manager"): KpiCard[] {
   if (!today) return [];
   const cards: KpiCard[] = [];
   for (const key of KPI_ORDER[role]) {
     if (cards.length === MAX_KPIS) break;
-    // A manager sees no money (owner, 2026-10-25), whatever the underlying role's figures list.
-    if (key === "premium" && role === "manager") continue;
+    // No money without the money permission (lib/dashboard/access seesMoney; a manager: owner, 2026-10-25),
+    // whatever the underlying role's figures list.
+    if (key === "premium" && !money) continue;
     const source = figures.find((figure) => KPI_SOURCES[key].includes(figure.key));
     if (!source) continue;
     const card = buildKpi(key, today, source.href);

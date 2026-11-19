@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { listTeamPlans } from "@/lib/agency/payPlanStore";
 import { payoutPreview, producerRecordIds, readPayoutRules, readRuns } from "@/lib/agency/payoutStore";
@@ -7,6 +9,8 @@ import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { CommissionsPage } from "@/components/app/commissions/commissions-page";
 import { StepSlotTarget } from "@/components/app/step-frame/step-slot";
 import { ViewTabs } from "@/components/ui/view-tabs";
+import { StreamSection } from "@/components/ui/stream-section";
+import { Part, startParts } from "@/components/app/commissions/frame-parts";
 import { TableCard } from "@/components/ui/table-card";
 import { ErrorState } from "@/components/ui/page-states";
 import { PayMonthBoard, RunsBoard } from "@/components/app/commissions/team-payouts/team-payouts-board";
@@ -55,37 +59,47 @@ export default async function ProducerPayoutsPage({ searchParams }: { searchPara
     return { month: now, rows: await preview(now) };
   };
 
-  const [picked, runs, plans, rules, records] = await Promise.all([
-    pickMonth().catch((error: unknown) => ({ problem: error instanceof Error ? error.message : "The month could not be read." })),
-    readRuns(tenantId, undefined, { includeVoid: true }).catch(() => null),
-    listTeamPlans(tenantId).catch(() => null),
-    readPayoutRules(tenantId).catch(() => ({ negativePolicy: "carry_forward", recoveryPctBp: 2000 })),
-    producerRecordIds(tenantId).catch(() => new Map<string, string>()),
-  ]);
-  const draft = "problem" in picked ? null : picked;
-  const problem = "problem" in picked ? picked.problem : null;
-  const month = draft?.month ?? chosen ?? previousMonth(today());
-  const keep = `period=${month}`;
-  const names = Object.fromEntries([...(plans?.team ?? []).map((m) => [m.userId, m.name] as const), ...(draft?.rows ?? []).map((p) => [p.producerUserId, p.displayName] as const)]);
-  const noPlan = plans && !plans.pending ? plans.team.filter((m) => !m.plan).length : 0;
+  // The tabs on the title line; their counts (and, landing with no month asked, the month) once the reads land.
+  const tabsOf = (month: string, counts: { pay: number | null; runs: number | null; plans: number | null } | null) => {
+    const keep = `period=${month}`;
+    return <ViewTabs label="Team payouts" value={tab} tabs={[
+      { key: "pay", label: `Pay ${monthName(month)}`, count: counts?.pay ?? null, href: `/app/producer-payouts?${keep}` },
+      { key: "runs", label: "Runs", count: counts?.runs ?? null, href: `/app/producer-payouts?tab=runs&${keep}` },
+      { key: "plans", label: "Pay plans", count: counts?.plans ?? null, tone: "danger", href: `/app/producer-payouts?tab=plans&${keep}` },
+    ]} />;
+  };
 
-  const tabs = <ViewTabs label="Team payouts" value={tab} tabs={[
-    { key: "pay", label: `Pay ${monthName(month)}`, count: draft ? toPay(draft.rows) || null : null, href: `/app/producer-payouts?${keep}` },
-    { key: "runs", label: "Runs", count: runs?.length ?? null, href: `/app/producer-payouts?tab=runs&${keep}` },
-    { key: "plans", label: "Pay plans", count: noPlan || null, tone: "danger", href: `/app/producer-payouts?tab=plans&${keep}` },
-  ]} />;
+  // Frame first (§7a): the title, the tabs and the slot for the month's button draw at once; the reads stream in under them.
+  const view = startParts((async () => {
+    const [picked, runs, plans, rules, records] = await Promise.all([
+      pickMonth().catch((error: unknown) => ({ problem: error instanceof Error ? error.message : "The month could not be read." })),
+      readRuns(tenantId, undefined, { includeVoid: true }).catch(() => null),
+      listTeamPlans(tenantId).catch(() => null),
+      readPayoutRules(tenantId).catch(() => ({ negativePolicy: "carry_forward", recoveryPctBp: 2000 })),
+      producerRecordIds(tenantId).catch(() => new Map<string, string>()),
+    ]);
+    const draft = "problem" in picked ? null : picked;
+    const problem = "problem" in picked ? picked.problem : null;
+    const month = draft?.month ?? chosen ?? previousMonth(today());
+    const names = Object.fromEntries([...(plans?.team ?? []).map((m) => [m.userId, m.name] as const), ...(draft?.rows ?? []).map((p) => [p.producerUserId, p.displayName] as const)]);
+    const noPlan = plans && !plans.pending ? plans.team.filter((m) => !m.plan).length : 0;
+    return {
+      tabs: tabsOf(month, { pay: draft ? toPay(draft.rows) || null : null, runs: runs?.length ?? null, plans: noPlan || null }),
+      body: tab === "plans" ? (plans ? <PayPlansTable team={plans.team} pending={plans.pending} /> : <TableCard><ErrorState detail="The pay plans could not be read. Reload to try again." /></TableCard>)
+        : tab === "runs" ? (runs ? <RunsBoard runs={runs} names={names} payMonth={month} month={runsMonth && /^\d{4}-\d{2}$/.test(runsMonth) ? runsMonth : "all"} canCommit={!readOnly} /> : <TableCard><ErrorState detail="The runs could not be read. Reload to try again." /></TableCard>)
+        : draft ? <PayMonthBoard key={month} month={month} preview={draft.rows} runs={(runs ?? []).filter((r) => r.periodStart.slice(0, 7) === month)} rules={rules} records={Object.fromEntries(records)} canCommit={!readOnly} moneyActions={moneyActions} />
+        : <TableCard><ErrorState detail={problem ?? "The month could not be read. Reload to try again."} /></TableCard>,
+    };
+  })());
 
   return (
     <CommissionsPage
       step="teamPayouts"
       info="Pay your team for a month by each person's pay plan. Nothing is saved until you confirm, and nothing here moves money."
-      tabs={tabs}
+      tabs={<Suspense fallback={tabsOf(chosen ?? previousMonth(today()), null)}><Part read={view} part="tabs" /></Suspense>}
       actions={<StepSlotTarget id={PRODUCER_PAYOUTS_SLOT} />}
     >
-      {tab === "plans" ? (plans ? <PayPlansTable team={plans.team} pending={plans.pending} /> : <TableCard><ErrorState detail="The pay plans could not be read. Reload to try again." /></TableCard>)
-        : tab === "runs" ? (runs ? <RunsBoard runs={runs} names={names} payMonth={month} month={runsMonth && /^\d{4}-\d{2}$/.test(runsMonth) ? runsMonth : "all"} canCommit={!readOnly} /> : <TableCard><ErrorState detail="The runs could not be read. Reload to try again." /></TableCard>)
-        : draft ? <PayMonthBoard key={month} month={month} preview={draft.rows} runs={(runs ?? []).filter((r) => r.periodStart.slice(0, 7) === month)} rules={rules} records={Object.fromEntries(records)} canCommit={!readOnly} moneyActions={moneyActions} />
-        : <TableCard><ErrorState detail={problem ?? "The month could not be read. Reload to try again."} /></TableCard>}
+      <StreamSection shape={tab === "pay" ? "strip+table" : "table"}><Part read={view} part="body" /></StreamSection>
     </CommissionsPage>
   );
 }

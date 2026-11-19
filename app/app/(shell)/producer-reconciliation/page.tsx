@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { Suspense } from "react";
+
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -10,6 +12,8 @@ import { monthLabel, monthName, monthRange, parsePeriod, periodOptions, planShor
 import { READ_ONLY_REASON } from "@/components/app/commissions/producer-pay/review-dialog";
 import { Button } from "@/components/ui/button";
 import { ViewTabs } from "@/components/ui/view-tabs";
+import { StreamSection } from "@/components/ui/stream-section";
+import { Part, startParts } from "@/components/app/commissions/frame-parts";
 import { producerPayFigures, type ProducerPayFigure } from "@/lib/commissions/producerPayFigures";
 import { readMonthPayouts, readThreeTruths } from "@/lib/agency/moneyStores";
 import { readRoster } from "@/lib/agency/producerStore";
@@ -38,23 +42,6 @@ export default async function ProducerReconciliationPage({ searchParams }: { sea
   const { from, to } = monthRange(period);
   const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId };
   const failed = (what: string) => (error: unknown) => { console.error(`[producer pay] ${what} could not be read`, error); return null; };
-
-  // A read that fails shows "—", never $0.
-  const [pay, truths, paidOut, roster, plans] = await Promise.all([
-    producerPayFigures(viewer, from, to).catch(failed("figures")) as Promise<ProducerPayFigure[] | null>,
-    readThreeTruths(viewer.tenantId, from, to, REVIEW_THRESHOLD_CENTS).catch(failed("three truths")),
-    readMonthPayouts(viewer.tenantId, from, to).catch(failed("payouts")),
-    readRoster(guard.context).catch(failed("roster")),
-    listTeamPlans(viewer.tenantId).catch(failed("pay plans")),
-  ]);
-  const planOf = new Map((plans?.team ?? []).map((m) => [m.userId, m.plan]));
-  const producers = (roster?.rows ?? []).map((p) => ({ userId: p.userId, producerId: p.id, name: p.displayName, plan: planShort(planOf.get(p.userId)) }));
-  // AG-0.5: only the producers this session may see.
-  const visible = roster?.scope ? new Set(roster.scope) : null;
-  const truthRows = truths ? truths.rows.filter((r) => !visible || visible.has(r.producerUserId)) : null;
-  const reviews = truths ? truths.reviews.filter((r) => !visible || visible.has(r.producerUserId)) : null;
-  const openReviews = reviews?.filter((r) => r.status === "open").length ?? 0;
-
   const here = (next: ReconciliationView) => `${HREF}?${new URLSearchParams({ ...(next === "pay" ? {} : { view: next }), period })}`;
   const readOnly = guard.entitlement.access === "read_only";
   const payLabel = `Pay ${monthName(period)}`;
@@ -67,28 +54,56 @@ export default async function ProducerReconciliationPage({ searchParams }: { sea
     </>
   );
 
+  const tabsOf = (toReview: number | null) => (
+    <ViewTabs<ReconciliationView> label="Producer pay" value={view} tabs={[
+      { key: "pay", label: "Pay", href: here("pay") },
+      { key: "truths", label: "Three truths", href: here("truths") },
+      { key: "review", label: "To review", count: toReview, tone: "danger", href: here("review") },
+    ]} />
+  );
+
+  // Frame first (§7a): the title, the tabs, the month and Pay draw at once; the month's figures stream in.
+  const read = startParts((async () => {
+    // A read that fails shows "—", never $0.
+    const [pay, truths, paidOut, roster, plans] = await Promise.all([
+      producerPayFigures(viewer, from, to).catch(failed("figures")) as Promise<ProducerPayFigure[] | null>,
+      readThreeTruths(viewer.tenantId, from, to, REVIEW_THRESHOLD_CENTS).catch(failed("three truths")),
+      readMonthPayouts(viewer.tenantId, from, to).catch(failed("payouts")),
+      readRoster(guard.context).catch(failed("roster")),
+      listTeamPlans(viewer.tenantId).catch(failed("pay plans")),
+    ]);
+    const planOf = new Map((plans?.team ?? []).map((m) => [m.userId, m.plan]));
+    const producers = (roster?.rows ?? []).map((p) => ({ userId: p.userId, producerId: p.id, name: p.displayName, plan: planShort(planOf.get(p.userId)) }));
+    // AG-0.5: only the producers this session may see.
+    const visible = roster?.scope ? new Set(roster.scope) : null;
+    const truthRows = truths ? truths.rows.filter((r) => !visible || visible.has(r.producerUserId)) : null;
+    const reviews = truths ? truths.reviews.filter((r) => !visible || visible.has(r.producerUserId)) : null;
+    const openReviews = reviews?.filter((r) => r.status === "open").length ?? 0;
+    return {
+      tabs: tabsOf(reviews ? openReviews : null),
+      body: (
+        <ReconciliationBoard
+          view={view}
+          period={period}
+          threshold={REVIEW_THRESHOLD_CENTS}
+          readOnly={readOnly}
+          producers={producers}
+          pay={pay}
+          paidOut={paidOut ? Object.fromEntries(paidOut) : null}
+          truths={truthRows}
+          reviews={reviews}
+        />
+      ),
+    };
+  })());
   return (
     <CommissionsPage
       step="reconciliation"
       info={<>Each producer&apos;s pay for {monthLabel(period)}: what they earned, were advanced, charged back and paid, and what they are owed at the month&apos;s end. Three truths sets the rate card, the statements and the bank side by side.</>}
-      tabs={<ViewTabs<ReconciliationView> label="Producer pay" value={view} tabs={[
-        { key: "pay", label: "Pay", href: here("pay") },
-        { key: "truths", label: "Three truths", href: here("truths") },
-        { key: "review", label: "To review", count: reviews ? openReviews : null, tone: "danger", href: here("review") },
-      ]} />}
+      tabs={<Suspense fallback={tabsOf(null)}><Part read={read} part="tabs" /></Suspense>}
       actions={actions}
     >
-      <ReconciliationBoard
-        view={view}
-        period={period}
-        threshold={REVIEW_THRESHOLD_CENTS}
-        readOnly={readOnly}
-        producers={producers}
-        pay={pay}
-        paidOut={paidOut ? Object.fromEntries(paidOut) : null}
-        truths={truthRows}
-        reviews={reviews}
-      />
+      <StreamSection shape="strip+table"><Part read={read} part="body" /></StreamSection>
     </CommissionsPage>
   );
 }

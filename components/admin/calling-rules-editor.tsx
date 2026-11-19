@@ -7,7 +7,8 @@ import { Callout, Field, control, st } from "@/components/app/settings/primitive
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { PageHeader } from "@/components/ui/page-header";
+import { useTitleAction } from "@/components/admin/platform/title-action";
+import { PLATFORM_ACTION } from "@/lib/adminPlatform/titleActions";
 import { NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -32,6 +33,7 @@ import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * /admin/calling-rules · the state calling rules the dialer enforces on top of the federal window.
  *
@@ -94,6 +96,12 @@ export function CallingRulesEditor({ board: initial, today }: { board: CallingRu
     }
   }
 
+  // "Mark reviewed" sits on the Platform frame's title line (admin round 1, 2026-11-18); a press while a change is
+  // still saving is ignored, as the disabled button used to.
+  useTitleAction(PLATFORM_ACTION.markReviewed, () => {
+    if (!busy) void act(() => send("/api/admin/calling-rules/reviewed", "POST"), "Review recorded. The rules feed is refreshed.");
+  });
+
   async function act(run: () => Promise<unknown>, done: string) {
     setBusy(true);
     setError("");
@@ -132,22 +140,6 @@ export function CallingRulesEditor({ board: initial, today }: { board: CallingRu
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Calling rules"
-        description="State calling hours, Sunday rules and holidays the dialer applies on top of the federal 8:00 am – 9:00 pm."
-        actions={
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy}
-            title="Confirm the rules as they stand. The dialer refuses every call once the last review is older than its limit."
-            onClick={() => void act(() => send("/api/admin/calling-rules/reviewed", "POST"), "Review recorded. The rules feed is refreshed.")}
-          >
-            Mark reviewed
-          </Button>
-        }
-      />
-
       <StatStrip label="State calling rules">
         <StatTile label="States with a rule" value={summary.withRule} footnote={`of ${summary.states}`} />
         <StatTile label="No state rule" value={summary.withoutRule} valueTone={summary.withoutRule > 0 ? "warning" : undefined} footnote="federal window only" />
@@ -489,7 +481,7 @@ function StateRuleDialog({
           <div className="flex flex-wrap gap-3">
             {WEEKDAYS.map((label, day) => (
               <label key={label} className="inline-flex items-center gap-1.5 text-sm text-[var(--body)]">
-                <input type="checkbox" checked={draft.allowedWeekdays.includes(day)} disabled={readOnly || busy} onChange={() => toggleDay(day)} />
+                <CheckBox checked={draft.allowedWeekdays.includes(day)} disabled={readOnly || busy} onChange={() => toggleDay(day)} />
                 {label}
               </label>
             ))}
@@ -499,7 +491,7 @@ function StateRuleDialog({
         {draft.allowedWeekdays.includes(0) && (
           <div className="grid gap-4 sm:grid-cols-3 sm:items-end">
             <label className="inline-flex items-center gap-2 pb-2 text-sm text-[var(--body)]">
-              <input type="checkbox" checked={draft.sundayHours} disabled={readOnly || busy} onChange={(event) => setDraft({ ...draft, sundayHours: event.target.checked })} />
+              <CheckBox checked={draft.sundayHours} disabled={readOnly || busy} onChange={(event) => setDraft({ ...draft, sundayHours: event.target.checked })} />
               Different hours on Sunday
             </label>
             {draft.sundayHours && (
@@ -516,7 +508,7 @@ function StateRuleDialog({
         )}
 
         <label className="inline-flex items-center gap-2 text-sm text-[var(--body)]">
-          <input type="checkbox" checked={draft.blockHolidays} disabled={readOnly || busy} onChange={(event) => setDraft({ ...draft, blockHolidays: event.target.checked })} />
+          <CheckBox checked={draft.blockHolidays} disabled={readOnly || busy} onChange={(event) => setDraft({ ...draft, blockHolidays: event.target.checked })} />
           No calls on this state&rsquo;s holidays or federal holidays
         </label>
 

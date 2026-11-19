@@ -6,7 +6,7 @@ import { useState } from "react";
 
 import { PausedButton } from "@/components/app/accounting/bank-board";
 import { postBank } from "@/components/app/accounting/bank-match";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { ConfirmDialog, confirmAction } from "@/components/ui/confirm-dialog";
 import { DataToolbar, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -21,6 +21,7 @@ import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { daysBetween, lagWords, POLICY_LABELS, readableDay, shortDay, VERDICT_LABELS, type MoneyState, type PaymentVerdict, type PolicyState } from "@/lib/accounting/bankResultsCore";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 
 /**
  * One carrier payment (round 1 boards B3/B4, 2026-11-07; round 7 boards 1·3, 1·4 and 1·8, owner 2026-11-10). The
@@ -250,7 +251,7 @@ export function PaymentPolicies({ p, readOnly, show }: { p: PaymentView; readOnl
               <dt className="text-muted-foreground">Difference</dt><dd className={`m-0 tabular-nums ${open.shortCents ? "font-semibold text-[var(--error-ink)]" : ""}`}>{open.shortCents ? `−${money(open.shortCents)}` : POLICY_LABELS[open.state]}</dd>
             </dl>
             <DialogFooter className="sm:justify-between">
-              <Link className="self-center text-sm font-medium text-[var(--accent-ink)] hover:underline" href={open.href}>Open the policy ›</Link>
+              <Link className={cn(buttonVariants({ variant: "outline", size: "sm" }), "no-underline self-center")} href={open.href}>Open the Policy</Link>
               <span className="flex gap-2">
                 {open.state === "short" && open.findingId ? (readOnly ? <PausedButton variant="outline">Accept as paid</PausedButton> : <Button variant="outline" disabled={busy} onClick={() => void acceptOne(open)}>Accept as paid</Button>) : null}
                 {openAt! < shown.length - 1 ? <Button disabled={busy} onClick={() => setOpenAt(openAt! + 1)}>Next ›</Button> : <Button variant="outline" onClick={() => setOpenAt(null)}>Close</Button>}

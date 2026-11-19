@@ -13,6 +13,7 @@ import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarC
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { NoMatches } from "@/components/ui/page-states";
+import { Callout } from "@/components/app/settings/primitives";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
@@ -213,7 +214,7 @@ export function LapseRiskBoard({
       {!framed && <PageHeader title="Lapse risk" actions={readOnly ? undefined : <RecordLapseSignal />} />}
       {!framed && tabs}
 
-      {readOnly && <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">Your account is read-only. Recording and resolving lapse signals is unavailable.</div>}
+      {readOnly && <Callout tone="warning" title="Your account is read-only.">Recording and resolving lapse signals is unavailable.</Callout>}
 
       <StatStrip label="Lapse risk summary">
         <StatTile label="Policies at risk" value={totals.policies.toLocaleString()} footnote={`${openSignals} open ${openSignals === 1 ? "signal" : "signals"}`} />

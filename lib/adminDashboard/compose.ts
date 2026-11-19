@@ -25,7 +25,12 @@ export function adminOpenablePaths(role: AdminRole): string[] {
  */
 export function canOpenAdminHref(role: AdminRole, href: string): boolean {
   const path = href.split(/[?#]/)[0].replace(/\/$/, "") || "/";
-  return adminOpenablePaths(role).some((base) => path === base || (base !== "/admin" && path.startsWith(`${base}/`)));
+  const open = adminOpenablePaths(role);
+  // A path that is itself a page on some role's rail must be on THIS role's rail: the prefix rule below is for records
+  // under a page (/admin/tenants/<id>), never for a sibling page. Without this, /admin/monitoring (every admin's)
+  // admitted /admin/monitoring/lockouts (super admin only) — admin round 1, 2026-11-17.
+  if (adminOpenablePaths("super_admin").includes(path)) return open.includes(path);
+  return open.some((base) => path === base || (base !== "/admin" && path.startsWith(`${base}/`)));
 }
 
 /* ── Which figures a role gets ─────────────────────────────────────────────────────────────── */

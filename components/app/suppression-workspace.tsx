@@ -17,7 +17,6 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs } from "@/components/app/view-tabs";
-import { cn } from "@/lib/utils";
 import {
   LIST_TYPES,
   LIST_TYPE_LABELS,
@@ -34,11 +33,12 @@ import { SOURCE_LABELS, howYouLearned, listTone } from "@/lib/compliance/suppres
 import { TcpaDncExemptions } from "@/components/app/tcpa-dnc-exemptions";
 import { TcpaScreeningAudit } from "@/components/app/tcpa-screening-audit";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
-import { Field, checkboxControl, control } from "@/components/ui/field";
+import { Field, control } from "@/components/ui/field";
 import { ComplianceSlot } from "@/components/app/compliance/compliance-slot";
 import { useUrlTab } from "@/components/app/reports/reports-slot";
 import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
 
+import { CheckBox } from "@/components/ui/check-box";
 type Loaded = {
   entries: SuppressionEntry[];
   counts: { internal: number; external: number };
@@ -430,7 +430,7 @@ export function SuppressionWorkspace() {
             <input id="suppress-reason" required maxLength={500} placeholder="Called our office and asked to be removed, 23 Sep" value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} className={control} />
           </Field>
           <label className="flex items-start gap-2 text-sm text-[var(--body)]">
-            <input type="checkbox" className={cn(checkboxControl, "mt-0.5")} checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
+            <CheckBox className="mt-0.5" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
             <span>I have checked the number. I understand {typedDigits ? formatPhone(typedDigits) : "this number"} can never be called again.</span>
           </label>
         </>}

@@ -103,7 +103,7 @@ export function PreviewDialog({ open, onOpenChange, body, initial, graceEvent = 
  */
 export function PreviewTodayButton({ ruleId, readOnly, href, initial, primary = false, graceEvent = true, defaultOpen = false }: { ruleId: string; readOnly: boolean; href: string; initial?: Preview | null; primary?: boolean; graceEvent?: boolean; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(Boolean(initial) || (defaultOpen && !readOnly));
-  if (readOnly && !initial) return <Link href={href} className={buttonVariants({ variant: primary ? "default" : "outline" })}>Preview today</Link>;
+  if (readOnly && !initial) return <Link href={href} className={buttonVariants({ variant: primary ? "default" : "outline" })}>Preview Today</Link>;
   return (
     <>
       <Button type="button" variant={primary ? "default" : "outline"} onClick={() => setOpen(true)}>Preview today</Button>

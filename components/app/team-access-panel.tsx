@@ -9,6 +9,7 @@ import { TENANT_ROLE_LABELS, MEMBER_ROLE_LABELS, baseRoleOf, type MemberRole, ty
 import { accessSummary, EXTRA_ROLES, UNHIDEABLE_PAGES, type ExtraRole } from "@/lib/tenantAuth/teamAccess";
 import type { TeamAccessSnapshot } from "@/lib/tenantTeam/access";
 
+import { CheckBox } from "@/components/ui/check-box";
 export type AccessDraft = { extraRoles: ExtraRole[]; hiddenPages: string[] };
 
 /**
@@ -123,7 +124,7 @@ export function TeamAccessPanel({
           <div className="mt-2 flex flex-wrap gap-1.5">
             {EXTRA_ROLES.filter((role) => role !== base).map((role) => (
               <label key={role} className="flex items-center gap-2 rounded-[8px] border border-[var(--border)] px-2.5 py-1.5 text-sm text-[var(--body)]">
-                <input type="checkbox" className="size-4 accent-[var(--brand-500)]" checked={extras.includes(role)} onChange={(event) => toggleRole(role, event.target.checked)} />
+                <CheckBox checked={extras.includes(role)} onChange={(event) => toggleRole(role, event.target.checked)} />
                 {TENANT_ROLE_LABELS[role]}
               </label>
             ))}
@@ -147,7 +148,7 @@ export function TeamAccessPanel({
               <div className="mt-1 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                 {section.items.map((entry) => (
                   <label key={entry.key} className="flex min-w-0 items-center gap-2 rounded-[8px] border border-[var(--border)] px-2.5 py-1.5 text-sm text-[var(--body)]">
-                    <input type="checkbox" className="size-4 shrink-0 accent-[var(--brand-500)]" checked={!hidden.has(entry.key)} onChange={(event) => togglePage(entry.key, event.target.checked)} />
+                    <CheckBox checked={!hidden.has(entry.key)} onChange={(event) => togglePage(entry.key, event.target.checked)} />
                     <span className="truncate" title={entry.label}>{entry.navLabel ?? entry.label}</span>
                   </label>
                 ))}

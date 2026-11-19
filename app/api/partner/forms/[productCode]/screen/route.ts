@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { requirePartner } from "@/lib/partnerAuth/requirePartner";
+import { partnerMayOpen, partnerPageRefused, requirePartner } from "@/lib/partnerAuth/requirePartner";
 import { evaluateTransfer, TransferGateUnrecorded } from "@/lib/compliance/transferGate";
 import { partnerRejectsThisMonth } from "@/lib/compliance/partnerCompliance";
 import { partnerClearedPayload, partnerRejectPayload } from "@/lib/compliance/transferGateCore";
@@ -34,6 +34,8 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 export async function POST(request: NextRequest, { params }: { params: Promise<{ productCode: string }> }) {
   const auth = await requirePartner();
   if (auth instanceof NextResponse) return auth;
+  // Partner type (lib/partnerAuth/portalAccess.ts): refused on the server, not only hidden from the menu.
+  if (!(await partnerMayOpen(auth.context, "submit"))) return partnerPageRefused();
   if (auth.context.partnerStatus !== "active") return NextResponse.json({ error: "This partner is paused and cannot screen new leads" }, { status: 403 });
   const productCode = (await params).productCode;
   try {

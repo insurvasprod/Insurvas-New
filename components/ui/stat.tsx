@@ -4,6 +4,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { InfoTip } from "@/components/ui/info-tip";
 import { CountUp } from "@/components/ui/count-up";
+import { ROLL_MS } from "@/components/ui/motion-tokens";
 
 /**
  * The pieces a figure is made of.
@@ -298,9 +299,11 @@ export function StatTile({
           table below them; they should not compete with it. */}
       <div className="mt-1 flex items-end justify-between gap-3">
         {/* m-figure: the glass layer's halo behind the number in dark mode (app/globals.css). A plain
-            number or numeric string counts to its value (CountUp); anything richer renders as given. */}
+            number or numeric string rolls to its new value when it changes after the page is up (CountUp
+            `changesOnly`, Tier 1 motion Wave A 2026-11-17: the calm cascade brings the page in, so it never counts
+            up on a page opening); anything richer renders as given. */}
         <span className={cn(valueSize === "text" ? "min-w-0 truncate text-base font-semibold leading-[1.5]" : "m-figure text-2xl font-bold leading-[1.2] tracking-[-0.025em] tabular-nums", valueTone && VALUE_TONE[valueTone])}>
-          {valueSize !== "text" && (typeof value === "number" || (typeof value === "string" && /\d/.test(value))) ? <CountUp text={String(value)} /> : value}
+          {valueSize !== "text" && (typeof value === "number" || (typeof value === "string" && /\d/.test(value))) ? <CountUp text={String(value)} changesOnly duration={ROLL_MS} /> : value}
           {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
         </span>
         {trend && trend.placement !== "under" && <Sparkline points={trend.points} tone={trend.tone} />}

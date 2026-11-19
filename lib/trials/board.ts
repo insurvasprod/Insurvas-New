@@ -15,6 +15,8 @@ import {
   earliest,
   trialConverted,
   monthOutcome,
+  monthlyOutcomes,
+  type MonthConversion,
   secondEarliest,
   separation,
   signalsAt,
@@ -66,6 +68,8 @@ export type TrialsBoard = {
     month: MonthOutcome;
   };
   separation: Separation | null;
+  /** Converted and lapsed in each of the last six months, oldest first; null when the subscriptions could not be read. */
+  history: MonthConversion[] | null;
   /** The in-flight trial with the fewest days left that has neither imported leads nor a second user. */
   spotlight: { name: string; daysLeft: number; overdue: boolean; others: number } | null;
   signalsAvailable: boolean;
@@ -324,6 +328,7 @@ export async function fetchTrialsBoard(now: Date = new Date()): Promise<TrialsBo
       month: monthOutcome(endedInputs, now),
     },
     separation: subs !== null && signalsAvailable ? separation(cohort, now) : null,
+    history: subs !== null ? monthlyOutcomes(endedInputs, now, 6) : null,
     spotlight: first ? { name: first.displayName, daysLeft: first.daysLeft, overdue: first.overdue, others: neither.length - 1 } : null,
     signalsAvailable,
     statsAvailable: subs !== null,

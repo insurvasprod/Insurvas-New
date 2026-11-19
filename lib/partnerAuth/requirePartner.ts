@@ -11,6 +11,8 @@ import type { PartnerMember } from "./team";
 import { isTenantSuspended } from "@/lib/tenants/suspension";
 import { getEntitlement } from "@/lib/entitlements/get";
 import { hasFeature } from "@/lib/entitlements/types";
+import type { PartnerType } from "@/lib/partners/constants";
+import { asPartnerType, partnerPageAllowed, type PartnerPortalPage } from "./portalAccess";
 
 /**
  * Partner logins are part of `publisher_records`, the feature that lets an agency have partners at
@@ -27,6 +29,8 @@ export type PartnerContext = {
   partnerName: string;
   partnerTimezone: string;
   partnerStatus: "draft" | "active" | "paused" | "offboarded";
+  /** LA-1.1: publisher, marketing or affiliate. The menu, the home and the lead form follow it (portalAccess.ts). */
+  partnerType: PartnerType;
 };
 
 export async function getPartnerSession(): Promise<PartnerSessionPayload | null> {
@@ -54,7 +58,7 @@ const readPartnerContext = cache(async (): Promise<PartnerContext | null> => {
   const [{ data: membership }, { data: tenant }, isAgencyAccount, agencyHasPartners] = await Promise.all([
     supabase
       .from("partner_users")
-      .select("tenant_id, partner_id, role, status, accepted_at, users!partner_users_user_id_fkey!inner(status, session_version), partners!inner(name, status, timezone)")
+      .select("tenant_id, partner_id, role, status, accepted_at, users!partner_users_user_id_fkey!inner(status, session_version), partners!inner(name, status, timezone, partner_type)")
       .eq("tenant_id", session.tenantId)
       .eq("partner_id", session.partnerId)
       .eq("user_id", session.sub)
@@ -75,7 +79,7 @@ const readPartnerContext = cache(async (): Promise<PartnerContext | null> => {
     status: string;
     accepted_at: string | null;
     users: { status: string; session_version: number };
-    partners: { name: string; status: PartnerContext["partnerStatus"]; timezone: string };
+    partners: { name: string; status: PartnerContext["partnerStatus"]; timezone: string; partner_type: string };
   };
   const row = membership as unknown as PartnerMembershipRow | null;
 
@@ -83,8 +87,11 @@ const readPartnerContext = cache(async (): Promise<PartnerContext | null> => {
   if (row.users.status !== "active") return null;
   if (session.sessionVersion !== undefined && session.sessionVersion !== row.users.session_version) return null;
   if (row.partners.status === "offboarded") return null;
+  // partner_type is NOT NULL in the schema; an unknown value fails closed rather than guessing a menu.
+  const partnerType = asPartnerType(row.partners.partner_type);
+  if (!partnerType) return null;
 
-  return { userId: session.sub, tenantId: session.tenantId, partnerId: session.partnerId, role: row.role, partnerName: row.partners.name, partnerTimezone: row.partners.timezone, partnerStatus: row.partners.status };
+  return { userId: session.sub, tenantId: session.tenantId, partnerId: session.partnerId, role: row.role, partnerName: row.partners.name, partnerTimezone: row.partners.timezone, partnerStatus: row.partners.status, partnerType };
 });
 
 export async function requirePartner(allowedRoles?: readonly PartnerRole[]): Promise<{ context: PartnerContext } | NextResponse> {
@@ -92,6 +99,44 @@ export async function requirePartner(allowedRoles?: readonly PartnerRole[]): Pro
   if (!context) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   if (allowedRoles && !allowedRoles.includes(context.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   return { context };
+}
+
+/**
+ * Whether the partner organisation has more than one active person — the one fact the affiliate menu
+ * turns on (portalAccess.ts). Memoised per request. A read that fails answers "no team": an affiliate
+ * then sees the lighter portal, which hides pages rather than opening them.
+ */
+export const partnerHasTeam = cache(async (tenantId: string, partnerId: string): Promise<boolean> => {
+  const { count, error } = await getSupabaseServiceClient()
+    .from("partner_users")
+    .select("user_id", { count: "exact", head: true })
+    .eq("tenant_id", tenantId)
+    .eq("partner_id", partnerId)
+    .eq("status", "active");
+  if (error) return false;
+  return (count ?? 0) > 1;
+});
+
+/** Whether this signed-in partner may open a portal page, by type, role and team (portalAccess.ts). */
+export async function partnerMayOpen(context: PartnerContext, page: PartnerPortalPage): Promise<boolean> {
+  const hasTeam = context.partnerType === "affiliate" ? await partnerHasTeam(context.tenantId, context.partnerId) : false;
+  return partnerPageAllowed(page, { type: context.partnerType, role: context.role, hasTeam });
+}
+
+/** The answer a route gives a partner whose type or role does not get its page. */
+export function partnerPageRefused(): NextResponse {
+  return NextResponse.json({ error: "This page is not part of your portal" }, { status: 403 });
+}
+
+/**
+ * `requirePartner` for a route that belongs to one portal page: a type that does not get the page is
+ * refused here, on the server, not only by a hidden menu link.
+ */
+export async function requirePartnerPage(page: PartnerPortalPage, allowedRoles?: readonly PartnerRole[]): Promise<{ context: PartnerContext } | NextResponse> {
+  const auth = await requirePartner(allowedRoles);
+  if (auth instanceof NextResponse) return auth;
+  if (!(await partnerMayOpen(auth.context, page))) return partnerPageRefused();
+  return auth;
 }
 
 /**

@@ -382,6 +382,42 @@ export async function newVersion(scope: MapScope, id: string) {
   return getMap(scope, newId);
 }
 
+// ── admin: reject a draft, retire a map (admin round 1, catalog screen 12) ──
+//
+// Both are moves the status CHECK and the publish guard already allow, so no migration: a draft goes
+// to `retired` with no approval (read back as "Rejected": retired, never approved), and a published or
+// flagged map goes to `retired` (fills stop using it; the carrier-wide map, if any, takes over). The
+// guard then freezes either one; "Start version N + 1" copies it into a new draft.
+
+async function auditAdminMap(scope: MapScope, action: "field_map.rejected" | "field_map.retired", mapId: string, metadata: Record<string, unknown>) {
+  if (scope.plane !== "admin" || !scope.request) throw new Error("A field-map write needs its request for the audit row.");
+  await auditExtension({ actorType: "admin", actorId: scope.adminId, action, targetType: "carrier_field_map", targetId: mapId, metadata: { ...metadata, plane: "admin" }, request: scope.request });
+}
+
+/** A draft or in-review platform map, turned down: it never fills anything and stays on record as rejected. */
+export async function rejectMap(scope: MapScope, id: string, reason: string | null) {
+  if (scope.plane !== "admin") throw new ApplicationError("FIELD_MAP_PLATFORM", "Only staff reject a platform draft.", 403);
+  const map = await mapRow(scope, id, { write: true });
+  if (!EDITABLE_FIELD_MAP_STATUSES.includes(map.status)) throw new ApplicationError("FIELD_MAP_NOT_DRAFT", `Map v${map.version} is not a draft; retire it instead.`, 409);
+  const upd = await db().from("carrier_field_map").update({ status: "retired" }).eq("id", map.id).is("tenant_id", null).in("status", [...EDITABLE_FIELD_MAP_STATUSES]).select("id");
+  if (upd.error) fail(upd.error, "Could not reject the draft");
+  if (!rows<{ id: string }>(upd.data).length) throw new ApplicationError("FIELD_MAP_CONFLICT", "Someone else changed this map at the same moment. Refresh and try again.", 409);
+  await auditAdminMap(scope, "field_map.rejected", map.id, { version: map.version, carrierId: map.carrier_id, productId: map.carrier_product_id, reason });
+  return getMap(scope, map.id);
+}
+
+/** A published (or flagged) platform map, taken out of use: fills stop using it. */
+export async function retireMap(scope: MapScope, id: string, reason: string | null) {
+  if (scope.plane !== "admin") throw new ApplicationError("FIELD_MAP_PLATFORM", "Only staff retire a platform map.", 403);
+  const map = await mapRow(scope, id, { write: true });
+  if (!FILLABLE_FIELD_MAP_STATUSES.includes(map.status)) throw new ApplicationError("FIELD_MAP_NOT_LIVE", map.status === "retired" ? `Map v${map.version} is already retired.` : `Map v${map.version} is a draft; reject it instead.`, 409);
+  const upd = await db().from("carrier_field_map").update({ status: "retired" }).eq("id", map.id).is("tenant_id", null).in("status", [...FILLABLE_FIELD_MAP_STATUSES]).select("id");
+  if (upd.error) fail(upd.error, "Could not retire the map");
+  if (!rows<{ id: string }>(upd.data).length) throw new ApplicationError("FIELD_MAP_CONFLICT", "Someone else changed this map at the same moment. Refresh and try again.", 409);
+  await auditAdminMap(scope, "field_map.retired", map.id, { version: map.version, carrierId: map.carrier_id, productId: map.carrier_product_id, from: map.status, reason });
+  return getMap(scope, map.id);
+}
+
 // ── fill time (bearer) ─────────────────────────────────────────────────────
 
 /**

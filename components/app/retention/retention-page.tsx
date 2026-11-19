@@ -1,11 +1,15 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { cookies } from "next/headers";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { StepFrame } from "@/components/app/step-frame/step-frame";
 import type { RailStep } from "@/components/app/step-frame/step-rail";
 import type { Crumb } from "@/components/ui/breadcrumbs";
+import { ShowSwap } from "@/components/ui/view-switch";
+import type { ShowMode } from "@/lib/reports/show";
 import { InfoTip } from "@/components/ui/info-tip";
+import { DocsGuideLink } from "@/components/app/docs/docs-guide-link";
+import { TitleShape } from "@/components/ui/stream-section";
 import { RETENTION_RAIL_COOKIE, RETENTION_SETTINGS_FOOT, RETENTION_STEPS, RETENTION_WAITING, retentionStepLabel, stepItem, type RetentionStep } from "@/lib/retention/steps";
 
 /**
@@ -37,16 +41,21 @@ async function openSteps(): Promise<{ steps: RailStep[]; owner: boolean }> {
  * A record under a step (a save card, a servicing request, a reinstatement case; the pick of 2026-11-05,
  * docs/retention/CRITIQUE.md) passes its `title`, its status `chip`, one muted line of `facts` and its trail,
  * as Accounting's records do; `actions` holds at most two buttons and a More menu.
+ *
+ * `show`: the step has the Table · Chart switch (ViewSwitch) in its actions, defaulting to this view; the step's
+ * content then crosses in when the switch flips (ShowSwap, Tier 1 motion Wave A 2026-11-17), as on Reports.
  */
-export async function RetentionPage({ step, title, info, chip, facts, breadcrumbs, tabs, actions, children }: {
+export async function RetentionPage({ step, title, info, chip, facts, breadcrumbs, tabs, actions, show, children }: {
   step: RetentionStep;
-  title?: string;
+  /** Text, or a record's name read from its data: `<RecordTitle read={…} />` (frame first, UI-CONSISTENCY §7a). */
+  title?: ReactNode;
   info?: ReactNode;
   chip?: ReactNode;
   facts?: ReactNode;
   breadcrumbs?: Crumb[];
   tabs?: ReactNode;
   actions?: ReactNode;
+  show?: ShowMode;
   children: ReactNode;
 }) {
   const [{ steps, owner }, jar] = await Promise.all([openSteps(), cookies()]);
@@ -59,10 +68,12 @@ export async function RetentionPage({ step, title, info, chip, facts, breadcrumb
     steps.splice(at, 0, own);
   }
   const heading = title ?? retentionStepLabel(step);
+  // The (i) names the page in words; a streamed record name is not words yet, so it names the step.
+  const named = typeof heading === "string" ? heading : retentionStepLabel(step);
   return (
     <StepFrame
       title={heading}
-      titleInfo={info || chip ? <>{info ? <InfoTip label={`About ${heading}`} side="right">{info}</InfoTip> : null}{chip}</> : undefined}
+      titleInfo={info || chip ? <>{info ? <InfoTip label={`About ${named}`} side="right">{info}<DocsGuideLink /></InfoTip> : null}{chip}</> : undefined}
       meta={facts ? <p className="mt-1 text-sm text-muted-foreground lg:min-w-[360px] lg:[contain:inline-size]">{facts}</p> : undefined}
       breadcrumbs={breadcrumbs}
       tabs={tabs}
@@ -70,7 +81,7 @@ export async function RetentionPage({ step, title, info, chip, facts, breadcrumb
       // Each step's one warning rides on the rail (round 7, 0·A); the owner's settings sit at its foot.
       rail={{ label: "Retention", cookie: RETENTION_RAIL_COOKIE, countsUrl: "/api/app/retention/steps", waiting: RETENTION_WAITING, steps, step, collapsed: jar.get(RETENTION_RAIL_COOKIE)?.value === "collapsed", foot: owner ? RETENTION_SETTINGS_FOOT : null }}
     >
-      {children}
+      {show ? <ShowSwap fallback={show}>{children}</ShowSwap> : children}
     </StepFrame>
   );
 }
@@ -79,4 +90,18 @@ export async function RetentionPage({ step, title, info, chip, facts, breadcrumb
 export function retentionTrail(step: RetentionStep, label: string, middle?: Crumb): Crumb[] {
   const own = stepItem(step);
   return [{ label: "Retention" }, { label: own.label, href: own.href }, ...(middle ? [middle] : []), { label }];
+}
+
+/**
+ * Frame first (UI-CONSISTENCY §7a, owner 2026-11-12): a part of a Retention page that waits on the page's one read.
+ * The page starts its read as a promise and returns its frame at once; the title, the tabs' counts, the buttons and
+ * the step each await the same promise in their own boundary, so the read runs once and nothing waits on another.
+ */
+export async function Await<T>({ read, children }: { read: Promise<T>; children: (value: T) => ReactNode }) {
+  return children(await read);
+}
+
+/** A record's name on the title line: a title-shaped placeholder until the read lands (a missing record names nothing). */
+export function RecordTitle<T>({ read, name }: { read: Promise<T>; name: (value: T) => string | null }) {
+  return <Suspense fallback={<TitleShape />}><Await read={read}>{(value) => name(value)}</Await></Suspense>;
 }

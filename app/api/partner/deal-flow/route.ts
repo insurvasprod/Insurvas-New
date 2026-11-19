@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { partnerTeamMembers, requirePartner } from "@/lib/partnerAuth/requirePartner";
+import { partnerTeamMembers, partnerMayOpen, partnerPageRefused, requirePartner } from "@/lib/partnerAuth/requirePartner";
 import { visibleSubmitters } from "@/lib/partnerAuth/team";
 import { listPartnerDealFlow } from "@/lib/partnerDealFlow/service";
 import { partnerDealFlowCsv } from "@/lib/partnerDealFlow/csv";
@@ -65,6 +65,8 @@ function checkPartnerParam(request: NextRequest, partnerId: string) {
 export async function GET(request: NextRequest) {
   const auth = await requirePartner();
   if (auth instanceof NextResponse) return auth;
+  // Partner type (lib/partnerAuth/portalAccess.ts): refused on the server, not only hidden from the menu.
+  if (!(await partnerMayOpen(auth.context, "deal-flow"))) return partnerPageRefused();
   const { context } = auth;
   if (!checkPartnerParam(request, context.partnerId)) {
     return NextResponse.json({ error: "You cannot access another partner's deal flow" }, { status: 403 });

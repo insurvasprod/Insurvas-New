@@ -1,0 +1,80 @@
+[
+  {
+    "src": "/docs/shots/settings/pipelines-outcomes/1.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Find the pipeline you use",
+    "focus": {
+      "x": 264,
+      "y": 0,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/pipelines-outcomes/2.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click New pipeline for another",
+    "focus": {
+      "x": 720,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/pipelines-outcomes/3.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Set up to open the map",
+    "focus": {
+      "x": 720,
+      "y": 60,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/pipelines-outcomes/4.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check where each outcome goes"
+  },
+  {
+    "src": "/docs/shots/settings/pipelines-outcomes/5.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Add outcome for a new result",
+    "focus": {
+      "x": 303,
+      "y": 23,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/pipelines-outcomes/6.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Add stage for a new step",
+    "focus": {
+      "x": 720,
+      "y": 23,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/pipelines-outcomes/7.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Save changes",
+    "focus": {
+      "x": 720,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  }
+]

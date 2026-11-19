@@ -29,7 +29,8 @@ import { confirmAction } from "@/components/ui/confirm-dialog";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 import { PartnerChatPanel } from "@/components/partner/partner-chat-panel";
 import { PartnerLeadPipeline } from "@/components/partner/partner-lead-pipeline";
-import { PartnerPortalOverview } from "@/components/partner/partner-portal-overview";
+import { PartnerTypeOverview } from "@/components/partner/partner-type-overview";
+import type { PartnerType } from "@/lib/partners/constants";
 import { PartnerSettingsWorkspace } from "@/components/partner/partner-settings-workspace";
 import { PartnerTeamWorkspace } from "@/components/partner/partner-team-workspace";
 import { PartnerTeamReviewWorkspace } from "@/components/partner/partner-team-review-workspace";
@@ -57,6 +58,7 @@ import { effectiveTemplateForm } from "@/lib/templates/sectionAvailability";
 import { placementWidth } from "@/lib/templates/placementWidth";
 import { US_STATES } from "@/lib/signup/constants";
 
+import { CheckBox } from "@/components/ui/check-box";
 type ApprovedProduct = { code: string; name: string; category: string };
 type PartnerMarket = {
   carrier_id: string;
@@ -165,8 +167,7 @@ export function PartnerField({
       >
         {field.options.map((option) => (
           <label className="flex items-center gap-1 text-sm" key={option}>
-            <input
-              type="checkbox"
+            <CheckBox
               checked={Array.isArray(value) && value.includes(option)}
               onChange={(event) =>
                 onChange([
@@ -1231,8 +1232,7 @@ export function PartnerLeadForm({
       <p>{screening.warning.message}</p>
       {screening.warning.code === "dnc" && (
         <label className="portal-remember-me">
-          <input
-            type="checkbox"
+          <CheckBox
             checked={dncAcknowledged}
             onChange={(event) => {
               setDncAcknowledged(event.target.checked);
@@ -1492,7 +1492,7 @@ export function PartnerLeadForm({
           {formOpened && (
             <div className="portal-partner-submit-consent-line">
               <label htmlFor={`partner-consent-${productCode}`}>
-                <input ref={consentRef} id={`partner-consent-${productCode}`} type="checkbox" checked={consentGiven} onChange={(event) => setConsentGiven(event.target.checked)} />
+                <CheckBox ref={consentRef} id={`partner-consent-${productCode}`} checked={consentGiven} onChange={(event) => setConsentGiven(event.target.checked)} />
                 <span>Customer gave express written consent to be contacted by phone and SMS<span className="portal-partner-submit-required"> *</span></span>
               </label>
               <InfoTip label="About the customer consent">The customer gave express written consent to be contacted by a licensed agent at the number above, by phone and by SMS, about insurance products. I hold documentation of that consent and understand every submission is audit logged.</InfoTip>
@@ -1551,6 +1551,7 @@ function LegacyPartnerPortalWorkspace({
   partnerStatus,
   section,
   partnerName,
+  partnerType = "publisher",
   agencyName,
   initialDraftId,
 }: {
@@ -1558,6 +1559,7 @@ function LegacyPartnerPortalWorkspace({
   partnerStatus: "draft" | "active" | "paused" | "offboarded";
   section: PartnerPortalSection;
   partnerName?: string;
+  partnerType?: PartnerType;
   agencyName?: string | null;
   initialDraftId?: string | null;
 }) {
@@ -1824,7 +1826,7 @@ function LegacyPartnerPortalWorkspace({
       )}
       {section === "pipeline" && (
         <section id="pipeline" className="scroll-mt-6">
-          <PartnerLeadPipeline partnerStatus={partnerStatus} role={role} partnerName={partnerName} />
+          <PartnerLeadPipeline partnerStatus={partnerStatus} role={role} partnerName={partnerName} partnerType={partnerType} />
         </section>
       )}
       {section === "messages" && (
@@ -1882,6 +1884,7 @@ export function PartnerPortalWorkspace({
   partnerId,
   partnerName,
   partnerTimezone,
+  partnerType = "publisher",
   agencyName,
   section = "overview",
   initialDraftId,
@@ -1891,6 +1894,8 @@ export function PartnerPortalWorkspace({
   partnerId?: string;
   partnerName?: string;
   partnerTimezone?: string;
+  /** LA-1.1: the home and the pipeline speak the type's words (lib/partnerAuth/portalAccess.ts). */
+  partnerType?: PartnerType;
   agencyName?: string | null;
   section?: PartnerPortalSection;
   initialDraftId?: string | null;
@@ -1920,7 +1925,7 @@ export function PartnerPortalWorkspace({
   }, []);
 
   if (section === "overview")
-    return <PartnerPortalOverview role={role} partnerStatus={partnerStatus} partnerName={partnerName} />;
+    return <PartnerTypeOverview role={role} partnerStatus={partnerStatus} partnerName={partnerName ?? ""} partnerType={partnerType} />;
   if (section === "team")
     return <PartnerTeamWorkspace role={role} partnerStatus={partnerStatus} partnerName={partnerName} />;
   if (section === "team-review")
@@ -1941,6 +1946,7 @@ export function PartnerPortalWorkspace({
       partnerStatus={partnerStatus}
       section={section}
       partnerName={partnerName}
+      partnerType={partnerType}
       agencyName={agencyName}
       initialDraftId={initialDraftId}
     />

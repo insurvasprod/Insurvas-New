@@ -24,6 +24,7 @@ import {
 } from "@/lib/tenants/createOptions";
 import { inputControl } from "@/components/ui/field";
 
+import { CheckBox } from "@/components/ui/check-box";
 type Form = {
   tenantName: string;
   ownerName: string;
@@ -218,8 +219,7 @@ export function CreateTenantDialog({ onCreated, plans }: { onCreated: () => void
                   />
                   <span className="text-sm text-muted-foreground">days, or</span>
                   <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
+                    <CheckBox
                       checked={form.startBillingNow}
                       onChange={(e) => set("startBillingNow", e.target.checked)}
                     />

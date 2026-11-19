@@ -55,7 +55,8 @@ export function ToggleChip({
       disabled={disabled}
       onClick={removable ? onRemove : onClick}
       className={cn(
-        "inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-md border px-3 text-sm font-semibold tracking-[-0.01em] transition-colors",
+        // m-chip-toggle (globals "5l · Polish", Wave D): on and off fade over --t-panel, and a press dips the chip.
+        "inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-md border px-3 text-sm font-semibold tracking-[-0.01em] m-chip-toggle",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50",
         selected
           ? "border-transparent bg-[var(--primary-soft)] text-[var(--accent-ink)]"
@@ -63,7 +64,7 @@ export function ToggleChip({
         className,
       )}
     >
-      {selected && !removable && <Check className="size-3.5" aria-hidden="true" />}
+      {selected && !removable && <Check className="m-tick size-3.5" aria-hidden="true" />}
       {titleCaseNode(children)}
       {count !== undefined && (
         <span className={cn(

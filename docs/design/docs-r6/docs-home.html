@@ -1,0 +1,493 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docs home</title>
+<!--kit-css-->
+<style>
+/*
+ * Docs round 6 — copied from the Settings round 8 kit, plus the Docs pieces at the end. Every board links this file so all boards share one look.
+ * Tokens = the live app: light "C · White + olive lines" + gold third colour; dark = the live dark theme.
+ * Text 12 / 14 / 16 only; page title 24. Theme: <body class="light|dark">. Option: <body data-opt="A|B|C">.
+ */
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--board);color:var(--ink)}
+body.light{--board:#e9ecea;--board-ink:#0d4037;--board-line:#cdd6d1;--board-card:#fff;
+  --canvas:#fbfcfb;--card:#fff;--card-border:#cbd8d2;--band:#e9f2ee;--tile:#fff;--tile-edge:#d9e5df;--hover:#f1f7f4;--rule:#dbe6e1;
+  --border:#cbd8d2;--border-strong:#6d7f77;--ink:#0d4037;--body:#26332e;--muted:#4d5f58;
+  --primary:#07d6a0;--primary-hover:#08bf8b;--on-primary:#0d4037;--primary-soft:#dcfaf0;--accent-ink:#00735a;--ring:#008769;
+  --ok:#0c6633;--ok-s:#e0f3e7;--warn:#9a3d00;--warn-s:#fde8dc;--bad:#ab1f1f;--bad-s:#fdeaea;--info:#1d4f9a;--info-s:#e3edfa;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#8a5a00;--hl-soft:#fdf2d9;--hl-mark:#c98a12;
+  --backdrop:rgba(13,40,34,.38);--shadow:0 1px 0 rgba(13,64,55,.04);--overlay:0 2px 6px rgba(13,64,55,.08),0 28px 60px -12px rgba(13,64,55,.28);--code:#f4f8f6}
+body.dark{--board:#050b09;--board-ink:#f2f7f5;--board-line:#1d2b26;--board-card:#0d1714;
+  --canvas:#08110f;--card:#0d1714;--card-border:rgba(255,255,255,.09);--band:rgba(255,255,255,.04);--tile:rgba(255,255,255,.035);--tile-edge:rgba(255,255,255,.06);--hover:rgba(255,255,255,.04);--rule:#1b2a25;
+  --border:#22342e;--border-strong:#5f7a71;--ink:#f2f7f5;--body:#c9d6d1;--muted:#93a69f;
+  --primary:#07d6a0;--primary-hover:#2fe0b0;--on-primary:#0d4037;--primary-soft:#0f3a30;--accent-ink:#4fe3bb;--ring:#07d6a0;
+  --ok:#45c07d;--ok-s:#11291d;--warn:#f08a4b;--warn-s:#2e180c;--bad:#f0837c;--bad-s:#2d1412;--info:#7fb0ff;--info-s:#10203a;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#f5c562;--hl-soft:#2b2210;--hl-mark:#f2b33d;
+  --backdrop:rgba(0,0,0,.6);--shadow:none;--overlay:0 24px 64px rgba(0,0,0,.7);--code:#0a1412}
+body{--nav:#0d4037;--nav-ink:#eaf6f2;--nav-muted:#9fc4b8;--nav-line:#1d5649}
+
+/* ── Board chrome ───────────────────────────────────────────── */
+.board{max-width:1520px;margin:0 auto;padding:24px 16px 120px;color:var(--board-ink)}
+.board > h1{font-size:24px;margin:0;letter-spacing:-.02em}
+.lead{max-width:1100px;margin:8px 0 0;color:var(--board-ink);opacity:.85}
+.bar{position:sticky;top:0;z-index:80;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 0;margin:16px 0;background:var(--board);border-bottom:1px solid var(--board-line)}
+.bar .grp{display:flex;gap:6px;align-items:center;margin-right:10px}
+.bar .grp > span{font-size:12px;font-weight:600;opacity:.75;margin-right:2px}
+.bar button{font:600 14px Inter,system-ui,sans-serif;border:1px solid var(--board-line);background:var(--board-card);color:var(--board-ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+.bar button[aria-pressed=true]{background:#0d4037;color:#fff;border-color:#0d4037}
+.bar .hint{font-size:12px;opacity:.7;margin-left:auto}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin:14px 0}
+.notes > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px;font-size:14px}
+.notes b{display:block;margin-bottom:3px}
+.sec{display:flex;align-items:baseline;gap:12px;margin:30px 0 10px}
+.sec h2{font-size:16px;margin:0}
+.sec span{font-size:12px;opacity:.75}
+.opt{display:none}
+body[data-opt=A] .opt.A, body[data-opt=B] .opt.B, body[data-opt=C] .opt.C{display:block}
+.pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px}
+.pick > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:14px;font-size:14px}
+.pick > div.rec{border:2px solid #07d6a0}
+.pick b{font-size:16px;display:block;margin-bottom:4px}
+.pick ul{margin:6px 0 0;padding-left:18px}
+.tag-mig{display:inline-block;font-size:12px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink);margin-left:6px;vertical-align:middle}
+
+/* ── App shell ──────────────────────────────────────────────── */
+.app{display:grid;grid-template-columns:56px 232px 1fr;grid-template-rows:52px 1fr;height:760px;background:var(--canvas);border-radius:14px;overflow:hidden;border:1px solid var(--board-line);margin-bottom:20px;color:var(--ink);position:relative}
+.app.tall{height:880px}
+.app.norail{grid-template-columns:56px 1fr}
+.top{grid-column:1/-1;background:var(--nav);display:flex;align-items:center;gap:12px;padding:0 16px}
+.top .logo{width:22px;height:22px;border-radius:6px;background:var(--primary)}
+.top .search{flex:0 0 280px;height:32px;border-radius:8px;background:rgba(234,246,242,.08);color:var(--nav-muted);display:flex;align-items:center;padding:0 12px;font-size:12px}
+.top .sp{flex:1}
+.top .me{width:30px;height:30px;border-radius:50%;background:var(--hl);color:var(--on-hl);display:grid;place-items:center;font-size:12px;font-weight:700}
+.icons{background:var(--nav);display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0}
+.icons i{display:block;width:22px;height:22px;border-radius:6px;border:1.5px solid var(--nav-muted);opacity:.85}
+.icons i.on{border-color:var(--primary);background:rgba(7,214,160,.16)}
+/* settings rail */
+.srail{border-right:1px solid var(--border);background:var(--card);padding:12px 10px;overflow:auto}
+.srail .find{height:32px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--muted);margin-bottom:10px}
+.srail h5{font-size:12px;font-weight:600;color:var(--muted);margin:12px 6px 4px}
+.srail a{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:8px;font-size:14px;color:var(--body);text-decoration:none}
+.srail a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.srail a small{font-size:12px;color:var(--muted)}
+.srail a .cnt{font-size:12px;font-weight:700;padding:0 6px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink)}
+/* main */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px 24px 20px}
+.crumb{font-size:12px;color:var(--muted)}
+.head{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;margin:2px 0 4px}
+.head h3{font-size:24px;font-weight:600;letter-spacing:-.025em;margin:0}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--border);flex:1;min-width:200px}
+.tabs a{font-size:14px;color:var(--muted);padding:6px 0 8px;border-bottom:2px solid transparent;text-decoration:none;white-space:nowrap}
+.tabs a.on{color:var(--ink);border-color:var(--primary);font-weight:500}
+.tabs a .c{font-size:12px;margin-left:4px;padding:0 5px;border-radius:5px;background:var(--band);color:var(--muted)}
+.head .acts{display:flex;gap:8px;margin-left:auto;padding-bottom:6px}
+.status{font-size:12px;color:var(--muted);margin:2px 0 12px;display:flex;align-items:center;gap:6px}
+.status .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.status.bad .dot{background:var(--bad)}
+.status.warn .dot{background:var(--warn)}
+.body{flex:1;min-height:0;display:flex;gap:12px}
+/* cards */
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--shadow);min-width:0;display:flex;flex-direction:column;min-height:0}
+.card.flex1{flex:1}
+.card-h{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--rule);background:var(--band);border-radius:16px 16px 0 0}
+.card-h b{font-size:14px;font-weight:600}
+.card-h .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.card-b{padding:14px 16px}
+.scroll{overflow:auto;min-height:0;flex:1}
+.card-f{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule)}
+.card-f .sp{flex:1}
+.savebar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule);background:var(--hl-soft);border-radius:0 0 16px 16px;font-size:14px;color:var(--hl-ink);font-weight:500}
+.savebar .sp{flex:1}
+/* form */
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+.fgrid .full{grid-column:1/-1}
+label.l{display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:5px}
+.help{font-size:12px;color:var(--muted);margin-top:4px}
+.err{font-size:12px;color:var(--bad);margin-top:4px}
+.input{height:36px;border-radius:8px;border:1px solid var(--border-strong);background:var(--card);color:var(--ink);padding:0 12px;font-size:14px;display:flex;align-items:center;gap:8px;min-width:0}
+.input.ph{color:var(--muted)}
+.input.focus{outline:2px solid var(--ring);outline-offset:2px}
+.input.bad{border-color:var(--bad)}
+.input.dis{background:var(--band);color:var(--muted);border-color:var(--border)}
+.input .end{margin-left:auto;color:var(--muted);font-size:12px}
+.textarea{min-height:72px;align-items:flex-start;padding:8px 12px;height:auto}
+.fsec{padding:16px 0;border-top:1px solid var(--rule)}
+.fsec:first-child{border-top:0;padding-top:4px}
+.fsec > h4{font-size:16px;margin:0 0 2px}
+.fsec > p{font-size:12px;color:var(--muted);margin:0 0 12px}
+/* controls */
+.btn{font:500 14px Inter,system-ui,sans-serif;height:36px;padding:0 14px;border-radius:8px;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;cursor:default}
+.btn.sm{height:30px;padding:0 10px;font-size:12px}
+.btn.p{background:var(--primary);color:var(--on-primary)}
+.btn.o{background:var(--card);border-color:var(--border);color:var(--ink)}
+.btn.g{background:transparent;color:var(--body)}
+.btn.hl{background:var(--hl);color:var(--on-hl);font-weight:600}
+.btn.danger{background:var(--bad-s);color:var(--bad)}
+.btn.d{opacity:.5}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:500;background:var(--card);color:var(--body);border:1px solid var(--tile-edge);white-space:nowrap}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.n::before{display:none}
+.chip.ok{background:var(--ok-s);color:var(--ok);border-color:transparent}
+.chip.warn{background:var(--warn-s);color:var(--warn);border-color:transparent}
+.chip.bad{background:var(--bad-s);color:var(--bad);border-color:transparent}
+.chip.info{background:var(--info-s);color:var(--info);border-color:transparent}
+.chip.act{background:var(--primary-soft);color:var(--accent-ink);border-color:transparent}
+.chip.hl{background:var(--hl-soft);color:var(--hl-ink);border-color:transparent;font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg span{padding:6px 12px;font-size:14px;color:var(--body);border-left:1px solid var(--border)}
+.seg span:first-child{border-left:0}
+.seg span.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.tog{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);font-size:14px;color:var(--body)}
+.tog.on{background:var(--primary-soft);border-color:transparent;color:var(--accent-ink);font-weight:500}
+.switch{width:36px;height:20px;border-radius:999px;background:var(--border-strong);position:relative;display:inline-block;vertical-align:middle;flex:none}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(13,64,55,.25)}
+.switch.on{background:var(--primary)}
+.switch.on::after{left:18px}
+.check{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.check.on{background:var(--primary);border-color:var(--primary)}
+.radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.radio.on{border:5px solid var(--primary)}
+.av{width:28px;height:28px;border-radius:50%;display:inline-grid;place-items:center;font-size:12px;font-weight:700;background:var(--hl-soft);color:var(--hl-ink);flex:none}
+.ic{width:32px;height:32px;border-radius:9px;display:inline-grid;place-items:center;background:var(--primary-soft);color:var(--accent-ink);font-weight:700;flex:none}
+.muted{color:var(--muted)}
+small{font-size:12px}
+.small{font-size:12px}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--code);border:1px solid var(--tile-edge);border-radius:10px;padding:10px 12px;color:var(--body);white-space:pre;overflow:auto}
+.copy{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:0 4px 0 12px;height:36px;background:var(--card)}
+.copy .v{flex:1;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile{background:var(--tile);box-shadow:inset 0 0 0 1px var(--tile-edge);border-radius:12px;padding:10px 12px}
+.tile small{display:block;font-size:12px;color:var(--muted)}
+.tile b{font-size:16px}
+.list a,.li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--rule);color:var(--body);text-decoration:none}
+.li.on{background:var(--primary-soft);box-shadow:inset 2px 0 0 var(--primary)}
+.li b{font-size:14px;color:var(--ink);display:block}
+.li small{font-size:12px;color:var(--muted)}
+.li .end{margin-left:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+thead th{background:var(--band);color:var(--muted);font-weight:500;font-size:12px;text-align:left;padding:8px 14px;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:9px 14px;border-bottom:1px solid var(--rule);color:var(--body);white-space:nowrap}
+tbody tr.h td{background:var(--hover)}
+tbody tr.s td{background:var(--primary-soft)}
+.strip{display:grid;grid-auto-flow:column;grid-auto-columns:1fr}
+.strip > div{padding:10px 16px;border-left:1px solid var(--rule)}
+.strip > div:first-child{border-left:0}
+.strip small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.strip b{display:block;font-size:24px;font-weight:600;letter-spacing:-.02em}
+.steps{display:flex;gap:8px;align-items:center}
+.steps span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.steps span i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;background:var(--band);color:var(--muted)}
+.steps span.on{color:var(--ink);font-weight:600}
+.steps span.on i{background:var(--primary);color:var(--on-primary)}
+.steps span.done i{background:var(--primary-soft);color:var(--accent-ink)}
+.steps em{flex:1;height:1px;background:var(--border);min-width:16px}
+/* overlays */
+.scrim{position:absolute;inset:52px 0 0 0;background:var(--backdrop);z-index:5}
+.sheet{position:absolute;top:52px;right:0;bottom:0;width:480px;background:var(--card);border-left:1px solid var(--border);box-shadow:var(--overlay);z-index:6;display:flex;flex-direction:column}
+.sheet.wide{width:640px}
+.sheet-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--rule)}
+.sheet-h b{font-size:16px}
+.sheet-h .x{margin-left:auto;color:var(--muted);font-size:16px}
+.sheet-b{padding:16px 18px;overflow:auto;flex:1}
+.sheet-f{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--rule)}
+.dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:440px;background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--overlay);z-index:6;padding:18px}
+.dialog h4{margin:0 0 6px;font-size:16px}
+.dialog p{margin:0 0 12px;font-size:14px;color:var(--body)}
+.menu{background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:var(--overlay);padding:4px;width:220px}
+.menu div{padding:8px 10px;border-radius:6px;font-size:14px;color:var(--body);display:flex;justify-content:space-between}
+.menu div.h{background:var(--hover);color:var(--ink)}
+.menu hr{border:0;border-top:1px solid var(--rule);margin:4px 0}
+.toast{display:inline-flex;align-items:center;gap:10px;background:#0d4037;color:#f2f7f5;border-radius:999px;padding:10px 16px;font-size:14px}
+body.dark .toast{background:#f2f7f5;color:#0d4037}
+.toast i{width:8px;height:8px;border-radius:50%;background:#07d6a0}
+.skel{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--band),var(--hover),var(--band));margin:8px 0}
+.empty{text-align:center;padding:28px 16px}
+.empty .ic{margin:0 auto 10px}
+.empty b{display:block;font-size:16px}
+.empty p{font-size:14px;color:var(--muted);margin:4px 0 12px}
+/* state strip under a board section: loading / empty / error side by side */
+.states{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.states > .card{min-height:180px}
+@media (max-width:1100px){.app{grid-template-columns:56px 1fr}.srail{display:none}.states{grid-template-columns:1fr}.fgrid{grid-template-columns:1fr}}
+
+/* ── Docs round 6 additions ─────────────────────────────────── */
+.app.docs{grid-template-columns:56px 1fr}
+.dmain{display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px 24px 20px;gap:12px;overflow:auto}
+.dhead{display:flex;align-items:center;gap:16px}
+.dhead h3{font-size:24px;font-weight:600;letter-spacing:-.025em;margin:0}
+.dhead .dsearch{flex:0 1 460px;margin:0 auto;height:36px;border:1px solid var(--border-strong);border-radius:8px;display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--muted);font-size:14px}
+.dhead .dsearch kbd{margin-left:auto;font:600 12px Inter,sans-serif;border:1px solid var(--border);border-radius:5px;padding:0 5px}
+.dgrid{display:grid;gap:12px;min-height:0;flex:1}
+.drail{background:var(--card);border:1px solid var(--card-border);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:8px;overflow:auto}
+.drail h6{font-size:12px;font-weight:600;color:var(--muted);margin:8px 6px 2px}
+.drail a{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;font-size:14px;color:var(--body);text-decoration:none}
+.drail a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.drail a .n{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--band);color:var(--muted);flex:none}
+.drail a.on .n{background:var(--primary);color:var(--on-primary)}
+.drail a .end{margin-left:auto;font-size:12px;color:var(--muted)}
+.dot-done{width:16px;height:16px;border-radius:50%;background:var(--ok);flex:none;position:relative}
+.dot-done::after{content:"";position:absolute;left:5px;top:3px;width:4px;height:7px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.dot-todo{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-strong);flex:none}
+.dot-read{width:16px;height:16px;border-radius:50%;border:5px solid var(--hl);flex:none}
+.ring{--p:50;width:64px;height:64px;border-radius:50%;background:conic-gradient(var(--primary) calc(var(--p)*1%),var(--band) 0);display:grid;place-items:center;flex:none}
+.ring::before{content:attr(data-v);width:50px;height:50px;border-radius:50%;background:var(--card);display:grid;place-items:center;font-size:14px;font-weight:700;color:var(--ink)}
+.ring.lg{width:92px;height:92px}.ring.lg::before{width:74px;height:74px;font-size:16px}
+.segbar{display:flex;gap:3px;height:8px}
+.segbar i{flex:1;border-radius:4px;background:var(--band);position:relative;overflow:hidden}
+.segbar i::after{content:"";position:absolute;inset:0;width:var(--f,0%);background:var(--primary)}
+.segbar i.read::after{background:var(--hl)}
+.legend{display:flex;gap:12px;font-size:12px;color:var(--muted);align-items:center}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+.pbar{height:6px;border-radius:999px;background:var(--band);overflow:hidden}
+.pbar i{display:block;height:100%;background:var(--primary);border-radius:999px}
+.scard{background:var(--card);border:1px solid var(--card-border);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.scard.cur{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+.scard .k{font-size:12px;color:var(--muted)}
+.scard b{font-size:14px;color:var(--ink)}
+.scard p{margin:0;font-size:14px;color:var(--muted)}
+.shot{border:1px solid var(--border);border-radius:10px;background:linear-gradient(var(--band),var(--band)) 0 0/100% 14px no-repeat,var(--canvas);aspect-ratio:16/10;position:relative;overflow:hidden}
+.shot::before{content:"";position:absolute;left:8%;top:22%;right:40%;height:10%;border-radius:4px;background:var(--tile-edge)}
+.shot::after{content:"";position:absolute;left:8%;top:40%;right:20%;height:34%;border-radius:6px;background:var(--hover);box-shadow:inset 0 0 0 1px var(--tile-edge)}
+.shot .lit{position:absolute;border:2px solid var(--primary);border-radius:6px;z-index:2}
+.shot .coach{position:absolute;z-index:2;background:var(--card);border:1px solid var(--primary);border-radius:6px;padding:4px 6px;font-size:12px;color:var(--ink);box-shadow:var(--overlay);max-width:46%}
+.flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap}
+.flow .node{flex:1 1 120px;min-width:110px;background:var(--card);border:1px solid var(--card-border);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:3px}
+.flow .node small{font-size:12px;color:var(--muted)}
+.flow .node b{font-size:14px}
+.flow .arr{width:22px;display:grid;place-items:center;color:var(--border-strong);font-size:16px}
+.flow .node.on{border-color:var(--primary);background:var(--primary-soft)}
+.modgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.mod{background:var(--card);border:1px solid var(--card-border);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mod .t{display:flex;align-items:center;gap:8px}
+.mod .t b{font-size:14px}
+.mod p{margin:0;font-size:12px;color:var(--muted)}
+.qa{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.qa > div{background:var(--card);border:1px solid var(--card-border);border-radius:14px;padding:12px 14px}
+.qa h5{margin:0 0 6px;font-size:12px;font-weight:600;color:var(--accent-ink)}
+.qa ul,.qa ol{margin:0;padding-left:18px;font-size:14px;color:var(--body)}
+.qa li{margin:3px 0}
+.content{background:var(--board-card);border:1px solid var(--board-line);border-radius:14px;padding:14px 16px;color:var(--board-ink)}
+.content h3{margin:0 0 2px;font-size:16px}
+.content .who{font-size:12px;opacity:.75;margin-bottom:8px}
+.content .cols{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:16px;font-size:14px}
+.content h5{margin:0 0 4px;font-size:12px}
+.content ol,.content ul{margin:0;padding-left:18px}
+.content li{margin:2px 0}
+.content .open{font-size:12px;opacity:.8;margin-top:8px}
+@media (max-width:1100px){.qa,.content .cols{grid-template-columns:1fr}}
+
+</style>
+<!--/kit-css-->
+<style>
+.hero{display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center;background:var(--card);border:1px solid var(--card-border);border-radius:16px;padding:16px 18px}
+.hero h4{margin:0;font-size:16px}
+.hero p{margin:2px 0 0;color:var(--muted);font-size:14px}
+.tracks{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.track{background:var(--card);border:1px solid var(--card-border);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.track .num{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-weight:700;background:var(--primary-soft);color:var(--accent-ink)}
+.track h4{margin:0;font-size:16px}
+.track p{margin:0;font-size:14px;color:var(--muted)}
+.track .li{padding:6px 0;border-bottom:1px solid var(--rule)}
+.track .li:last-child{border-bottom:0}
+.more{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.map{position:relative;background:var(--card);border:1px solid var(--card-border);border-radius:16px;padding:16px}
+.map .lane{display:flex;align-items:center;gap:0}
+.map .under{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:12px}
+.map .under .node{border:1px dashed var(--card-border);background:var(--card);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:3px}
+.map .under .node small{font-size:12px;color:var(--muted)}
+.map .under .node b{font-size:14px}
+.ask{display:flex;flex-direction:column;align-items:center;gap:10px;padding:28px 0 8px;text-align:center}
+.ask h4{font-size:24px;margin:0;letter-spacing:-.02em}
+.ask .big{width:620px;max-width:100%;height:48px;border:1px solid var(--border-strong);border-radius:12px;display:flex;align-items:center;gap:10px;padding:0 16px;color:var(--muted);background:var(--card)}
+.qs{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:760px}
+.qs span{border:1px solid var(--border);border-radius:999px;padding:5px 12px;font-size:14px;color:var(--body);background:var(--card)}
+.cols3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+</style>
+</head>
+<body class="dark" data-opt="B">
+<div class="board">
+  <h1>Docs › Home</h1>
+  <p class="lead">Docs is where a new agent or a new agency owner learns two things: how to get into insurance, and how to put Insurvas to work. Today it is a list of chapters, and Insurvas itself (each module, what it does, why it's there) has no pages at all: only the 18 setup steps do.</p>
+  <div class="notes">
+    <div><b>1 · Three progress numbers that disagree</b>The menu says "1 of 17 read", the chapter says "15/18", a page says "1 of 7 done". "Read", "done in Insurvas" and "ticked by you" are different things with the same bar.</div>
+    <div><b>2 · No "using Insurvas" chapter</b>Setup tells you which button to click, never what a module is for. Nobody explains why Carrier sync, Pay issues or the Consent locker exist, or when you'd open them.</div>
+    <div><b>3 · No next step on the home page</b>The home page doesn't say where you are or what to do next. The only "next" lives in Get set up.</div>
+    <div><b>4 · Chapters read like a book</b>Six equal cards. A new agent can't tell that one chapter is three months of their life and another is a one-hour setup.</div>
+  </div>
+
+  <div class="bar" role="toolbar">
+    <div class="grp"><span>Option</span><button data-opt-btn="A">A · Your path</button><button data-opt-btn="B">B · Lead-to-money map</button><button data-opt-btn="C">C · Ask first</button></div>
+    <div class="grp"><span>Theme</span><button data-theme-btn="light">Light</button><button data-theme-btn="dark">Dark</button></div>
+    <span class="hint">Keys 1–3 option · L / D theme</span>
+  </div>
+
+  <!-- ───────── A ───────── -->
+  <div class="opt A">
+    <div class="sec"><h2>A · Your path</h2><span>Where you are and the one next thing on top; then three tracks: get licensed, set up Insurvas, use Insurvas</span></div>
+    <div class="app docs tall">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DD</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i class="on"></i><i></i></div>
+      <div class="dmain">
+        <div class="crumb">Docs</div>
+        <div class="dhead"><h3>Docs</h3><div class="dsearch">⌕ Search Docs: licences, carriers, pay issues…<kbd>⌘K</kbd></div></div>
+        <div class="hero">
+          <div class="ring lg" style="--p:83" data-v="15/18"></div>
+          <div>
+            <h4>You're 15 of 18 steps into Insurvas</h4>
+            <p>Ready to sell is done. Three optional settings are left, about 9 minutes.</p>
+            <div class="row" style="margin-top:8px"><span class="chip ok">Ready to sell</span><span class="chip hl">2 of 17 pages read</span><span class="chip n">Last read: Import your leads</span></div>
+          </div>
+          <div class="scard cur" style="width:300px">
+            <span class="k">Next for you · 2 min</span>
+            <b>Invite your team</b>
+            <p>Add each producer with their role.</p>
+            <div class="row"><span class="btn p sm">Do it in Insurvas ›</span><span class="btn g sm">Read first</span></div>
+          </div>
+        </div>
+        <div class="tracks">
+          <div class="track">
+            <div class="row"><span class="num">1</span><h4>Get into insurance</h4><span class="sp" style="flex:1"></span><span class="chip n">4–8 weeks</span></div>
+            <p>Licence, exam, carriers. Before Insurvas.</p>
+            <div class="pbar"><i style="width:25%"></i></div>
+            <div class="li"><span class="dot-done"></span>Your path to selling insurance</div>
+            <div class="li"><span class="dot-read"></span>Pre-licensing, the exam and your licence</div>
+            <div class="li"><span class="dot-todo"></span>Non-resident licences</div>
+            <div class="li"><span class="dot-todo"></span>Getting contracted · 4 pages</div>
+          </div>
+          <div class="track">
+            <div class="row"><span class="num">2</span><h4>Set up Insurvas</h4><span class="sp" style="flex:1"></span><span class="chip ok">15 of 18</span></div>
+            <p>Every Get set up step, click by click, on real screens.</p>
+            <div class="pbar"><i style="width:83%"></i></div>
+            <div class="li"><span class="dot-done"></span>Ready to sell · 10 steps</div>
+            <div class="li"><span class="dot-todo"></span>Invite your team</div>
+            <div class="li"><span class="dot-todo"></span>Set your hierarchy</div>
+            <div class="li"><span class="dot-done"></span>Optional settings · 5 of 7</div>
+          </div>
+          <div class="track" style="border-color:var(--hl)">
+            <div class="row"><span class="num" style="background:var(--hl-soft);color:var(--hl-ink)">3</span><h4>Use Insurvas</h4><span class="sp" style="flex:1"></span><span class="chip hl">New</span></div>
+            <p>Each module: how it works, why it's there, what it does for you.</p>
+            <div class="pbar"><i style="width:0"></i></div>
+            <div class="modgrid" style="grid-template-columns:1fr 1fr;gap:6px">
+              <span class="chip n">Today: calls</span><span class="chip n">Leads</span><span class="chip n">Sales</span><span class="chip n">Book of business</span>
+              <span class="chip n">Carrier sync</span><span class="chip n">Commissions</span><span class="chip n">Retention</span><span class="chip n">Accounting</span>
+              <span class="chip n">Partners</span><span class="chip n">Compliance</span><span class="chip n">Reports</span><span class="chip n">Home</span>
+            </div>
+          </div>
+        </div>
+        <div class="sec" style="margin:4px 0 0"><h2 style="font-size:14px">After you're selling</h2><span>Reference chapters, read when you need them</span></div>
+        <div class="more">
+          <div class="scard"><b>Selling within the rules</b><p>Do-not-call, calling hours, disclosures · 3 pages</p></div>
+          <div class="scard"><b>After the sale</b><p>Underwriting to in force, commissions, chargebacks · 3 pages</p></div>
+          <div class="scard"><b>Running an agency</b><p>Hierarchy, onboarding producers, team setup · 3 pages</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── B ───────── -->
+  <div class="opt B">
+    <div class="sec"><h2>B · Lead-to-money map (picked, round 2: fills the height)</h2><span>The map is the whole page: each box is a module, with its guide, its top "How do I…" tasks and whether your agency uses it yet. The bottom row is what's next and the setup and reference shelves</span></div>
+    <div class="app docs tall">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DD</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i class="on"></i><i></i></div>
+      <div class="dmain" style="overflow:hidden">
+        <div class="crumb">Docs</div>
+        <div class="dhead"><h3>Docs</h3><div class="dsearch">⌕ How do I… pay partners, import my book, claim a pay issue<kbd>⌘K</kbd></div></div>
+        <div class="scard" style="flex-direction:row;align-items:center;gap:16px;padding:10px 14px">
+          <b style="white-space:nowrap">Your Insurvas</b>
+          <div style="flex:1;display:flex;flex-direction:column;gap:5px">
+            <div class="segbar" style="height:10px"><i style="--f:100%"></i><i style="--f:75%"></i><i style="--f:33%"></i><i style="--f:50%"></i><i style="--f:20%"></i><i style="--f:60%"></i><i style="--f:0%"></i><i style="--f:0%"></i><i style="--f:50%"></i></div>
+            <div class="legend" style="justify-content:space-between"><span>Leads</span><span>Today</span><span>Sales</span><span>Book</span><span>Carrier sync</span><span>Commissions</span><span>Accounting</span><span>Retention</span><span>Compliance</span></div>
+          </div>
+          <span class="chip ok">23 of 41 tasks done in your agency</span>
+        </div>
+        <div class="map" style="flex:1;display:flex;flex-direction:column;min-height:0">
+          <div class="row" style="margin-bottom:10px"><b>How Insurvas turns a lead into money</b><span class="muted small">Click a module for its guide, or a task for its steps · ✓ done in your agency</span></div>
+          <div class="flow" style="flex:1.4;align-items:stretch">
+            <div class="node"><small>1 · Leads</small><b>Buy and import</b><small>Vendors, campaigns, the DNC check</small><span style="flex:1"></span><span class="small">✓ Create a campaign</span><span class="small">✓ Import a lead list</span><span class="small muted">○ Recycle unreached leads</span><span class="chip ok">4 of 4</span></div><div class="arr">→</div>
+            <div class="node"><small>2 · Today</small><b>Call and transfer</b><small>Dialer, inbound, callbacks</small><span style="flex:1"></span><span class="small">✓ Call your next lead</span><span class="small">✓ Claim a transfer</span><span class="small muted">○ Book a callback</span><span class="chip ok">3 of 4</span></div><div class="arr">→</div>
+            <div class="node"><small>3 · Sales</small><b>Quote and apply</b><small>Applications, pending cases</small><span style="flex:1"></span><span class="small">✓ Quote a client</span><span class="small muted">○ Submit an application</span><span class="small muted">○ Follow a pending case</span><span class="chip n">1 of 3</span></div><div class="arr">→</div>
+            <div class="node"><small>4 · Book of business</small><b>Issued and in force</b><small>Policies, carrier files</small><span style="flex:1"></span><span class="small muted">○ Import your book</span><span class="small">✓ Find a policy</span><span class="chip warn">1 to do</span></div><div class="arr">→</div>
+            <div class="node on"><small>5 · Commissions</small><b>Get paid right</b><small>Statements, pay issues, payouts</small><span style="flex:1"></span><span class="small">✓ Upload a statement</span><span class="small muted">○ Claim a pay issue</span><span class="small muted">○ Pay your partners</span><span class="chip n">3 of 5</span></div><div class="arr">→</div>
+            <div class="node"><small>6 · Accounting</small><b>Know your profit</b><small>Bills, bank, P&amp;L</small><span style="flex:1"></span><span class="small muted">○ Check a vendor bill</span><span class="small muted">○ Match bank deposits</span><span class="small muted">○ Read your P&amp;L</span><span class="chip n">Not used yet</span></div>
+          </div>
+          <div class="under" style="flex:.7">
+            <div class="node"><small>Keeps the money · under Book</small><b>Retention</b><small>Saves policies before a chargeback</small><span style="flex:1"></span><span class="small muted">○ Work a save case · ○ Win back a lapse</span></div>
+            <div class="node"><small>Keeps you safe · under every step</small><b>Compliance</b><small>Consent, DNC, evidence, appointments</small><span style="flex:1"></span><span class="small">✓ Find a lead's consent · ○ Pull an evidence report</span></div>
+            <div class="node"><small>Tells you what works · reads them all</small><b>Reports</b><small>True CPA, scorecards, persistency</small><span style="flex:1"></span><span class="small muted">○ Find your true cost per sale</span></div>
+          </div>
+        </div>
+        <div class="cols3">
+          <div class="scard cur"><span class="k">Next for you</span><b>Pay your partners</b><p>Commissions · 4 steps with screens · Show me ›</p></div>
+          <div class="scard"><span class="k">Set up Insurvas</span><b>15 of 18 setup steps done</b><div class="pbar"><i style="width:83%"></i></div></div>
+          <div class="scard"><span class="k">Reference</span><b>Rules, after the sale, running an agency</b><p>9 pages</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── C ───────── -->
+  <div class="opt C">
+    <div class="sec"><h2>C · Ask first</h2><span>A help centre: one big search and the questions people really ask, then the chapters</span></div>
+    <div class="app docs tall">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DD</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i class="on"></i><i></i></div>
+      <div class="dmain">
+        <div class="ask">
+          <h4>What do you want to do?</h4>
+          <div class="big">⌕ Ask or search: "why was this lead not dialed?"</div>
+          <div class="qs"><span>Import a lead list</span><span>Why is a carrier short-paying me?</span><span>Who gets the next transfer?</span><span>Set calling hours</span><span>What is a chargeback?</span><span>Add a producer</span></div>
+        </div>
+        <div class="cols3">
+          <div class="scard"><span class="k">Continue reading</span><b>Import your leads</b><div class="pbar"><i style="width:40%"></i></div><p>Click 2 of 5</p></div>
+          <div class="scard cur"><span class="k">Next in setup</span><b>Invite your team</b><p>2 minutes · Do it in Insurvas ›</p></div>
+          <div class="scard"><span class="k">New</span><b>Use Insurvas, module by module</b><p>12 guides: how, why, what it does for you</p></div>
+        </div>
+        <div class="cols3">
+          <div><div class="small muted" style="margin:6px 0">Before Insurvas</div><div class="list card"><a>Getting into insurance <span class="end muted small">4</span></a><a>Getting contracted <span class="end muted small">4</span></a></div></div>
+          <div><div class="small muted" style="margin:6px 0">Insurvas</div><div class="list card"><a>Set up Insurvas <span class="end muted small">15/18</span></a><a>Use Insurvas <span class="end muted small">12</span></a></div></div>
+          <div><div class="small muted" style="margin:6px 0">Reference</div><div class="list card"><a>Selling within the rules</a><a>After the sale</a><a>Running an agency</a></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec"><h2>Pick one</h2><span>Nothing is built until you choose</span></div>
+  <div class="pick">
+    <div><b>A · Your path</b>Opens on where you are and the one next thing, then the three tracks a new agent actually walks.<ul><li>One progress ring: setup steps done in Insurvas. "Read" is a separate gold count.</li><li>New third track, "Use Insurvas": 12 module guides.</li><li>Reference chapters move below, smaller.</li></ul></div>
+    <div class="rec"><b>B · Lead-to-money map (picked)</b>Teaches the product by its shape: six boxes from lead to profit, three underneath that support them.<ul><li>Best for "why does this module exist"</li><li>Weaker for a brand-new agent with no licence yet.</li></ul></div>
+    <div><b>C · Ask first</b>A help centre with search on top.<ul><li>Best once people know what they're looking for.</li><li>Doesn't show progress or a path.</li></ul></div>
+  </div>
+</div>
+<!--kit-js-->
+<script>
+/* Settings round 8 board kit: option (A/B/C) and theme switching. Keys 1–3 pick an option, L / D the theme.
+   Buttons: <button data-opt="A">, <button data-theme="light">. The body carries class light|dark and data-opt. */
+(function () {
+  var body = document.body;
+  if (!body.dataset.opt) body.dataset.opt = "A";
+  if (!/\b(light|dark)\b/.test(body.className)) body.classList.add("light");
+  function sync() {
+    document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.optBtn === body.dataset.opt)); });
+    document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(body.classList.contains(b.dataset.themeBtn))); });
+  }
+  function opt(v) { body.dataset.opt = v; sync(); }
+  function theme(v) { body.classList.remove("light", "dark"); body.classList.add(v); sync(); }
+  document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.addEventListener("click", function () { opt(b.dataset.optBtn); }); });
+  document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.addEventListener("click", function () { theme(b.dataset.themeBtn); }); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "1") opt("A"); if (e.key === "2") opt("B"); if (e.key === "3") opt("C");
+    if (e.key === "l" || e.key === "L") theme("light"); if (e.key === "d" || e.key === "D") theme("dark");
+  });
+  sync();
+})();
+
+</script>
+<!--/kit-js-->
+</body>
+</html>

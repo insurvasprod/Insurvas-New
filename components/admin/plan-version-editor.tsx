@@ -5,11 +5,8 @@ import { useRouter } from "next/navigation";
 import { Lock } from "lucide-react";
 import { notify } from "@/lib/notify";
 
-import { Callout } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
-import { StatusChip } from "@/components/admin/status-chip";
 import type { FeatureModuleGroup } from "@/lib/features/constants";
 import type { PlanLimits } from "@/lib/metering/constants";
 import type { PlanEditorMeter } from "@/lib/plans/planSave";
@@ -17,6 +14,7 @@ import { buildAgentMenu } from "@/lib/menu/definition";
 import { BILLING_CYCLE_LABELS, formatCents, formatCentsAsCurrency, monthlyEquivalentCents, parseDollarsToCents, type PlanPrices } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
+import { CheckBox } from "@/components/ui/check-box";
 /** Blank means "this cycle isn't offered"; anything else must parse to whole cents. */
 function centsFromInput(value: string): { cents: number | null; invalid: boolean } {
   if (value.trim() === "") return { cents: null, invalid: false };
@@ -192,19 +190,26 @@ export function PlanVersionEditor({
     </Button>
   );
 
+  // What saving will do, as the status line (catalog.html screen 2; owner rule: no notice cards on the page).
+  const statusParts = [
+    isArchived ? "archived" : "live",
+    `${subscriberCount.toLocaleString("en-US")} live ${subscriberCount === 1 ? "subscriber" : "subscribers"} on this version`,
+    publishes
+      ? `saving publishes version ${nextVersion}; the ${subscriberCount.toLocaleString("en-US")} existing ${subscriberCount === 1 ? "subscriber stays" : "subscribers stay"} on version ${planVersion}`
+      : "nobody is on this version, so saving edits it in place",
+  ];
+
   return (
-    <div className="flex min-w-0 flex-col gap-6">
-      <div>
-        <PageHeader
-          title={`${planName} — version ${planVersion}`}
-          breadcrumbs={[{ label: "Catalog" }, { label: "Plans", href: "/admin/plans" }, { label: `${planName} — version ${planVersion}` }]}
-          actions={saveButton}
-        />
-        <div className="mt-3 flex flex-wrap gap-2">
-          {isArchived ? <StatusChip tone="neutral">Archived</StatusChip> : <StatusChip tone="good" dot>Live</StatusChip>}
-          <StatusChip tone="neutral"><code className="font-mono">{planCode}</code></StatusChip>
-          <StatusChip tone={publishes ? "warning" : "neutral"}>{subscriberCount.toLocaleString()} live {subscriberCount === 1 ? "subscriber" : "subscribers"} on this version</StatusChip>
-        </div>
+    <div className="flex min-w-0 flex-col gap-4">
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
+        <p className="m-0 flex min-w-0 flex-1 items-center gap-2 text-xs text-muted-foreground" role="status">
+          <span className={cn("size-1.5 shrink-0 rounded-full", publishes ? "bg-[var(--warning)]" : "bg-[var(--success)]")} aria-hidden="true" />
+          <span className="min-w-0 truncate">
+            <span className="font-medium text-foreground">Version {planVersion} of <code className="font-mono">{planCode}</code></span>
+            {statusParts.map((part) => <span key={part}> · {part}</span>)}
+          </span>
+        </p>
+        {saveButton}
       </div>
 
       <StatStrip label="This version">
@@ -220,17 +225,9 @@ export function PlanVersionEditor({
         <StatTile
           label="Subscribers"
           value={subscriberCount.toLocaleString("en-US")}
-          valueTone={publishes ? "warning" : undefined}
           footnote={publishes ? "saving publishes a new version" : "on this version"}
         />
       </StatStrip>
-
-      {publishes && (
-        <Callout
-          tone="warning"
-          title={`Saving publishes version ${nextVersion}; the ${subscriberCount.toLocaleString()} existing ${subscriberCount === 1 ? "subscriber stays" : "subscribers stay"} on version ${planVersion}.`}
-        />
-      )}
 
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
         <div className="flex min-w-0 flex-col gap-6">
@@ -290,7 +287,7 @@ export function PlanVersionEditor({
                 return (
                   <div key={meter.meter_key} className="grid gap-3 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_160px_120px] sm:items-center">
                     <label className="flex min-w-0 items-start gap-2.5">
-                      <input type="checkbox" checked={draft.own} onChange={(e) => set({ own: e.target.checked })} className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]" />
+                      <CheckBox checked={draft.own} onChange={(e) => set({ own: e.target.checked })} className="mt-0.5" />
                       <span className="min-w-0">
                         <span className={label}>{meter.label}</span>
                         <span className={hint}>
@@ -311,7 +308,7 @@ export function PlanVersionEditor({
                       aria-invalid={invalid || undefined}
                     />
                     <label className="flex items-center gap-2 text-sm text-[var(--body)]">
-                      <input type="checkbox" checked={draft.hardCap} disabled={!draft.own} onChange={(e) => set({ hardCap: e.target.checked })} className="size-4 accent-[var(--primary)]" />
+                      <CheckBox checked={draft.hardCap} disabled={!draft.own} onChange={(e) => set({ hardCap: e.target.checked })} />
                       Hard cap
                     </label>
                   </div>
@@ -343,7 +340,7 @@ export function PlanVersionEditor({
                     const isOn = granted.has(feature.feature_key);
                     return (
                       <label key={feature.id} className={cn("flex items-start gap-2.5 rounded-[8px] border p-2.5", isOn ? "border-[var(--primary)] bg-[var(--brand-50)]" : "border-[var(--border)]", isLocked ? "cursor-not-allowed opacity-70" : "cursor-pointer hover:bg-[var(--surface-alt)]")}>
-                        <input type="checkbox" checked={isOn} disabled={isLocked} onChange={() => toggle(feature.feature_key)} className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]" />
+                        <CheckBox checked={isOn} disabled={isLocked} onChange={() => toggle(feature.feature_key)} className="mt-0.5" />
                         <span className="min-w-0">
                           <span className="flex items-center gap-1.5 text-sm font-semibold text-[var(--ink)]">
                             {feature.label}

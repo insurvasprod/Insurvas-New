@@ -10,6 +10,7 @@ import { AuthAlert, AuthSubmit, authLabel } from "@/components/portal/auth-contr
 import { googleFinishHeading } from "@/components/app/funnel-headings";
 import { cn } from "@/lib/utils";
 
+import { CheckBox } from "@/components/ui/check-box";
 type LegalDoc = { id: string; doc_type: string; version: number; title: string };
 
 const fieldClass = "auth-h border-[var(--border-strong)] bg-card px-3 text-base md:text-base";
@@ -87,13 +88,13 @@ export function GoogleFinishForm({ email, name, withHeading = true }: { email: s
         </div>
 
         {legalState === "failed" ? (
-          <AuthAlert>
+          <AuthAlert shake={false}>
             The terms could not be loaded, so they cannot be accepted yet.{" "}
             <button type="button" className="font-semibold underline underline-offset-2" onClick={loadLegal}>Try again</button>
           </AuthAlert>
         ) : legalDocs.length > 0 ? (
           <label className="flex min-h-11 cursor-pointer items-start gap-3 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
-            <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} className="mt-0.5 size-5 shrink-0 accent-[var(--accent-ink)]" />
+            <CheckBox checked={accepted} onChange={(event) => setAccepted(event.target.checked)} className="mt-0.5" />
             <span>
               I agree to the{" "}
               {legalDocs.map((doc, index) => (

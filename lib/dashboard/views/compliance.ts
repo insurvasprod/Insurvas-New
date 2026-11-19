@@ -208,7 +208,7 @@ export async function loadComplianceView(props: DashViewProps) {
   const { tenantId, userId, role } = context;
   const viewer = { tenantId, userId, role };
   // A narrow agency session is refused by every compliance page but Licences & appointments (AG-0.5).
-  const opens = (page: (typeof COMPLIANCE_PAGES)[keyof typeof COMPLIANCE_PAGES]) => (scope === null || page.narrowOk) && firstOpenable([page.key], available, role, solo) !== null;
+  const opens = (page: (typeof COMPLIANCE_PAGES)[keyof typeof COMPLIANCE_PAGES]) => (scope === null || page.narrowOk) && firstOpenable([page.key], available, role, solo, props.gate) !== null;
   const can = {
     complaints: opens(COMPLIANCE_PAGES.complaints),
     deletions: opens(COMPLIANCE_PAGES.deletions),

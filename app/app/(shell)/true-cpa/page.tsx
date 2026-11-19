@@ -4,7 +4,9 @@ import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { TrueCpaWorkspace } from "@/components/app/true-cpa-workspace";
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { defaultScorecardPeriod, getVendorScorecard } from "@/lib/vendorScorecard/service";
+import { Await } from "@/components/app/reports/await";
 import { ReportsPage } from "@/components/app/reports/reports-page";
+import { StreamSection } from "@/components/ui/stream-section";
 import { sharedPeriod } from "@/lib/reports/views";
 import { scopeFromParams, TRUE_CPA_PERSIST_DAYS } from "@/lib/reports/trueCpaView";
 
@@ -18,10 +20,11 @@ export default async function TrueCpaPage({ searchParams }: { searchParams: Prom
   // the shell, hydration and a second request. A failure here is not a failed page: the workspace fetches it
   // itself and shows its own error. Round 7: the scope is in the address (?from&to, the Reports views' shared
   // period, and ?vendor_id&campaign_id&product_code&persist_days, which a chart's bar sets), so the report
-  // rendered here is the one the workspace shows.
+  // rendered here is the one the workspace shows. Frame first (§7a): the title, rail and switch draw at once; the
+  // report is started here and the workspace streams in with it.
   const query = await searchParams;
   const period = sharedPeriod(query) ?? defaultScorecardPeriod();
   const scope = scopeFromParams(query, period);
-  const initialReport = await getVendorScorecard(guard.context.tenantId, { from: scope.from, to: scope.to, vendorId: scope.vendorId || null, campaignId: scope.campaignId || null, productCode: scope.productCode || null, persistDays: scope.persist ? TRUE_CPA_PERSIST_DAYS : null }, guard.entitlement.access === "read_only").catch(() => null);
-  return <ReportsPage view="cpa" show="chart" info="What an issued policy really cost, by vendor and campaign: net spend divided by issued policies. A dash or “No policy yet” means no issued policy, never $0. The funnel starts at the leads received; records bought (lifetime, from each campaign) are not a step. Undialable rate and claim acceptance answer different questions and are never combined into one score."><TrueCpaWorkspace initialReport={initialReport} framed /></ReportsPage>;
+  const initialReport = getVendorScorecard(guard.context.tenantId, { from: scope.from, to: scope.to, vendorId: scope.vendorId || null, campaignId: scope.campaignId || null, productCode: scope.productCode || null, persistDays: scope.persist ? TRUE_CPA_PERSIST_DAYS : null }, guard.entitlement.access === "read_only").catch(() => null);
+  return <ReportsPage view="cpa" show="chart" info="What an issued policy really cost, by vendor and campaign: net spend divided by issued policies. A dash or “No policy yet” means no issued policy, never $0. The funnel starts at the leads received; records bought (lifetime, from each campaign) are not a step. Undialable rate and claim acceptance answer different questions and are never combined into one score."><StreamSection shape="strip+table"><Await read={initialReport}>{(report) => <TrueCpaWorkspace initialReport={report} framed />}</Await></StreamSection></ReportsPage>;
 }

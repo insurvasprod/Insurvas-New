@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 
 import { getPartnerTemplateForProduct } from "@/lib/agentTemplates/service";
 import { partnerProductHttpError } from "@/lib/partnerProducts/http";
-import { requirePartner } from "@/lib/partnerAuth/requirePartner";
+import { partnerMayOpen, partnerPageRefused, requirePartner } from "@/lib/partnerAuth/requirePartner";
 import { assertPartnerProductApproved } from "@/lib/partnerProducts/service";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ productCode: string }> }) {
   const auth = await requirePartner();
   if (auth instanceof NextResponse) return auth;
+  // Partner type (lib/partnerAuth/portalAccess.ts): refused on the server, not only hidden from the menu.
+  if (!(await partnerMayOpen(auth.context, "submit"))) return partnerPageRefused();
   try {
     const productCode = (await params).productCode;
     await assertPartnerProductApproved(auth.context.tenantId, auth.context.partnerId, productCode);

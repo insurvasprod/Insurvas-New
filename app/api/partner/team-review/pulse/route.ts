@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { requirePartner } from "@/lib/partnerAuth/requirePartner";
+import { partnerMayOpen, partnerPageRefused, requirePartner } from "@/lib/partnerAuth/requirePartner";
 import { partnerTeamPulse } from "@/lib/partnerTeamReview/service";
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -13,6 +13,8 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 export async function GET(request: NextRequest) {
   const auth = await requirePartner(["partner_admin"]);
   if (auth instanceof NextResponse) return auth;
+  // Partner type (lib/partnerAuth/portalAccess.ts): refused on the server, not only hidden from the menu.
+  if (!(await partnerMayOpen(auth.context, "team-review"))) return partnerPageRefused();
   const from = request.nextUrl.searchParams.get("from");
   const to = request.nextUrl.searchParams.get("to");
   if (!from || !to || !DAY.test(from) || !DAY.test(to)) return NextResponse.json({ error: "Choose a valid review period" }, { status: 400 });

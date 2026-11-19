@@ -7,13 +7,14 @@ import { PreviewDialog } from "@/components/app/book/setup/preview-table";
 import { StagePicker } from "@/components/app/book/setup/stage-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { checkboxControl, control, Field, textareaControl } from "@/components/ui/field";
+import { control, Field, textareaControl } from "@/components/ui/field";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { EVENT_LABELS, FILL_INS, fillInsWithoutValue, noteProblems, RULE_EVENTS, type RuleEvent } from "@/lib/pipelineRules/rules";
 import type { BoardPipeline } from "@/lib/pipelineRules/store";
 import { notify } from "@/lib/notify";
 
+import { CheckBox } from "@/components/ui/check-box";
 export type RuleDraft = { name: string; event: RuleEvent; carrierIds: string[]; fromStageIds: string[]; targetPipelineId: string; targetStageId: string; noteOn: boolean; noteTemplate: string };
 
 const ENDPOINT = "/api/app/pipeline-rules";
@@ -213,7 +214,7 @@ export function RuleForm({ ruleId, initial, board, carriers, readOnly, focusName
           <CardHeader><CardTitle>Note on the lead</CardTitle></CardHeader>
           <CardContent className="flex flex-col gap-3">
             <label className="flex items-center gap-2 text-sm text-[var(--body)]">
-              <input type="checkbox" className={checkboxControl} checked={draft.noteOn} onChange={(e) => set({ noteOn: e.target.checked })} />
+              <CheckBox checked={draft.noteOn} onChange={(e) => set({ noteOn: e.target.checked })} />
               Add a note
             </label>
             {draft.noteOn && (

@@ -18,7 +18,8 @@ import { STAGE_STATE_LABELS, shownStages, type FileStage, type StageState } from
  */
 /** Each stage starts this long after the one before it. */
 const STEP_MS = 70;
-const fill = "motion-safe:animate-[m-stage-fill_.36s_cubic-bezier(.2,.8,.2,1)_both] origin-left";
+/** The kit's connector draw (`.m-track`, globals.css: from the left, --t-enter on --e-out, once; Wave D 2026-11-18). */
+const fill = "m-track";
 const BAR: Record<StageState, string> = {
   done: "bg-[var(--primary)]",
   needs: "bg-[var(--warning)]",

@@ -104,7 +104,7 @@ export default async function RetentionResultsPage({ searchParams }: { searchPar
   }
 
   return (
-    <RetentionPage step="results" title="Results" info={info} tabs={tabs} actions={actions} breadcrumbs={TRAIL}>
+    <RetentionPage step="results" title="Results" info={info} tabs={tabs} actions={actions} show="chart" breadcrumbs={TRAIL}>
       {body}
     </RetentionPage>
   );

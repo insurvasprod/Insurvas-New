@@ -190,7 +190,22 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
     );
   }
 
-  if (!loaded) return <PageLoading />;
+  // Frame first (UI-CONSISTENCY §7a): the title and its button draw at once (the invite opens once the team is read);
+  // the members load in their card.
+  if (!loaded) {
+    return (
+      <div className="m-stagger flex min-h-[calc(100dvh_-_7rem)] w-full min-w-0 flex-col gap-6">
+        <PageHeader
+          title="Team access"
+          description="See who has access to your partner workspace. Partner users can submit leads, track your organization's pipeline, and message the agent."
+          hideTitle
+          breadcrumbs={CRUMBS}
+          actions={<Button type="button" variant="secondary" size="sm" disabled><UserPlus aria-hidden="true" />Invite teammate</Button>}
+        />
+        <PageLoading header={false} strip={false} />
+      </div>
+    );
+  }
 
   const memberState = (user: PartnerUser): Exclude<Filter, "all"> => (user.status !== "active" ? "deactivated" : user.accepted_at ? "active" : "invited");
   const active = users.filter((user) => memberState(user) === "active").length;

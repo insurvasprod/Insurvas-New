@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin Billing Area</title>
+<!--kit-css-->
+<style>
+/*
+ * Settings round 8 — shared mockup kit. Every board links this file so all boards share one look.
+ * Tokens = the live app: light "C · White + olive lines" + gold third colour; dark = the live dark theme.
+ * Text 12 / 14 / 16 only; page title 24. Theme: <body class="light|dark">. Option: <body data-opt="A|B|C">.
+ */
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--board);color:var(--ink)}
+body.light{--board:#e9ecea;--board-ink:#0d4037;--board-line:#cdd6d1;--board-card:#fff;
+  --canvas:#fbfcfb;--card:#fff;--card-border:#cbd8d2;--band:#e9f2ee;--tile:#fff;--tile-edge:#d9e5df;--hover:#f1f7f4;--rule:#dbe6e1;
+  --border:#cbd8d2;--border-strong:#6d7f77;--ink:#0d4037;--body:#26332e;--muted:#4d5f58;
+  --primary:#07d6a0;--primary-hover:#08bf8b;--on-primary:#0d4037;--primary-soft:#dcfaf0;--accent-ink:#00735a;--ring:#008769;
+  --ok:#0c6633;--ok-s:#e0f3e7;--warn:#9a3d00;--warn-s:#fde8dc;--bad:#ab1f1f;--bad-s:#fdeaea;--info:#1d4f9a;--info-s:#e3edfa;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#8a5a00;--hl-soft:#fdf2d9;--hl-mark:#c98a12;
+  --backdrop:rgba(13,40,34,.38);--shadow:0 1px 0 rgba(13,64,55,.04);--overlay:0 2px 6px rgba(13,64,55,.08),0 28px 60px -12px rgba(13,64,55,.28);--code:#f4f8f6}
+body.dark{--board:#050b09;--board-ink:#f2f7f5;--board-line:#1d2b26;--board-card:#0d1714;
+  --canvas:#08110f;--card:#0d1714;--card-border:rgba(255,255,255,.09);--band:rgba(255,255,255,.04);--tile:rgba(255,255,255,.035);--tile-edge:rgba(255,255,255,.06);--hover:rgba(255,255,255,.04);--rule:#1b2a25;
+  --border:#22342e;--border-strong:#5f7a71;--ink:#f2f7f5;--body:#c9d6d1;--muted:#93a69f;
+  --primary:#07d6a0;--primary-hover:#2fe0b0;--on-primary:#0d4037;--primary-soft:#0f3a30;--accent-ink:#4fe3bb;--ring:#07d6a0;
+  --ok:#45c07d;--ok-s:#11291d;--warn:#f08a4b;--warn-s:#2e180c;--bad:#f0837c;--bad-s:#2d1412;--info:#7fb0ff;--info-s:#10203a;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#f5c562;--hl-soft:#2b2210;--hl-mark:#f2b33d;
+  --backdrop:rgba(0,0,0,.6);--shadow:none;--overlay:0 24px 64px rgba(0,0,0,.7);--code:#0a1412}
+body{--nav:#0d4037;--nav-ink:#eaf6f2;--nav-muted:#9fc4b8;--nav-line:#1d5649}
+
+/* ── Board chrome ───────────────────────────────────────────── */
+.board{max-width:1520px;margin:0 auto;padding:24px 16px 120px;color:var(--board-ink)}
+.board > h1{font-size:24px;margin:0;letter-spacing:-.02em}
+.lead{max-width:1100px;margin:8px 0 0;color:var(--board-ink);opacity:.85}
+.bar{position:sticky;top:0;z-index:80;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 0;margin:16px 0;background:var(--board);border-bottom:1px solid var(--board-line)}
+.bar .grp{display:flex;gap:6px;align-items:center;margin-right:10px}
+.bar .grp > span{font-size:12px;font-weight:600;opacity:.75;margin-right:2px}
+.bar button{font:600 14px Inter,system-ui,sans-serif;border:1px solid var(--board-line);background:var(--board-card);color:var(--board-ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+.bar button[aria-pressed=true]{background:#0d4037;color:#fff;border-color:#0d4037}
+.bar .hint{font-size:12px;opacity:.7;margin-left:auto}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin:14px 0}
+.notes > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px;font-size:14px}
+.notes b{display:block;margin-bottom:3px}
+.sec{display:flex;align-items:baseline;gap:12px;margin:30px 0 10px}
+.sec h2{font-size:16px;margin:0}
+.sec span{font-size:12px;opacity:.75}
+.opt{display:none}
+body[data-opt=A] .opt.A, body[data-opt=B] .opt.B, body[data-opt=C] .opt.C{display:block}
+.pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px}
+.pick > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:14px;font-size:14px}
+.pick > div.rec{border:2px solid #07d6a0}
+.pick b{font-size:16px;display:block;margin-bottom:4px}
+.pick ul{margin:6px 0 0;padding-left:18px}
+.tag-mig{display:inline-block;font-size:12px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink);margin-left:6px;vertical-align:middle}
+
+/* ── App shell ──────────────────────────────────────────────── */
+.app{display:grid;grid-template-columns:56px 232px 1fr;grid-template-rows:52px 1fr;height:760px;background:var(--canvas);border-radius:14px;overflow:hidden;border:1px solid var(--board-line);margin-bottom:20px;color:var(--ink);position:relative}
+.app.tall{height:880px}
+.app.norail{grid-template-columns:56px 1fr}
+.top{grid-column:1/-1;background:var(--nav);display:flex;align-items:center;gap:12px;padding:0 16px}
+.top .logo{width:22px;height:22px;border-radius:6px;background:var(--primary)}
+.top .search{flex:0 0 280px;height:32px;border-radius:8px;background:rgba(234,246,242,.08);color:var(--nav-muted);display:flex;align-items:center;padding:0 12px;font-size:12px}
+.top .sp{flex:1}
+.top .me{width:30px;height:30px;border-radius:50%;background:var(--hl);color:var(--on-hl);display:grid;place-items:center;font-size:12px;font-weight:700}
+.icons{background:var(--nav);display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0}
+.icons i{display:block;width:22px;height:22px;border-radius:6px;border:1.5px solid var(--nav-muted);opacity:.85}
+.icons i.on{border-color:var(--primary);background:rgba(7,214,160,.16)}
+/* settings rail */
+.srail{border-right:1px solid var(--border);background:var(--card);padding:12px 10px;overflow:auto}
+.srail .find{height:32px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--muted);margin-bottom:10px}
+.srail h5{font-size:12px;font-weight:600;color:var(--muted);margin:12px 6px 4px}
+.srail a{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:8px;font-size:14px;color:var(--body);text-decoration:none}
+.srail a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.srail a small{font-size:12px;color:var(--muted)}
+.srail a .cnt{font-size:12px;font-weight:700;padding:0 6px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink)}
+/* main */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px 24px 20px}
+.crumb{font-size:12px;color:var(--muted)}
+.head{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;margin:2px 0 4px}
+.head h3{font-size:24px;font-weight:600;letter-spacing:-.025em;margin:0}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--border);flex:1;min-width:200px}
+.tabs a{font-size:14px;color:var(--muted);padding:6px 0 8px;border-bottom:2px solid transparent;text-decoration:none;white-space:nowrap}
+.tabs a.on{color:var(--ink);border-color:var(--primary);font-weight:500}
+.tabs a .c{font-size:12px;margin-left:4px;padding:0 5px;border-radius:5px;background:var(--band);color:var(--muted)}
+.head .acts{display:flex;gap:8px;margin-left:auto;padding-bottom:6px}
+.status{font-size:12px;color:var(--muted);margin:2px 0 12px;display:flex;align-items:center;gap:6px}
+.status .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.status.bad .dot{background:var(--bad)}
+.status.warn .dot{background:var(--warn)}
+.body{flex:1;min-height:0;display:flex;gap:12px}
+/* cards */
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--shadow);min-width:0;display:flex;flex-direction:column;min-height:0}
+.card.flex1{flex:1}
+.card-h{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--rule);background:var(--band);border-radius:16px 16px 0 0}
+.card-h b{font-size:14px;font-weight:600}
+.card-h .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.card-b{padding:14px 16px}
+.scroll{overflow:auto;min-height:0;flex:1}
+.card-f{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule)}
+.card-f .sp{flex:1}
+.savebar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule);background:var(--hl-soft);border-radius:0 0 16px 16px;font-size:14px;color:var(--hl-ink);font-weight:500}
+.savebar .sp{flex:1}
+/* form */
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+.fgrid .full{grid-column:1/-1}
+label.l{display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:5px}
+.help{font-size:12px;color:var(--muted);margin-top:4px}
+.err{font-size:12px;color:var(--bad);margin-top:4px}
+.input{height:36px;border-radius:8px;border:1px solid var(--border-strong);background:var(--card);color:var(--ink);padding:0 12px;font-size:14px;display:flex;align-items:center;gap:8px;min-width:0}
+.input.ph{color:var(--muted)}
+.input.focus{outline:2px solid var(--ring);outline-offset:2px}
+.input.bad{border-color:var(--bad)}
+.input.dis{background:var(--band);color:var(--muted);border-color:var(--border)}
+.input .end{margin-left:auto;color:var(--muted);font-size:12px}
+.textarea{min-height:72px;align-items:flex-start;padding:8px 12px;height:auto}
+.fsec{padding:16px 0;border-top:1px solid var(--rule)}
+.fsec:first-child{border-top:0;padding-top:4px}
+.fsec > h4{font-size:16px;margin:0 0 2px}
+.fsec > p{font-size:12px;color:var(--muted);margin:0 0 12px}
+/* controls */
+.btn{font:500 14px Inter,system-ui,sans-serif;height:36px;padding:0 14px;border-radius:8px;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;cursor:default}
+.btn.sm{height:30px;padding:0 10px;font-size:12px}
+.btn.p{background:var(--primary);color:var(--on-primary)}
+.btn.o{background:var(--card);border-color:var(--border);color:var(--ink)}
+.btn.g{background:transparent;color:var(--body)}
+.btn.hl{background:var(--hl);color:var(--on-hl);font-weight:600}
+.btn.danger{background:var(--bad-s);color:var(--bad)}
+.btn.d{opacity:.5}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:500;background:var(--card);color:var(--body);border:1px solid var(--tile-edge);white-space:nowrap}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.n::before{display:none}
+.chip.ok{background:var(--ok-s);color:var(--ok);border-color:transparent}
+.chip.warn{background:var(--warn-s);color:var(--warn);border-color:transparent}
+.chip.bad{background:var(--bad-s);color:var(--bad);border-color:transparent}
+.chip.info{background:var(--info-s);color:var(--info);border-color:transparent}
+.chip.act{background:var(--primary-soft);color:var(--accent-ink);border-color:transparent}
+.chip.hl{background:var(--hl-soft);color:var(--hl-ink);border-color:transparent;font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg span{padding:6px 12px;font-size:14px;color:var(--body);border-left:1px solid var(--border)}
+.seg span:first-child{border-left:0}
+.seg span.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.tog{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);font-size:14px;color:var(--body)}
+.tog.on{background:var(--primary-soft);border-color:transparent;color:var(--accent-ink);font-weight:500}
+.switch{width:36px;height:20px;border-radius:999px;background:var(--border-strong);position:relative;display:inline-block;vertical-align:middle;flex:none}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(13,64,55,.25)}
+.switch.on{background:var(--primary)}
+.switch.on::after{left:18px}
+.check{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.check.on{background:var(--primary);border-color:var(--primary)}
+.radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.radio.on{border:5px solid var(--primary)}
+.av{width:28px;height:28px;border-radius:50%;display:inline-grid;place-items:center;font-size:12px;font-weight:700;background:var(--hl-soft);color:var(--hl-ink);flex:none}
+.ic{width:32px;height:32px;border-radius:9px;display:inline-grid;place-items:center;background:var(--primary-soft);color:var(--accent-ink);font-weight:700;flex:none}
+.muted{color:var(--muted)}
+small{font-size:12px}
+.small{font-size:12px}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--code);border:1px solid var(--tile-edge);border-radius:10px;padding:10px 12px;color:var(--body);white-space:pre;overflow:auto}
+.copy{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:0 4px 0 12px;height:36px;background:var(--card)}
+.copy .v{flex:1;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile{background:var(--tile);box-shadow:inset 0 0 0 1px var(--tile-edge);border-radius:12px;padding:10px 12px}
+.tile small{display:block;font-size:12px;color:var(--muted)}
+.tile b{font-size:16px}
+.list a,.li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--rule);color:var(--body);text-decoration:none}
+.li.on{background:var(--primary-soft);box-shadow:inset 2px 0 0 var(--primary)}
+.li b{font-size:14px;color:var(--ink);display:block}
+.li small{font-size:12px;color:var(--muted)}
+.li .end{margin-left:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+thead th{background:var(--band);color:var(--muted);font-weight:500;font-size:12px;text-align:left;padding:8px 14px;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:9px 14px;border-bottom:1px solid var(--rule);color:var(--body);white-space:nowrap}
+tbody tr.h td{background:var(--hover)}
+tbody tr.s td{background:var(--primary-soft)}
+.strip{display:grid;grid-auto-flow:column;grid-auto-columns:1fr}
+.strip > div{padding:10px 16px;border-left:1px solid var(--rule)}
+.strip > div:first-child{border-left:0}
+.strip small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.strip b{display:block;font-size:24px;font-weight:600;letter-spacing:-.02em}
+.steps{display:flex;gap:8px;align-items:center}
+.steps span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.steps span i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;background:var(--band);color:var(--muted)}
+.steps span.on{color:var(--ink);font-weight:600}
+.steps span.on i{background:var(--primary);color:var(--on-primary)}
+.steps span.done i{background:var(--primary-soft);color:var(--accent-ink)}
+.steps em{flex:1;height:1px;background:var(--border);min-width:16px}
+/* overlays */
+.scrim{position:absolute;inset:52px 0 0 0;background:var(--backdrop);z-index:5}
+.sheet{position:absolute;top:52px;right:0;bottom:0;width:480px;background:var(--card);border-left:1px solid var(--border);box-shadow:var(--overlay);z-index:6;display:flex;flex-direction:column}
+.sheet.wide{width:640px}
+.sheet-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--rule)}
+.sheet-h b{font-size:16px}
+.sheet-h .x{margin-left:auto;color:var(--muted);font-size:16px}
+.sheet-b{padding:16px 18px;overflow:auto;flex:1}
+.sheet-f{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--rule)}
+.dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:440px;background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--overlay);z-index:6;padding:18px}
+.dialog h4{margin:0 0 6px;font-size:16px}
+.dialog p{margin:0 0 12px;font-size:14px;color:var(--body)}
+.menu{background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:var(--overlay);padding:4px;width:220px}
+.menu div{padding:8px 10px;border-radius:6px;font-size:14px;color:var(--body);display:flex;justify-content:space-between}
+.menu div.h{background:var(--hover);color:var(--ink)}
+.menu hr{border:0;border-top:1px solid var(--rule);margin:4px 0}
+.toast{display:inline-flex;align-items:center;gap:10px;background:#0d4037;color:#f2f7f5;border-radius:999px;padding:10px 16px;font-size:14px}
+body.dark .toast{background:#f2f7f5;color:#0d4037}
+.toast i{width:8px;height:8px;border-radius:50%;background:#07d6a0}
+.skel{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--band),var(--hover),var(--band));margin:8px 0}
+.empty{text-align:center;padding:28px 16px}
+.empty .ic{margin:0 auto 10px}
+.empty b{display:block;font-size:16px}
+.empty p{font-size:14px;color:var(--muted);margin:4px 0 12px}
+/* state strip under a board section: loading / empty / error side by side */
+.states{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.states > .card{min-height:180px}
+@media (max-width:1100px){.app{grid-template-columns:56px 1fr}.srail{display:none}.states{grid-template-columns:1fr}.fgrid{grid-template-columns:1fr}}
+
+</style>
+<!--/kit-css-->
+<style>
+/* Billing as one area (owner 2026-11-17): app-style icon menu with hover flyout, a step rail on the left of the page, Overview first. */
+.app.bl{grid-template-columns:64px 1fr;height:820px}
+.app.bl.tall{height:940px}
+.app.bl .icons{gap:14px}
+.app.bl .icons i.on{background:rgba(7,214,160,.22)}
+.page{display:flex;flex-direction:column;min-width:0;min-height:0;padding:14px 22px 18px;overflow:hidden}
+.page .crumb{margin-bottom:2px}
+.frame{display:grid;grid-template-columns:232px minmax(0,1fr);gap:14px;flex:1;min-height:0}
+.steprail{background:var(--card);border:1px solid var(--card-border);border-radius:16px;padding:10px;display:flex;flex-direction:column;gap:2px;overflow:auto}
+.steprail h6{font-size:12px;font-weight:600;color:var(--muted);margin:10px 8px 4px}
+.steprail h6:first-child{margin-top:2px}
+.steprail a{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:10px;font-size:14px;color:var(--body)}
+.steprail a i{width:26px;height:26px;border-radius:8px;background:var(--band);box-shadow:inset 0 0 0 1px var(--tile-edge);flex:none;display:grid;place-items:center;font-style:normal;font-size:12px;color:var(--muted)}
+.steprail a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600;box-shadow:inset 0 0 0 1px var(--primary)}
+.steprail a.on i{background:var(--primary);color:var(--on-primary)}
+.steprail a .c{margin-left:auto;font-size:12px;font-weight:600;padding:0 6px;border-radius:6px;background:var(--band);color:var(--muted)}
+.steprail a .c.w{background:var(--warn-s);color:var(--warn)}
+.steprail a .c.b{background:var(--bad-s);color:var(--bad)}
+.steprail a .nw{margin-left:auto;font-size:12px;font-weight:600;color:var(--info)}
+.steprail .foot{margin-top:auto;border-top:1px solid var(--rule);padding-top:6px}
+.body2{display:flex;flex-direction:column;gap:12px;min-width:0;min-height:0;overflow:hidden}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kpis.k5{grid-template-columns:repeat(5,minmax(0,1fr))}
+.kpis.k3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.kpi{background:var(--card);border:1px solid var(--card-border);border-radius:16px;padding:10px 14px;box-shadow:var(--shadow);min-width:0}
+.kpi small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.kpi b{font-size:24px;font-weight:600;color:var(--ink);letter-spacing:-.02em}
+.kpi b.stale{color:var(--muted)}
+.kpi .d{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .d .up{color:var(--hl-ink);font-weight:600}
+.kpi .d .dn{color:var(--warn);font-weight:600}
+.kpi svg{width:100%;height:24px;margin-top:4px}
+.sp1{fill:none;stroke:var(--primary);stroke-width:2}
+.tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tools .input{height:32px;font-size:12px;min-width:200px}
+.fchip{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;color:var(--body);background:var(--card);white-space:nowrap}
+.fchip.on{background:var(--primary-soft);border-color:transparent;color:var(--accent-ink);font-weight:600}
+td.r,th.r{text-align:right}
+td b{color:var(--ink);font-weight:500}
+.go{color:var(--muted)}
+.grid2{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:12px;min-height:0;flex:1}
+.stack{display:flex;flex-direction:column;gap:12px;min-height:0}
+.new{display:inline-block;font-size:12px;font-weight:600;padding:0 6px;border-radius:6px;background:var(--info-s);color:var(--info);margin-left:6px;vertical-align:1px}
+.bulk{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--primary-soft);border-bottom:1px solid var(--rule);font-size:14px;color:var(--accent-ink);font-weight:500}
+.bulk .sp{flex:1}
+.stabs{display:flex;gap:4px;border-bottom:1px solid var(--rule);padding:0 18px}
+.stabs a{font-size:14px;color:var(--muted);padding:8px 8px;border-bottom:2px solid transparent}
+.stabs a.on{color:var(--ink);border-color:var(--primary);font-weight:500}
+.facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px}
+.tl{list-style:none;margin:0;padding:0}
+.tl li{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--rule);font-size:14px;color:var(--body)}
+.tl li small{margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap}
+.tl li i{width:8px;height:8px;border-radius:50%;background:var(--primary);margin-top:6px;flex:none}
+.tl li i.w{background:var(--warn)}.tl li i.b{background:var(--bad)}.tl li i.n{background:var(--border-strong)}
+.flyout{position:absolute;left:64px;top:150px;z-index:9;width:250px;background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--overlay);padding:8px}
+.flyout b{display:block;font-size:14px;padding:6px 8px;color:var(--ink)}
+.flyout a{display:flex;justify-content:space-between;padding:6px 8px;border-radius:8px;font-size:14px;color:var(--body)}
+.flyout a.h{background:var(--hover);color:var(--ink)}
+.flyout h6{font-size:12px;color:var(--muted);margin:8px 8px 2px;font-weight:600}
+.flyout .c{font-size:12px;color:var(--muted)}
+.wf{display:flex;align-items:flex-end;gap:10px;height:140px;padding:18px 4px 0}
+.wf div{flex:1;border-radius:6px 6px 0 0;position:relative}
+.wf span{position:absolute;bottom:-20px;left:0;right:0;text-align:center;font-size:12px;color:var(--muted)}
+.wf em{position:absolute;top:-18px;left:0;right:0;text-align:center;font-size:12px;color:var(--ink);font-style:normal}
+.bar-h{height:10px;border-radius:4px;background:var(--primary)}
+.cohort td{text-align:center;font-size:12px;padding:6px}
+.cohort td.h1{background:color-mix(in srgb,var(--primary) 70%,transparent);color:var(--on-primary)}
+.cohort td.h2{background:color-mix(in srgb,var(--primary) 45%,transparent)}
+.cohort td.h3{background:color-mix(in srgb,var(--primary) 22%,transparent)}
+.ladder{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.ladder span{padding:3px 8px;border-radius:6px;background:var(--band);color:var(--body)}
+.ladder span.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.ladder em{font-style:normal}
+.addlist{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;margin:8px 0 22px}
+.addlist > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px;font-size:14px;color:var(--board-ink)}
+.addlist b{display:block;margin-bottom:4px}
+.addlist ul{margin:4px 0 0;padding-left:18px}
+.addlist li{margin:2px 0}
+.keep{opacity:.8}
+</style>
+</head>
+<body class="light" data-opt="A">
+<div class="board">
+  <h1>Admin › Billing: one area with a rail</h1>
+  <p class="lead">Your direction: Billing works like Accounting, Compliance and Reports. Hovering Billing in the menu shows every page. Clicking it opens the Billing workspace, a simple overview of billing. Inside, a rail on the left switches pages. Every page keeps exactly the content and actions it has today, in a cleaner layout. Each page also gets what an admin is missing today, marked <span class="new">New</span>, and two pages the Notion spec lists that were never built: <b>Failed payments</b> (§6.5 dunning queue) and <b>Reconciliation</b> (§12 provider reconciliation report). Each page's list of what stays and what's new sits under its screen.</p>
+  <p class="lead small">Tile figures are live values from Nov 17. Row names, coupon and offer names, amounts in the sheets, and new-feature numbers are illustrative.</p>
+  <div class="notes">
+    <div><b>The frame</b>Title + tabs on one line, a status line under it, the step rail on the left (grouped, with counts), Payment provider at the rail's foot as Accounting has its settings. A record opens as a right sheet. Filters live in the address.</div>
+    <div><b>Roles hold</b>Billing ops sees every step except Credits &amp; limits and Payment provider. Platform config sees only Credits &amp; limits. Support has no Billing. The rail and the hover menu show each role only its steps.</div>
+    <div><b>Better, not different</b>Same columns, filters, figures and actions as today. Capital-letter labels and coloured big numbers go; one chip per row carries the colour; notices move into the status line; the Trials and Subscriptions rows open sheets that can act.</div>
+    <div><b>New, and what it needs</b>Each New item says what it needs: nothing (built from data we keep), a migration (a small table, paste script for you), or provider support (Whop must allow it).</div>
+  </div>
+
+  <div class="bar" role="toolbar">
+    <div class="grp"><span>Theme</span><button data-theme-btn="light">Light</button><button data-theme-btn="dark">Dark</button></div>
+    <span class="hint">L / D theme · scroll for every page</span>
+  </div>
+
+  <div class="opt A">
+
+  <!-- 0 · Menu hover -->
+  <div class="sec"><h2>0 · Hover Billing in the menu</h2><span>The same flyout Accounting and Compliance have: every page grouped, each with its count. Click "Billing" itself for the workspace.</span></div>
+  <div class="app bl" data-step="overview" style="height:520px">
+    <div class="flyout"><b>Billing</b><a class="h">Workspace <span class="c">3 need you</span></a><h6>Customers</h6><a>Subscriptions <span class="c">54</span></a><a>Trials <span class="c">27</span></a><a>Failed payments <span class="c">1</span></a><h6>Invoices</h6><a>Invoices <span class="c">19 overdue</span></a><a>Refunds &amp; credits <span class="c">2</span></a><a>Reconciliation <span class="c">23</span></a><h6>Discounts</h6><a>Coupons</a><a>Offers &amp; discounts</a><h6>Usage &amp; reports</h6><a>Credits &amp; limits <span class="c">2 over</span></a><a>Revenue</a><a>Payment provider</a></div>
+    <div data-body><div class="kpis"><div class="kpi"><small>MRR · live</small><b>$4,675</b></div><div class="kpi"><small>Collected this month</small><b>$99</b></div><div class="kpi"><small>Overdue</small><b>19</b></div><div class="kpi"><small>Trials ending · 7 days</small><b>27</b></div></div></div>
+  </div>
+
+  <!-- 1 · Workspace -->
+  <div class="sec"><h2>1 · Billing workspace (Overview)</h2><span>Replaces today's four link cards. A simple dashboard of billing: the figures, what needs you, what's coming up, and what just happened.</span></div>
+  <div class="app bl tall" data-step="overview" data-title="Billing" data-status="warn|3 need you · billing run last finished Sep 13 · 2 payment events stuck for 64 days · <u>Payment provider</u>" data-acts="<span class='btn o'>Export month</span><span class='btn hl'>Raise a custom invoice</span>">
+    <div data-body>
+      <div class="kpis k5">
+        <div class="kpi"><small>MRR · live</small><b>$4,675</b><div class="d">26 active · 4 plans</div><svg viewBox="0 0 120 24"><polyline class="sp1" points="0,20 20,18 40,17 60,14 80,11 100,9 120,8"/></svg></div>
+        <div class="kpi"><small>Collected this month</small><b>$99</b><div class="d">100% of $99 invoiced</div><svg viewBox="0 0 120 24"><polyline class="sp1" points="0,10 20,8 40,12 60,6 80,4 100,20 120,20"/></svg></div>
+        <div class="kpi"><small>Overdue</small><b>19</b><div class="d">$2,140.00 owed</div><svg viewBox="0 0 120 24"><polyline class="sp1" points="0,20 20,18 40,16 60,12 80,10 100,8 120,6"/></svg></div>
+        <div class="kpi"><small>Trials ending · 7 days</small><b>27</b><div class="d">27 with no card</div><svg viewBox="0 0 120 24"><polyline class="sp1" points="0,20 20,19 40,16 60,12 80,10 100,6 120,4"/></svg></div>
+        <div class="kpi"><small>Refunds waiting</small><b>2</b><div class="d">need a second admin</div><svg viewBox="0 0 120 24"><polyline class="sp1" points="0,20 20,20 40,18 60,18 80,16 100,14 120,14"/></svg></div>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <div class="card-h"><b>Needs you</b><span class="chip n hl">7</span><div class="r small muted">worst first · each opens its page, filtered</div></div>
+          <div class="scroll"><table><tbody>
+            <tr><td><b>Billing run stopped</b></td><td>Last finished Sep 13 · invoices aren't being raised</td><td><span class="chip bad">Failing</span></td><td class="go">›</td></tr>
+            <tr><td><b>Payment events stuck</b></td><td>2 waiting, oldest 64 days</td><td><span class="chip bad">Failing</span></td><td class="go">›</td></tr>
+            <tr><td><b>Invoices that don't match</b></td><td>23 differ from what the provider charged</td><td><span class="chip warn">Look</span></td><td class="go">›</td></tr>
+            <tr><td><b>Overdue invoices</b></td><td>19 · $2,140.00 owed</td><td><span class="chip warn">Look</span></td><td class="go">›</td></tr>
+            <tr><td><b>Trials ending, no card</b></td><td>27 within 7 days</td><td><span class="chip warn">Look</span></td><td class="go">›</td></tr>
+            <tr><td><b>Credit notes to approve</b></td><td>2 raised by another admin</td><td><span class="chip warn">Look</span></td><td class="go">›</td></tr>
+            <tr><td><b>Over a usage limit</b></td><td>2 customers</td><td><span class="chip warn">Look</span></td><td class="go">›</td></tr>
+          </tbody></table></div>
+        </div>
+        <div class="stack">
+          <div class="card"><div class="card-h"><b>Coming up · 7 days</b><span class="new">New</span></div><table><tbody>
+            <tr><td>Renewals</td><td class="r">6 · $1,794.00</td><td class="go">›</td></tr>
+            <tr><td>Trials ending</td><td class="r">27</td><td class="go">›</td></tr>
+            <tr><td>Plan changes queued</td><td class="r">2</td><td class="go">›</td></tr>
+            <tr><td>Coupons expiring</td><td class="r">2</td><td class="go">›</td></tr>
+            <tr><td>Offers starting</td><td class="r">Black Friday · Nov 24</td><td class="go">›</td></tr>
+          </tbody></table></div>
+          <div class="card" style="flex:1;min-height:0"><div class="card-h"><b>Just happened</b><span class="new">New</span><div class="r small muted">from the audit log</div></div><div class="scroll card-b" style="padding-top:4px"><ul class="tl">
+            <li><i></i>Ellery &amp; Fields paid INV-1066 · $598.00<small>2h ago</small></li>
+            <li><i class="w"></i>Admin Team changed plan → Agency Plus on Dec 3<small>5h ago</small></li>
+            <li><i class="n"></i>QA raised credit note CN-0007 · $50.00<small>yesterday</small></li>
+            <li><i class="b"></i>Blair Test Insurance card declined<small>yesterday</small></li>
+            <li><i></i>Coupon WELCOME50 used by Rowan Test Insurance<small>Nov 15</small></li>
+          </ul></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="addlist">
+    <div class="keep"><b>Kept from today</b><ul><li>The four destinations (Invoices, Coupons, Refunds &amp; credits, Revenue): now every step in the rail</li></ul></div>
+    <div><b>New on the workspace</b><ul><li>Billing figures with trend lines; Needs you from the billing checks (needs nothing)</li><li>Coming up in 7 days: renewals, trials, queued changes, expiring coupons, offers starting (needs nothing)</li><li>Just happened: payments, plan changes, refunds, declines from the audit log (needs nothing)</li><li>Export month: a CSV of invoices, payments and credit notes for the bookkeeper (needs nothing)</li></ul></div>
+  </div>
+
+  <!-- 2 · Subscriptions -->
+  <div class="sec"><h2>2 · Subscriptions</h2><span>Same tiles, columns and filters. The row opens a sheet that can act (today's expanded row was read-only). The dashboard's "past due" link now lands on the Past due filter.</span></div>
+  <div class="app bl" data-step="subs" data-title="Subscriptions" data-status="ok|26 active across 4 plans · 27 trialling · 1 past due · MRR here is live at list price; Revenue reads the nightly snapshot" data-acts="<span class='btn o'>Export</span><span class='btn o'>Save this view</span>">
+    <div data-body>
+      <div class="kpis"><div class="kpi"><small>Active</small><b>26</b><div class="d">across 4 plans</div></div><div class="kpi"><small>Trialling</small><b>27</b><div class="d">27 end this week</div></div><div class="kpi"><small>Cancelled, still in period</small><b>0</b><div class="d">access until period end</div></div><div class="kpi"><small>MRR · live</small><b>$4,675</b><div class="d">at list price</div></div></div>
+      <div class="card" style="flex:1;min-height:0">
+        <div class="card-h"><div class="tools"><span class="fchip on">All · 54</span><span class="fchip">Past due · 1</span><span class="fchip">Cancelling · 0</span><span class="fchip">Queued changes · 2</span><span class="fchip">Renews in 7 days · 6 <span class="new" style="margin:0">New</span></span><span class="input ph">Search customer…</span><span class="fchip">Plan ▾</span><span class="fchip">Status ▾</span><span class="fchip">Cycle ▾</span></div></div>
+        <div class="scroll"><table><thead><tr><th>Customer</th><th>Plan</th><th>Cycle</th><th>Current period</th><th>Queued change</th><th class="r">Monthly</th><th>Status</th><th></th></tr></thead><tbody>
+          <tr><td><b>Ellery &amp; Fields</b></td><td>Advance Team</td><td>Monthly</td><td>Nov 1 – Dec 1</td><td>—</td><td class="r">$598.00</td><td><span class="chip ok">Active</span></td><td class="go">›</td></tr>
+          <tr class="s"><td><b>Admin Team</b></td><td>Agency</td><td>Monthly</td><td>Nov 3 – Dec 3</td><td>→ Agency Plus on Dec 3</td><td class="r">$299.00</td><td><span class="chip ok">Active</span></td><td class="go">›</td></tr>
+          <tr><td><b>Blair Test Insurance</b></td><td>Ledger</td><td>Monthly</td><td>Oct 20 – Nov 20</td><td>—</td><td class="r">$99.00</td><td><span class="chip warn">Past due</span></td><td class="go">›</td></tr>
+          <tr><td><b>Rowan Test Insurance</b></td><td>Agency · 1–50 seats</td><td>Yearly</td><td>Trial · ends Nov 19</td><td>—</td><td class="r">$0.00</td><td><span class="chip info">Trial</span></td><td class="go">›</td></tr>
+        </tbody></table></div>
+        <div class="card-f small muted">Showing 1–25 of 54<span class="sp"></span>‹ ›</div>
+      </div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet wide">
+      <div class="sheet-h"><span class="av">AT</span><div><b>Admin Team</b><div class="small muted">Agency · monthly · since Mar 3, 2026</div></div><span class="chip ok">Active</span><span class="x">✕</span></div>
+      <div class="stabs"><a class="on">Subscription</a><a>Invoices · 9</a><a>Discount</a><a>History <span class="new" style="margin:0">New</span></a><a>Notes <span class="new" style="margin:0">New</span></a></div>
+      <div class="sheet-b">
+        <div class="facts"><div class="tile"><small>Started</small><b>Mar 3, 2026</b></div><div class="tile"><small>Current period</small><b>Nov 3 – Dec 3</b></div><div class="tile"><small>Monthly equivalent</small><b>$299.00</b></div><div class="tile"><small>Billed</small><b>Card · Whop</b></div><div class="tile"><small>Queued</small><b>Agency Plus · Dec 3</b></div><div class="tile"><small>Seats</small><b>5 of 5</b></div></div>
+        <div class="fsec"><h4>Change</h4><p>The same actions as the customer record, under the same rules: billing ops and super admin.</p><div class="row"><span class="btn o sm">Change plan…</span><span class="btn o sm">Cancel queued change</span><span class="btn o sm">Add-ons…</span><span class="btn o sm">Apply coupon…</span><span class="btn o sm">Pause…</span><span class="btn danger sm">Cancel subscription…</span></div></div>
+        <div class="fsec"><h4>Last changes</h4><ul class="tl"><li><i></i>Plan change queued: Agency → Agency Plus on Dec 3 · by QA<small>5h ago</small></li><li><i class="n"></i>Seat limit reached (5 of 5)<small>Nov 10</small></li></ul></div>
+      </div>
+      <div class="sheet-f"><span class="btn g">Open customer record ›</span><span style="flex:1"></span><span class="btn o">Close</span></div>
+    </aside>
+  </div>
+  <div class="addlist">
+    <div class="keep"><b>Kept from today</b><ul><li>Tiles: Active, Trialling, Cancelled still in period, MRR (live)</li><li>Columns: customer, plan, cycle, status, current period, queued change</li><li>Search, Plan / Status / Cycle / Queued-change filters, pager</li><li>Everything in the expanded row: started, period, monthly equivalent, trial end, billed, queued plan, access ended, cancellation reason, link to the customer</li></ul></div>
+    <div><b>New</b><ul><li>The row's sheet can act: change plan, cancel a queued change, add-ons, coupon, pause, cancel (existing routes; needs nothing)</li><li>Renews in 7 days filter; Monthly column (needs nothing)</li><li>History tab from the audit log (needs nothing)</li><li>Notes on a customer's billing <span class="tag-mig">needs a migration</span></li><li>Save this view (filters kept per admin, in the browser) and Export CSV (needs nothing)</li><li>Fix: filters read from the address, so <span class="mono">?status=past_due</span> works</li></ul></div>
+  </div>
+
+  <!-- 3 · Trials -->
+  <div class="sec"><h2>3 · Trials</h2><span>Same tiles, columns, filters and actions. Select several rows to extend or remind them all at once.</span></div>
+  <div class="app bl" data-step="trials" data-title="Trials" data-status="warn|27 end within 3 days · 27 have no card on file · converted this month 2 (11%) · lapsed 1 (6%)" data-acts="<span class='btn o'>Export</span>">
+    <div data-body>
+      <div class="kpis"><div class="kpi"><small>In trial</small><b>27</b><div class="d">across 3 plans</div></div><div class="kpi"><small>Ending in 3 days</small><b>27</b><div class="d">27 with no card</div></div><div class="kpi"><small>Converted this month</small><b>2</b><div class="d">11% of trials ended</div></div><div class="kpi"><small>Lapsed this month</small><b>1</b><div class="d">6%</div></div></div>
+      <div class="card" style="flex:1;min-height:0">
+        <div class="card-h"><div class="tools"><span class="input ph">Search customer…</span><span class="fchip">Plan ▾</span><span class="fchip on">Ends within 3 days ✕</span><span class="fchip">Activation ▾</span><span class="fchip on">No card ✕</span><span class="fchip">Clear</span></div></div>
+        <div class="bulk"><span class="check on"></span>3 selected<span class="sp"></span><span class="btn o sm">Extend 3…</span><span class="btn o sm">Email a card reminder <span class="new" style="margin:0">New</span></span><span class="btn g sm">Clear</span></div>
+        <div class="scroll"><table><thead><tr><th><span class="check"></span></th><th>Customer</th><th>Plan</th><th>Started</th><th>Ends</th><th class="r">Days left</th><th>Activation</th><th>Card</th><th></th></tr></thead><tbody>
+          <tr class="s"><td><span class="check on"></span></td><td><b>Rowan Test Insurance</b></td><td>Agency</td><td>Nov 5</td><td>Nov 19</td><td class="r">2</td><td>Signed in · 3 leads</td><td><span class="chip warn">No card</span></td><td class="go">›</td></tr>
+          <tr class="s"><td><span class="check on"></span></td><td><b>LA-1.6 QA</b></td><td>Advanced</td><td>Nov 5</td><td>Nov 19</td><td class="r">2</td><td>Never signed in</td><td><span class="chip warn">No card</span></td><td class="go">›</td></tr>
+          <tr class="s"><td><span class="check on"></span></td><td><b>System verify</b></td><td>Ledger</td><td>Nov 5</td><td>Nov 19</td><td class="r">2</td><td>Signed in</td><td><span class="chip warn">No card</span></td><td class="go">›</td></tr>
+          <tr><td><span class="check"></span></td><td><b>Docs Screenshots</b></td><td>Ledger</td><td>Nov 6</td><td>Nov 20</td><td class="r">3</td><td>Never signed in</td><td><span class="chip warn">No card</span></td><td class="go">›</td></tr>
+        </tbody></table></div>
+      </div>
+    </div>
+  </div>
+  <div class="addlist">
+    <div class="keep"><b>Kept from today</b><ul><li>Tiles: In trial, Ending in 3 days, Converted and Lapsed this month (%)</li><li>Columns: customer, plan, started, ends, days left, activation signals; sorted fewest days left</li><li>Search, Plan / Ends / Activation / Card filters, clear, refresh, pager</li><li>Row detail (owner, owner sign-in, trial day, card, billing) now in the sheet</li><li>Extend 1–90 days, Convert, Cancel, each confirmed</li></ul></div>
+    <div><b>New</b><ul><li>Select several and extend them together (existing route, one call each; needs nothing)</li><li>Email a card reminder to the trial's owner, with a preview first <span class="tag-mig">needs an email template</span></li><li>Conversion over 6 months in the sheet's foot (needs nothing)</li><li>Export CSV (needs nothing)</li></ul></div>
+  </div>
+
+  <!-- 4 · Failed payments (new page) -->
+  <div class="sec"><h2>4 · Failed payments <span class="new">New page</span></h2><span>The dunning queue from Notion §6.5: every customer whose payment failed, where they are in the retry ladder, and what happens next. Today this is a single number on the dashboard.</span></div>
+  <div class="app bl" data-step="failed" data-title="Failed payments" data-status="warn|1 customer past due · $99.00 at risk · next retry tomorrow 09:00 · access is cut 14 days after the first failure" data-acts="<span class='btn o'>Retry rules…</span>">
+    <div data-body>
+      <div class="kpis"><div class="kpi"><small>Past due</small><b>1</b><div class="d">$99.00 at risk</div></div><div class="kpi"><small>Recovered · 30 days</small><b>3</b><div class="d"><span class="up">▲ 1</span> · $447.00</div></div><div class="kpi"><small>Lost · 30 days</small><b>0</b><div class="d">cut after the last retry</div></div><div class="kpi"><small>Recovery rate</small><b>100%</b><div class="d">90 days</div></div></div>
+      <div class="card" style="flex:1;min-height:0">
+        <div class="card-h"><div class="tools"><span class="fchip on">Past due · 1</span><span class="fchip">Recovered · 3</span><span class="fchip">Lost · 0</span></div></div>
+        <table><thead><tr><th>Customer</th><th>Invoice</th><th class="r">Amount</th><th>Why it failed</th><th>Retry ladder</th><th>Next</th><th></th></tr></thead><tbody>
+          <tr><td><b>Blair Test Insurance</b></td><td>INV-1071</td><td class="r">$99.00</td><td>Card declined</td><td><div class="ladder"><span class="on">Day 1 ✓</span><em>›</em><span>Day 3</span><em>›</em><span>Day 7</span><em>›</em><span>Day 14 · cut</span></div></td><td>Retry tomorrow</td><td class="go">›</td></tr>
+        </tbody></table>
+        <div class="card-f"><span class="small muted">Each step: retry the card, then email the owner. After the last step the workspace goes read-only; nothing is deleted.</span><span class="sp"></span><span class="btn o sm">Email the owner now</span><span class="btn p sm">Retry the charge now</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="addlist">
+    <div><b>What this page needs</b><ul><li>Past due list from subscriptions + invoices (needs nothing)</li><li>Why it failed, from the provider's payment events (needs nothing)</li><li>Retry ladder and its state <span class="tag-mig">needs a migration</span></li><li>Retry the charge now <span class="tag-mig">needs provider support</span>: if Whop can't retry on request, the button becomes "Send the customer a link to update their card"</li><li>Recovered / lost / rate over time (needs the ladder's history)</li></ul></div>
+  </div>
+
+  <!-- 5 · Invoices -->
+  <div class="sec"><h2>5 · Invoices</h2><span>Same tiles, columns, lenses and the custom invoice (the one gold button). The invoice opens as a wide sheet with today's three parts and four actions. Select rows to export or download PDFs.</span></div>
+  <div class="app bl" data-step="invoices" data-title="Invoices" data-status="warn|19 overdue · $2,140.00 owed · 23 don't match the provider" data-acts="<span class='btn o'>Export</span><span class='btn hl'>Raise a custom invoice</span>">
+    <div data-body>
+      <div class="kpis"><div class="kpi"><small>Invoiced this month</small><b>$99.00</b><div class="d">1 invoice</div></div><div class="kpi"><small>Collected this month</small><b>$99.00</b><div class="d">100% of invoiced</div></div><div class="kpi"><small>Overdue</small><b>19</b><div class="d">0–30 days 4 · 31–60 6 · 60+ 9</div></div><div class="kpi"><small>Don't match</small><b>23</b><div class="d">billed ≠ charged</div></div></div>
+      <div class="card" style="flex:1;min-height:0">
+        <div class="card-h"><div class="tools"><span class="fchip on">All · 212</span><span class="fchip">Overdue · 19</span><span class="fchip">Don't match · 23</span><span class="input ph">Search invoice or customer…</span><span class="fchip">Customer ▾</span><span class="fchip">Status ▾</span><span class="fchip">Issued ▾ <span class="new" style="margin:0">New</span></span></div></div>
+        <div class="scroll"><table><thead><tr><th><span class="check"></span></th><th>Invoice</th><th>Customer</th><th>Issued</th><th>Due</th><th class="r">Total</th><th>Status</th><th></th></tr></thead><tbody>
+          <tr><td><span class="check"></span></td><td><b>INV-1066</b></td><td>Ellery &amp; Fields</td><td>Nov 1</td><td>Nov 1</td><td class="r">$598.00</td><td><span class="chip warn">16 days late</span></td><td class="go">›</td></tr>
+          <tr class="s"><td><span class="check"></span></td><td><b>INV-1042</b></td><td>Admin Team</td><td>Oct 1</td><td>Oct 1</td><td class="r">$299.00</td><td><span class="chip bad">Doesn't match</span></td><td class="go">›</td></tr>
+          <tr><td><span class="check"></span></td><td><b>INV-1031</b></td><td>Blair Test Insurance</td><td>Sep 20</td><td>Sep 20</td><td class="r">$99.00</td><td><span class="chip ok">Paid</span></td><td class="go">›</td></tr>
+        </tbody></table></div>
+      </div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet wide">
+      <div class="sheet-h"><div><b>INV-1042 · Admin Team</b><div class="small muted">Issued Oct 1 · due Oct 1 · 47 days late</div></div><span class="chip bad">Doesn't match</span><span class="x">✕</span></div>
+      <div class="sheet-b" style="padding-bottom:0">
+        <div class="facts"><div class="tile"><small>Our total</small><b>$299.00</b></div><div class="tile"><small>Provider charged</small><b>$249.00</b></div><div class="tile"><small>Difference</small><b>$50.00</b></div></div>
+        <div class="status bad" style="margin:0 0 6px"><span class="dot"></span>We billed $50.00 more than the provider charged · <u>see why in Reconciliation</u></div>
+      </div>
+      <div class="stabs"><a class="on">Lines · 2</a><a>Provider activity · 3</a><a>Credit notes · 0</a><a>Emails sent <span class="new" style="margin:0">New</span></a></div>
+      <div class="sheet-b"><table><thead><tr><th>Description</th><th>Period</th><th class="r">Qty</th><th class="r">Unit</th><th class="r">Amount</th></tr></thead><tbody><tr><td>Agency plan</td><td>Oct 1 – Nov 1</td><td class="r">1</td><td class="r">$249.00</td><td class="r">$249.00</td></tr><tr><td>Extra seats</td><td>Oct 1 – Nov 1</td><td class="r">2</td><td class="r">$25.00</td><td class="r">$50.00</td></tr></tbody></table></div>
+      <div class="sheet-f"><span class="btn g">Print ↗</span><span class="btn g">Download PDF <span class="new" style="margin:0">New</span></span><span class="btn g">Email to customer <span class="new" style="margin:0">New</span></span><span style="flex:1"></span><span class="btn danger">Void…</span><span class="btn o">Credit note…</span><span class="btn p">Mark paid…</span></div>
+    </aside>
+  </div>
+  <div class="addlist">
+    <div class="keep"><b>Kept from today</b><ul><li>Tiles: Mismatched (with Show), Invoiced and Collected this month, Overdue</li><li>Columns: invoice, customer, issued, due, total, status; days overdue</li><li>Search, Customer / Status filters, All · Overdue · Mismatched lens, refresh, pager</li><li>Raise a custom invoice</li><li>Detail: Issued, Due, Our total, Provider charged, Difference, mismatch line; Lines · Provider activity · Credit notes</li><li>Mark paid, Raise a credit note, Void (refused when paid, with the reason), Print view, customer link; same role rule (shown disabled to others)</li></ul></div>
+    <div><b>New</b><ul><li>Overdue by age: 0–30, 31–60, 60+ (needs nothing)</li><li>Issued date filter; select rows to Export CSV (needs nothing)</li><li>Download PDF from the print view (needs nothing)</li><li>Email the invoice to the customer, and an "Emails sent" tab <span class="tag-mig">needs an email template</span></li><li>"See why" opens the matching row in Reconciliation (needs nothing)</li></ul></div>
+  </div>
+
+  <!-- 6 · Refunds & credits -->
+  <div class="sec"><h2>6 · Refunds &amp; credits</h2><span>Same tiles, columns, approve (never the raiser) and retry. Raising a credit note now happens in a sheet on this page: pick a paid invoice, enter the amount and reason.</span></div>
+  <div class="app bl" data-step="refunds" data-title="Refunds &amp; credits" data-status="warn|2 wait for a second admin · 1 failed at the provider · refunds over $500.00 always need two people" data-acts="<span class='btn p'>Raise a credit note</span>">
+    <div data-body>
+      <div class="kpis"><div class="kpi"><small>Credit notes</small><b>6</b><div class="d">this year · $1,148.00</div></div><div class="kpi"><small>Waiting for approval</small><b>2</b><div class="d">1 raised by you</div></div><div class="kpi"><small>Failed</small><b>1</b><div class="d">provider refused</div></div><div class="kpi"><small>Awaiting reconciliation</small><b>2</b><div class="d">provider hasn't confirmed</div></div></div>
+      <div class="card" style="flex:1;min-height:0">
+        <div class="card-h"><div class="tools"><span class="fchip on">All · 6</span><span class="fchip">Needs approval · 2</span><span class="fchip">Failed · 1</span><span class="fchip">Awaiting reconciliation · 2</span><span class="input ph">Search credit note, customer or invoice… <span class="new" style="margin:0">New</span></span></div></div>
+        <table><thead><tr><th>Credit note</th><th>Customer</th><th>Against</th><th class="r">Amount</th><th>Reason <span class="new" style="margin:0">New</span></th><th>Reconciliation</th><th>Status</th><th></th></tr></thead><tbody>
+          <tr><td><b>CN-0007</b></td><td>Admin Team</td><td>INV-1042</td><td class="r">$50.00</td><td>Coupon missed</td><td>Waiting</td><td><span class="chip warn">Needs approval</span></td><td><span class="btn p sm">Approve</span></td></tr>
+          <tr><td><b>CN-0006</b></td><td>Blair Test Insurance</td><td>INV-1031</td><td class="r">$600.00</td><td>Goodwill</td><td>Waiting</td><td><span class="chip">Raised by you</span></td><td class="go">›</td></tr>
+          <tr><td><b>CN-0005</b></td><td>Docs Screenshots</td><td>INV-0990</td><td class="r">$99.00</td><td>Cancelled in trial</td><td>Provider refused</td><td><span class="chip bad">Failed</span></td><td><span class="btn o sm">Retry</span></td></tr>
+        </tbody></table>
+      </div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet">
+      <div class="sheet-h"><b>Raise a credit note</b><span class="x">✕</span></div>
+      <div class="sheet-b"><div class="fgrid"><div class="full"><label class="l">Invoice</label><div class="input">INV-1042 · Admin Team · $299.00 paid Oct 1</div><div class="help">Paid invoices only. Search by number or customer.</div></div><div><label class="l">Type</label><div class="seg"><span class="on">Refund</span><span>Credit</span></div></div><div><label class="l">Amount</label><div class="input">$50.00</div><div class="help">Up to $299.00</div></div><div class="full"><label class="l">Reason</label><div class="input">Coupon missed at checkout</div></div></div><div class="status warn" style="margin-top:14px"><span class="dot"></span>Another admin has to approve this before the provider is asked to refund</div></div>
+      <div class="sheet-f"><span class="btn o">Cancel</span><span class="btn p">Raise credit note</span></div>
+    </aside>
+  </div>
+  <div class="addlist">
+    <div class="keep"><b>Kept from today</b><ul><li>Approval threshold in words; tiles: Credit notes, Pending approval ("raised by you"), Failed, Awaiting reconciliation</li><li>Pending, failed and provider-pending warnings, now in the status line</li><li>Columns: credit note, customer, against (opens the invoice), amount, status, reconciliation; refresh, pager</li><li>Approve (hidden for the raiser), Retry reconciliation</li><li>Raise a credit note: same dialog fields as the invoice's, now raised here</li></ul></div>
+    <div><b>New</b><ul><li>Lenses and search (needs nothing)</li><li>Reason column (stored today with the note; needs nothing)</li><li>A credit note opens a sheet with its approval trail from the audit log (needs nothing)</li></ul></div>
+  </div>
+
+  <!-- 7 · Reconciliation (new) -->
+  <div class="sec"><h2>7 · Reconciliation <span class="new">New page</span></h2><span>Notion §12's provider reconciliation report: what we billed against what the provider charged, invoice by invoice, with the likely reason and a way to settle each one.</span></div>
+  <div class="app bl" data-step="recon" data-title="Reconciliation" data-status="warn|23 invoices don't match · $1,150.00 difference in total · 2 payment events not processed" data-acts="<span class='btn o'>Export</span>">
+    <div data-body>
+      <div class="kpis k3"><div class="kpi"><small>Don't match</small><b>23</b><div class="d">of 212 invoices</div></div><div class="kpi"><small>Difference</small><b>$1,150.00</b><div class="d">we billed more on 19</div></div><div class="kpi"><small>Provider only</small><b>4</b><div class="d">charges with no invoice of ours</div></div></div>
+      <div class="card" style="flex:1;min-height:0">
+        <div class="card-h"><div class="tools"><span class="fchip on">Don't match · 23</span><span class="fchip">Provider only · 4</span><span class="fchip">Settled · 9</span><span class="fchip">Likely reason ▾</span></div></div>
+        <table><thead><tr><th>Invoice</th><th>Customer</th><th class="r">We billed</th><th class="r">Provider charged</th><th class="r">Difference</th><th>Likely reason</th><th></th></tr></thead><tbody>
+          <tr><td><b>INV-1042</b></td><td>Admin Team</td><td class="r">$299.00</td><td class="r">$249.00</td><td class="r">$50.00</td><td>Coupon applied at the provider only</td><td><span class="btn o sm">Settle…</span></td></tr>
+          <tr><td><b>INV-1038</b></td><td>LA-1.8 QA</td><td class="r">$149.00</td><td class="r">$0.00</td><td class="r">$149.00</td><td>No charge found</td><td><span class="btn o sm">Settle…</span></td></tr>
+          <tr><td><b>—</b></td><td>Rowan Test Insurance</td><td class="r">$0.00</td><td class="r">$249.00</td><td class="r">−$249.00</td><td>Charged, no invoice of ours</td><td><span class="btn o sm">Settle…</span></td></tr>
+        </tbody></table>
+        <div class="card-f small muted">Settle: raise a credit note, mark paid, or mark "explained" with a note. Each is recorded in the audit log.</div>
+      </div>
+    </div>
+  </div>
+  <div class="addlist">
+    <div><b>What this page needs</b><ul><li>Don't match and the difference: already computed for the Mismatched lens (needs nothing)</li><li>Provider-only charges, from payment events with no invoice (needs nothing)</li><li>Likely reason, from simple rules over lines and coupons (needs nothing)</li><li>"Explained" with a note <span class="tag-mig">needs a migration</span></li></ul></div>
+  </div>
+
+  <!-- 8 · Coupons -->
+  <div class="sec"><h2>8 · Coupons</h2><span>Same tiles, columns, filters, create and deactivate. A coupon opens a sheet with who used it and the offers built on it.</span></div>
+  <div class="app bl" data-step="coupons" data-title="Coupons" data-status="ok|8 active · 2 expire within 14 days · $1,240.00 given in discounts this year" data-acts="<span class='btn p'>New coupon</span>">
+    <div data-body>
+      <div class="kpis"><div class="kpi"><small>Active</small><b>8</b><div class="d">of 11</div></div><div class="kpi"><small>Redemptions</small><b>122</b><div class="d"><span class="up">▲ 6</span> this month</div></div><div class="kpi"><small>Discount given</small><b>$1,240.00</b><div class="d">from invoice lines</div></div><div class="kpi"><small>Expiring · 14 days</small><b>2</b><div class="d">WELCOME50, SPRING10</div></div></div>
+      <div class="card" style="flex:1;min-height:0">
+        <div class="card-h"><div class="tools"><span class="input ph">Search code…</span><span class="fchip">Status ▾</span><span class="fchip">Type ▾</span><span class="fchip">Expiry ▾</span></div></div>
+        <table><thead><tr><th>Code</th><th>Discount</th><th>Restrictions</th><th class="r">Redemptions</th><th>Expires</th><th>Used by offers <span class="new" style="margin:0">New</span></th><th>Status</th><th></th></tr></thead><tbody>
+          <tr class="s"><td><b>WELCOME50</b></td><td>$50 off first invoice</td><td>Individual plans</td><td class="r">42</td><td>Nov 30</td><td>Welcome</td><td><span class="chip warn">Expires soon</span></td><td class="go">›</td></tr>
+          <tr><td><b>SWITCH20</b></td><td>20% for 6 months</td><td>Agency plans</td><td class="r">14</td><td>Dec 31</td><td>Agency switch</td><td><span class="chip ok">Active</span></td><td class="go">›</td></tr>
+          <tr><td><b>BF30</b></td><td>30% for 3 months</td><td>New agencies</td><td class="r">0</td><td>Dec 1</td><td>Black Friday</td><td><span class="chip ok">Active</span></td><td class="go">›</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet">
+      <div class="sheet-h"><b>WELCOME50</b><span class="chip warn">Expires soon</span><span class="x">✕</span></div>
+      <div class="stabs"><a class="on">Details</a><a>Redemptions · 42 <span class="new" style="margin:0">New</span></a><a>Offers · 1</a></div>
+      <div class="sheet-b"><div class="facts"><div class="tile"><small>Discount</small><b>$50 off</b></div><div class="tile"><small>Given so far</small><b>$2,100.00</b></div><div class="tile"><small>Expires</small><b>Nov 30</b></div></div><div class="fsec"><h4>Change</h4><p>The provider fixes a code's amount once it's created. Expiry and limit can change; anything else means a new code.</p><div class="row"><span class="btn o sm">Extend expiry… <span class="new" style="margin:0">New</span></span><span class="btn o sm">Duplicate as new code <span class="new" style="margin:0">New</span></span><span class="btn danger sm">Deactivate…</span></div></div></div>
+      <div class="sheet-f"><span class="btn o">Close</span></div>
+    </aside>
+  </div>
+  <div class="addlist">
+    <div class="keep"><b>Kept from today</b><ul><li>Tiles: Active, Redemptions, Discount given, Expiring soon</li><li>Columns: code, discount, restrictions, redemptions, expires, status; active first</li><li>Search, Status / Type / Expiry filters</li><li>Create (promo code at the provider), Deactivate</li></ul></div>
+    <div><b>New</b><ul><li>Used by offers column and an Offers tab (needs nothing)</li><li>Redemptions tab: who used it, when, on which invoice (needs nothing)</li><li>Duplicate as a new code (needs nothing)</li><li>Extend expiry <span class="tag-mig">needs provider support</span></li></ul></div>
+  </div>
+
+  <!-- 9 · Offers -->
+  <div class="sec"><h2>9 · Offers &amp; discounts</h2><span>Same tiles, columns, filters and actions. An offer opens a sheet with its rule, who qualifies right now and what it overlaps.</span></div>
+  <div class="app bl" data-step="offers" data-title="Offers &amp; discounts" data-status="warn|3 active · 3 could apply together: Welcome, Agency switch, Black Friday · next start Nov 24" data-acts="<span class='btn p'>New offer</span>">
+    <div data-body>
+      <div class="kpis"><div class="kpi"><small>Active</small><b>3</b><div class="d">42 redemptions</div></div><div class="kpi"><small>Scheduled</small><b>1</b><div class="d">Black Friday · Nov 24</div></div><div class="kpi"><small>Ended</small><b>1</b><div class="d">80 redemptions</div></div><div class="kpi"><small>Overlapping</small><b>3</b><div class="d">named in the status line</div></div></div>
+      <div class="grid2">
+        <div class="card"><div class="card-h"><div class="tools"><span class="input ph">Search offer or coupon…</span><span class="fchip">Target ▾</span><span class="fchip">Status ▾</span></div></div>
+          <table><thead><tr><th>Offer</th><th>Rule</th><th>Target</th><th>Window</th><th class="r">Redemptions</th><th>Status</th><th></th></tr></thead><tbody>
+            <tr><td><b>Black Friday</b></td><td>30% for 3 months</td><td>New agencies</td><td>Nov 24 – Dec 1</td><td class="r">0</td><td><span class="chip info">Scheduled</span></td><td class="go">›</td></tr>
+            <tr class="s"><td><b>Agency switch</b></td><td>20% for 6 months</td><td>Agency plans</td><td>Oct 1 – Dec 31</td><td class="r">14</td><td><span class="chip warn">Overlaps</span></td><td class="go">›</td></tr>
+            <tr><td><b>Welcome</b></td><td>$50 off first invoice</td><td>Individual plans</td><td>Always</td><td class="r">42</td><td><span class="chip ok">Active</span></td><td class="go">›</td></tr>
+          </tbody></table></div>
+        <div class="card"><div class="card-h"><b>Calendar</b><span class="new">New</span><div class="r small muted">Nov – Jan</div></div><div class="card-b">
+          <div class="small muted" style="margin-bottom:6px">Welcome</div><div class="bar-h" style="width:100%"></div>
+          <div class="small muted" style="margin:10px 0 6px">Agency switch</div><div class="bar-h" style="width:55%;background:var(--warn)"></div>
+          <div class="small muted" style="margin:10px 0 6px">Black Friday</div><div class="bar-h" style="width:12%;margin-left:30%;background:var(--info)"></div>
+        </div></div>
+      </div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet wide">
+      <div class="sheet-h"><b>Agency switch</b><span class="chip warn">Overlaps Welcome</span><span class="x">✕</span></div>
+      <div class="sheet-b"><div class="fgrid"><div><label class="l">Coupon</label><div class="input">SWITCH20</div></div><div><label class="l">Rule</label><div class="input">20% for 6 months</div></div><div><label class="l">Target</label><div class="input">Agency plans</div></div><div><label class="l">Window</label><div class="input">Oct 1 – Dec 31</div></div></div>
+      <div class="status warn" style="margin-top:12px"><span class="dot"></span>Who qualifies now: 6 agencies <span class="new" style="margin:0">New</span> · 2 of them also qualify for Welcome</div>
+      <div class="fsec"><h4>Apply to a customer</h4><p>Asks before applying when the customer's plan type doesn't match.</p><div class="input ph">Pick a customer…</div></div></div>
+      <div class="sheet-f"><span class="btn danger">Deactivate…</span><span style="flex:1"></span><span class="btn o">Cancel</span><span class="btn p">Save offer</span></div>
+    </aside>
+  </div>
+  <div class="addlist">
+    <div class="keep"><b>Kept from today</b><ul><li>Tiles: Active, Scheduled, Ended, Overlapping (named)</li><li>Columns: offer, rule, target, window, redemptions, status; newest start first</li><li>Search, Target / Status filters</li><li>New / Edit, Apply to a customer (asks on a plan mismatch), Deactivate / Reactivate</li></ul></div>
+    <div><b>New</b><ul><li>Calendar of offer windows (needs nothing)</li><li>Who qualifies now, and which other offers they also qualify for (needs nothing)</li></ul></div>
+  </div>
+
+  <!-- 10 · Credits & limits -->
+  <div class="sec"><h2>10 · Credits &amp; limits</h2><span>Super admin and platform config only, as today. Same four parts as tabs on the page instead of one long scroll.</span></div>
+  <div class="app bl" data-step="credits" data-title="Credits &amp; limits" data-status="warn|2 customers over a limit · 26 at 80% or more · 62 limits watched · 1 of 8 meters priced" data-acts="<span class='btn o'>Grant credits…</span><span class='btn p'>Add a credit pack</span>">
+    <div data-body>
+      <div class="kpis k5"><div class="kpi"><small>Over a limit</small><b>2</b><div class="d">customers</div></div><div class="kpi"><small>Near a limit</small><b>26</b><div class="d">at 80% or more</div></div><div class="kpi"><small>Limits watched</small><b>62</b><div class="d">meters and seats</div></div><div class="kpi"><small>Credit packs</small><b>6</b><div class="d">on sale · 0 retired</div></div><div class="kpi"><small>Meters priced</small><b>1</b><div class="d">of 8</div></div></div>
+      <div class="card" style="flex:1;min-height:0">
+        <div class="card-h"><div class="tools"><span class="fchip on">Usage · 62</span><span class="fchip">Credit packs · 6</span><span class="fchip">Default limits</span><span class="fchip">Meter pricing · 8</span><span style="width:12px"></span><span class="fchip">All</span><span class="fchip on">Over · 2</span><span class="fchip">Near · 26</span></div></div>
+        <table><thead><tr><th>Customer</th><th>Meter</th><th class="r">Used</th><th class="r">Limit</th><th>Use</th><th>Hits the limit <span class="new" style="margin:0">New</span></th><th>Status</th><th></th></tr></thead><tbody>
+          <tr><td><b>LA-1.8 QA</b></td><td>Seats</td><td class="r">6</td><td class="r">5</td><td style="width:140px"><div class="bar-h" style="width:100%;background:var(--warn)"></div></td><td>Already over</td><td><span class="chip bad">Over</span></td><td class="go">›</td></tr>
+          <tr><td><b>Admin Team</b></td><td>Dial minutes</td><td class="r">4,410</td><td class="r">5,000</td><td><div class="bar-h" style="width:88%"></div></td><td>in ~4 days</td><td><span class="chip warn">88%</span></td><td class="go">›</td></tr>
+        </tbody></table>
+        <div class="card-f small muted">A row opens: grant credits, add a pack to the customer's next invoice, or email the owner <span class="new" style="margin:0">New</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="addlist">
+    <div class="keep"><b>Kept from today</b><ul><li>Tiles: Over, Near, Limits watched, Credit packs, Meters priced</li><li>Usage monitor (over/all, refresh, pager), Credit packs, Default limits, Meter pricing (vendor cost, sell price, margin, platform default)</li><li>Add / Edit / archive a pack, Grant credits, Add a pack to an invoice, Edit pricing</li></ul></div>
+    <div><b>New</b><ul><li>"Hits the limit" forecast from this month's pace (needs nothing)</li><li>Email the owner when near a limit <span class="tag-mig">needs an email template</span></li><li>Note: billing ops still can't open this page, as today. Say if they should.</li></ul></div>
+  </div>
+
+  <!-- 11 · Revenue -->
+  <div class="sec"><h2>11 · Revenue</h2><span>Same tiles, movement, plan mix, funnel and churn. Warnings move into the status line. A period switch and a cohort table are added.</span></div>
+  <div class="app bl tall" data-step="revenue" data-title="Revenue" data-status="warn|Figures are 57 days old: nightly metrics stopped on Sep 21 · $45,616.00 collected with no subscription recorded" data-acts="<span class='seg'><span>30 days</span><span class='on'>90 days</span><span>12 months</span></span><span class='btn o'>Export</span>">
+    <div data-body>
+      <div class="kpis"><div class="kpi"><small>MRR</small><b class="stale">$3,480</b><div class="d">57 days old</div></div><div class="kpi"><small>ARR</small><b class="stale">$41,760</b><div class="d">57 days old</div></div><div class="kpi"><small>Collected · 30 days</small><b>$99</b><div class="d">100% of invoiced</div></div><div class="kpi"><small>Gross churn · 30 days</small><b>0%</b><div class="d">6-month mean 1.2%</div></div></div>
+      <div class="grid2">
+        <div class="stack">
+          <div class="card"><div class="card-h"><b>How MRR moved</b></div><div class="card-b" style="padding-bottom:30px"><div class="wf"><div style="height:80%;background:var(--primary)"><em>+$2,400</em><span>New</span></div><div style="height:30%;background:var(--hl-mark)"><em>+$600</em><span>Expansion</span></div><div style="height:12%;background:var(--border-strong)"><em>−$200</em><span>Contraction</span></div><div style="height:18%;background:var(--warn)"><em>−$350</em><span>Churn</span></div><div style="height:6%;background:var(--band)"><em>$0</em><span>Unexplained</span></div><div style="height:72%;background:var(--accent-ink)"><em>+$2,450</em><span>Net</span></div></div></div></div>
+          <div class="card"><div class="card-h"><b>Cohorts: still paying after</b><span class="new">New</span><div class="r small muted">Notion §12 cohort retention</div></div><table class="cohort"><thead><tr><th>Started</th><th>1 mo</th><th>2 mo</th><th>3 mo</th><th>6 mo</th></tr></thead><tbody><tr><td>Jun</td><td class="h1">100%</td><td class="h1">92%</td><td class="h2">85%</td><td class="h2">77%</td></tr><tr><td>Jul</td><td class="h1">100%</td><td class="h2">88%</td><td class="h2">80%</td><td></td></tr><tr><td>Aug</td><td class="h1">96%</td><td class="h2">84%</td><td></td><td></td></tr></tbody></table></div>
+        </div>
+        <div class="stack">
+          <div class="card"><div class="card-h"><b>Plan mix</b></div><table><thead><tr><th>Plan</th><th class="r">Customers</th><th class="r">MRR</th><th class="r">Share</th></tr></thead><tbody><tr><td><b>Ledger</b></td><td class="r">14</td><td class="r">$1,386</td><td class="r">40%</td></tr><tr><td><b>Advanced</b></td><td class="r">3</td><td class="r">$1,347</td><td class="r">39%</td></tr><tr><td><b>Basic</b></td><td class="r">3</td><td class="r">$747</td><td class="r">21%</td></tr></tbody></table></div>
+          <div class="card"><div class="card-h"><b>Activation funnel</b></div><div class="card-b"><div class="small muted">Signed up 18 · Verified 16 · Trial 13 · Set up 8 · Paid 2 · Day 30 2</div><div class="bar-h" style="width:44%;background:var(--warn);margin-top:8px"></div><div class="small muted" style="margin-top:4px">Biggest drop: trial → set up</div></div></div>
+          <div class="card"><div class="card-h"><b>Customers &amp; churn</b></div><table><tbody><tr><td>New this month</td><td class="r">3</td></tr><tr><td>Churned this month</td><td class="r">1</td></tr><tr><td>Net revenue churn</td><td class="r">—</td></tr></tbody></table></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="addlist">
+    <div class="keep"><b>Kept from today</b><ul><li>Tiles: MRR (snapshot), ARR, Collected 30 days (%), Gross churn (with 6-month mean)</li><li>Warnings: no metrics yet, stale snapshot, collected with no subscription</li><li>MRR movement (New, Expansion, Contraction, Churn, Unexplained, Net), Activation funnel, Plan mix, Customers &amp; churn</li></ul></div>
+    <div><b>New</b><ul><li>Period switch: 30 days · 90 days · 12 months (needs nothing)</li><li>Cohort table, from the subscriptions' start and end dates (needs nothing)</li><li>Export CSV (needs nothing)</li></ul></div>
+  </div>
+
+  <!-- 12 · Payment provider -->
+  <div class="sec"><h2>12 · Payment provider (rail foot)</h2><span>Setup, renamed, super admin only, as today. Opening it still writes the audit entry. The webhook events become a list you can open and replay.</span></div>
+  <div class="app bl" data-step="provider" data-title="Payment provider" data-status="bad|2 webhook events stuck, oldest 64 days · mode Live · no failed calls in 24 hours" data-acts="<span class='btn o'>Test connection</span>">
+    <div data-body>
+      <div class="kpis"><div class="kpi"><small>Mode</small><b>Live</b><div class="d">Whop</div></div><div class="kpi"><small>Failed calls · 24h</small><b>0</b><div class="d">—</div></div><div class="kpi"><small>Stuck webhooks</small><b>2</b><div class="d">oldest 64 days</div></div><div class="kpi"><small>Credentials missing</small><b>0</b><div class="d">of 5</div></div></div>
+      <div class="grid2">
+        <div class="card"><div class="card-h"><b>Webhook events</b><span class="new">New</span></div><table><thead><tr><th>Event</th><th>Received</th><th>Result</th><th></th></tr></thead><tbody><tr><td><b>payment.succeeded</b></td><td>Sep 14, 10:02</td><td><span class="chip bad">Stuck</span></td><td><span class="btn o sm">Replay</span></td></tr><tr><td><b>membership.went_valid</b></td><td>Sep 14, 10:01</td><td><span class="chip bad">Stuck</span></td><td><span class="btn o sm">Replay</span></td></tr><tr><td><b>payment.failed</b></td><td>Nov 16, 09:12</td><td><span class="chip ok">Processed</span></td><td class="go">›</td></tr></tbody></table></div>
+        <div class="card"><div class="card-h"><b>Credentials &amp; checks</b></div><table><tbody><tr><td>API base URL</td><td>Present</td></tr><tr><td>API key</td><td>Present</td></tr><tr><td>Webhook secret</td><td>Present</td></tr><tr><td>Product</td><td>Present</td></tr><tr><td>Account</td><td>Present</td></tr><tr><td>Webhook last received</td><td>Nov 16</td></tr><tr><td>Webhook last processed</td><td>Sep 14</td></tr></tbody></table></div>
+      </div>
+    </div>
+  </div>
+  <div class="addlist">
+    <div class="keep"><b>Kept from today</b><ul><li>Tiles: Mode, Failed calls 24h, Stuck webhooks, Credentials missing</li><li>Credential presence (base URL, key, webhook secret, product, account), webhook last received and processed</li><li>Checks table, Test connection, audit entry on view</li></ul></div>
+    <div><b>New</b><ul><li>Webhook events list (from the events table; needs nothing)</li><li>Replay a stuck event (runs today's processor again on it; needs nothing, audited)</li></ul></div>
+  </div>
+
+  <div class="sec"><h2>13 · Roles, loading, empty, error</h2><span>Each step streams on its own; the rail and title show at once.</span></div>
+  <div class="states">
+    <div class="card"><div class="card-h"><b>Rail · billing ops</b></div><div class="card-b small">Workspace · Subscriptions · Trials · Failed payments · Invoices · Refunds &amp; credits · Reconciliation · Coupons · Offers · Revenue<br><span class="muted">No Credits &amp; limits, no Payment provider (as today)</span></div></div>
+    <div class="card"><div class="card-h"><b>Failed payments</b></div><div class="empty"><span class="ic">✓</span><b>Nobody is past due</b><p>When a payment fails, the customer appears here with their retry ladder.</p></div></div>
+    <div class="card"><div class="card-h"><b>Invoices</b></div><div class="empty"><b>Couldn't load invoices</b><p>The read timed out. The figures above are current.</p><span class="btn o sm">Try again</span></div></div>
+  </div>
+
+  </div>
+
+  <div class="sec"><h2>What gets built</h2><span>Nothing until you say so</span></div>
+  <div class="pick"><div class="rec"><b>Billing area as drawn</b><ul><li>Hover menu + rail + workspace overview, like Accounting and Compliance</li><li>All 10 of today's pages, same content and actions, in the new frame; records as sheets</li><li>2 new pages: Failed payments, Reconciliation</li><li>New items marked "needs nothing" built straight away</li><li>Items needing a migration come as paste scripts for you; items needing provider support are checked against Whop first and shown honestly if not possible</li></ul></div></div>
+</div>
+<script>
+// Board-only: draw the shared shell (top bar, icon menu, crumb, title, tabs, status, step rail) around each screen's body.
+(function(){
+  const STEPS=[["h","Overview"],["overview","Workspace","",""],["h","Customers"],["subs","Subscriptions","54",""],["trials","Trials","27","w"],["failed","Failed payments","1","b",1],["h","Invoices"],["invoices","Invoices","19","w"],["refunds","Refunds &amp; credits","2","w"],["recon","Reconciliation","23","w",1],["h","Discounts"],["coupons","Coupons","",""],["offers","Offers &amp; discounts","",""],["h","Usage &amp; reports"],["credits","Credits &amp; limits","2","b"],["revenue","Revenue","",""]];
+  document.querySelectorAll(".app.bl").forEach(app=>{
+    const step=app.dataset.step, body=app.querySelector("[data-body]");
+    const title=app.dataset.title||"Billing", st=(app.dataset.status||"ok|").split("|");
+    const rail=STEPS.map(s=>{ if(s[0]==="h") return `<h6>${s[1]}</h6>`; const c=s[2]?`<span class="c ${s[3]}">${s[2]}</span>`:(s[4]?`<span class="nw">New</span>`:""); return `<a class="${s[0]===step?"on":""}"><i>${s[1].charAt(0)}</i>${s[1]}${c}</a>`; }).join("")+`<div class="foot"><a class="${step==="provider"?"on":""}"><i>P</i>Payment provider</a></div>`;
+    const top=`<div class="top"><span class="logo"></span><span class="search">Search customers, users, invoices…</span><span class="sp"></span><span class="me">QA</span></div><div class="icons"><i></i><i></i><i class="on"></i><i></i><i></i><i></i></div>`;
+    const page=document.createElement("div"); page.className="page";
+    page.innerHTML=`<div class="crumb">Billing${step==="overview"?"":" › "+title}</div><div class="head"><h3>${title}</h3><div class="acts">${app.dataset.acts||""}</div></div><div class="status ${st[0]}"><span class="dot"></span>${st[1]||""}</div><div class="frame"><nav class="steprail">${rail}</nav><div class="body2"></div></div>`;
+    page.querySelector(".body2").append(...body.childNodes); body.remove();
+    const rest=[...app.children]; app.innerHTML=top; app.append(page,...rest);
+  });
+})();
+</script>
+<!--kit-js-->
+<script>
+/* Settings round 8 board kit: option (A/B/C) and theme switching. Keys 1–3 pick an option, L / D the theme.
+   Buttons: <button data-opt="A">, <button data-theme="light">. The body carries class light|dark and data-opt. */
+(function () {
+  var body = document.body;
+  if (!body.dataset.opt) body.dataset.opt = "A";
+  if (!/\b(light|dark)\b/.test(body.className)) body.classList.add("light");
+  function sync() {
+    document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.optBtn === body.dataset.opt)); });
+    document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(body.classList.contains(b.dataset.themeBtn))); });
+  }
+  function opt(v) { body.dataset.opt = v; sync(); }
+  function theme(v) { body.classList.remove("light", "dark"); body.classList.add(v); sync(); }
+  document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.addEventListener("click", function () { opt(b.dataset.optBtn); }); });
+  document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.addEventListener("click", function () { theme(b.dataset.themeBtn); }); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "1") opt("A"); if (e.key === "2") opt("B"); if (e.key === "3") opt("C");
+    if (e.key === "l" || e.key === "L") theme("light"); if (e.key === "d" || e.key === "D") theme("dark");
+  });
+  sync();
+})();
+
+</script>
+<!--/kit-js-->
+</body>
+</html>

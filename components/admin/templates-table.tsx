@@ -1,8 +1,8 @@
 "use client";
 
 import { StatusChip } from "@/components/ui/status-chip";
-import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { SlidersHorizontal } from "lucide-react";
 
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
@@ -11,7 +11,7 @@ import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
-import { PageHeader } from "@/components/ui/page-header";
+import { setParamsInPlace } from "@/components/ui/nav-pending";
 import { TableCard } from "@/components/ui/table-card";
 import {
   DropdownMenu,
@@ -70,21 +70,21 @@ function UpdatedDate({ iso }: { iso: string }) {
 }
 
 /**
- * The Templates catalog (board p-adm-templates): header, figures, and the table with its search /
- * product / state toolbar. A row click — or the name, for the keyboard — opens the
- * editor, where editing, duplicating, publishing, archiving and restoring live; the open row carries
- * the brand tint, as on the board.
+ * The Templates catalog (admin round 1, docs/design/admin-r1/catalog.html screen 6): the table with its search /
+ * product / state toolbar, inside the Catalog frame (the figures and the status line are the page's). A row click —
+ * or the name, for the keyboard — opens the editor as a wide right sheet, where editing, duplicating, publishing,
+ * archiving and restoring live; the open row carries the brand tint. The search, the product, the states, the page,
+ * the open template (`?template=`) and the new-template sheet (`?new=1`) live in the URL without a round trip, so a
+ * product's "Templates" count in Products lands here filtered (`?product=<code>`).
  */
 export function TemplatesTable({
   templates,
   products,
-  tiles,
   usage,
   draftsSupported,
 }: {
   templates: CatalogTemplate[];
   products: ProductRow[];
-  tiles: ReactNode;
   /** Null when tenant copies or in-progress applications could not be read. */
   usage: TemplateUsageSummary | null;
   /** False until migration 20260925504000 (templates.published_at) is applied. */
@@ -92,17 +92,30 @@ export function TemplatesTable({
 }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
-  const [editor, setEditor] = useState<{ mode: "create" | "edit"; id?: string } | null>(null);
-  const [query, setQuery] = useState("");
-  const [productCode, setProductCode] = useState<string>("all");
-  const [states, setStates] = useState<TemplateState[]>([...DEFAULT_VISIBLE_STATES]);
-  const [page, setPage] = useState(1);
+  const params = useSearchParams();
+  const query = params.get("q") ?? "";
+  const productCode = params.get("product") || "all";
+  // `?status=draft` (the Catalog workspace's links) is one state; `?states=a,b` is the list's own.
+  const statesParam = params.get("states") ?? params.get("status");
+  const states = useMemo<TemplateState[]>(
+    () => (statesParam === null ? [...DEFAULT_VISIBLE_STATES] : statesParam.split(",").filter((item): item is TemplateState => (TEMPLATE_STATES as readonly string[]).includes(item))),
+    [statesParam],
+  );
+  const page = Math.max(1, Number(params.get("page")) || 1);
+  const openId = params.get("template");
+  const editor: { mode: "create" | "edit"; id?: string } | null = params.get("new") === "1" ? { mode: "create" } : openId ? { mode: "edit", id: openId } : null;
+  const set = (patch: Record<string, string | null>) => setParamsInPlace(patch);
+  const setPage = (next: number) => set({ page: next > 1 ? String(next) : null });
+  const setEditor = (next: { mode: "create" | "edit"; id?: string } | null) => set(next === null ? { template: null, new: null } : next.mode === "create" ? { new: "1", template: null } : { template: next.id ?? null, new: null });
+  const setStates = (next: TemplateState[]) => set({ status: null, states:sameStates(next, DEFAULT_VISIBLE_STATES) ? null : next.join(","), page: null });
 
   const productOptions = useMemo(() => {
     const seen = new Map<string, string>();
     for (const template of templates) seen.set(template.product_code, template.product_name);
+    // A product with no template yet, arrived at from Products: still named in the picker.
+    if (productCode !== "all" && !seen.has(productCode)) seen.set(productCode, products.find((product) => product.code === productCode)?.name ?? productCode);
     return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1], "en"));
-  }, [templates]);
+  }, [templates, products, productCode]);
 
   const sorted = useMemo(() => sortTemplatesForCatalog(templates), [templates]);
   const filtered = useMemo(
@@ -116,52 +129,31 @@ export function TemplatesTable({
   const editing = editor?.mode === "edit" ? templates.find((template) => template.id === editor.id) ?? null : null;
 
   function toggleState(state: TemplateState, on: boolean) {
-    setStates((currentStates) => (on ? [...currentStates, state] : currentStates.filter((item) => item !== state)));
-    setPage(1);
+    setStates(on ? [...states, state] : states.filter((item) => item !== state));
   }
 
   function clearFilters() {
-    setQuery("");
-    setProductCode("all");
-    setStates([...TEMPLATE_STATES]);
-    setPage(1);
+    set({ q: null, product: null, status: null, states: TEMPLATE_STATES.join(","), page: null });
   }
 
   const openEdit = (template: CatalogTemplate) => setEditor({ mode: "edit", id: template.id });
 
   return (
-    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <PageHeader
-        title="Templates"
-        actions={
-          <Button type="button" onClick={() => setEditor({ mode: "create" })}>
-            New template
-          </Button>
-        }
-      />
-
-      {tiles}
-
+    <>
       <TableCard
         footer={templates.length ? <Pager page={current} pageSize={pageSize} total={filtered.length} noun={filtered.length === 1 ? "template" : "templates"} suffix={TEMPLATE_CATALOG_ORDER} onPage={setPage} /> : undefined}
         toolbar={
           <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
             <ToolbarSearch
               value={query}
-              onChange={(value) => {
-                setQuery(value);
-                setPage(1);
-              }}
+              onChange={(value) => set({ q: value || null, page: null })}
               placeholder="Search templates"
             />
             <select
               aria-label="Product"
               className={toolbarControl}
               value={productCode}
-              onChange={(event) => {
-                setProductCode(event.target.value);
-                setPage(1);
-              }}
+              onChange={(event) => set({ product: event.target.value === "all" ? null : event.target.value, page: null })}
             >
               <option value="all">All products</option>
               {productOptions.map(([code, name]) => (
@@ -199,10 +191,7 @@ export function TemplatesTable({
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      onSelect={() => {
-                        setStates([...TEMPLATE_STATES]);
-                        setPage(1);
-                      }}
+                      onSelect={() => setStates([...TEMPLATE_STATES])}
                     >
                       Show every state
                     </DropdownMenuItem>
@@ -301,16 +290,19 @@ export function TemplatesTable({
         <TemplateEditorDialog
           key={editor.mode === "create" ? "create" : `edit-${editing?.id}-${editing?.version}-${editing?.state}`}
           mode={editor.mode}
-          open
           template={editing}
           state={editing?.state}
           usage={editing ? (usage ? usage.byTemplate[editing.id] ?? EMPTY_TEMPLATE_USAGE : null) : null}
           products={products}
           draftsSupported={draftsSupported}
           onClose={() => setEditor(null)}
-          onSaved={() => router.refresh()}
+          onSaved={() => { setEditor(null); startRefresh(() => router.refresh()); }}
         />
       )}
-    </div>
+    </>
   );
+}
+
+function sameStates(a: readonly TemplateState[], b: readonly TemplateState[]) {
+  return a.length === b.length && a.every((state) => b.includes(state));
 }

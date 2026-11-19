@@ -9,14 +9,13 @@
 
 import { StatusChip } from "@/components/ui/status-chip";
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { notify } from "@/lib/notify";
-import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
-import { LEGAL_DOC_LABELS, type LegalDocType } from "@/lib/legal/constants";
+import { LEGAL_DOC_LABELS, LEGAL_DOC_TYPES, type LegalDocType } from "@/lib/legal/constants";
 import { LEGAL_MIN_CONTENT_LENGTH, legalDay, nextLegalVersion, type AdminLegalVersion, type LegalDraft } from "@/lib/legal/adminTypes";
 import { CARD_TITLE, DRAFT_KEY, type EditorState, type Lookup, type Stat, VISIBLE_VERSIONS, fromDraft, plural, post, sameEditor } from "@/components/admin/legal/model";
-import { DocSwitch, HistoryTable, VersionRow, VersionView } from "@/components/admin/legal/versions";
+import { HistoryTable, VersionRow, VersionView } from "@/components/admin/legal/versions";
 import { DraftSummaryCard, DraftTextCard, LookupCard } from "@/components/admin/legal/draft-cards";
 import { ClearDialog, PublishDialog } from "@/components/admin/legal/dialogs";
 import { Button } from "@/components/ui/button";
@@ -47,7 +46,10 @@ export function LegalScreen({
   lookup,
 }: Props) {
   const router = useRouter();
-  const [doc, setDoc] = useState<LegalDocType>(initialDoc);
+  // The document is the address's `?doc=` (admin round 1, 2026-11-18): the Terms · Privacy · DPA bar sits on the
+  // Platform frame's title line (components/admin/legal/doc-tabs.tsx) and switches it in place, with no round trip.
+  const docParam = useSearchParams().get("doc");
+  const doc: LegalDocType = (LEGAL_DOC_TYPES as readonly string[]).includes(docParam ?? "") ? (docParam as LegalDocType) : initialDoc;
   const [selection, setSelection] = useState<Partial<Record<LegalDocType, string>>>({});
   const [editors, setEditors] = useState<Partial<Record<LegalDocType, EditorState>>>({});
   // A save/discard/publish answers before router.refresh() brings new props. These overrides bridge
@@ -59,7 +61,9 @@ export function LegalScreen({
   const [busy, setBusy] = useState<null | "save" | "discard" | "publish">(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [clearTarget, setClearTarget] = useState<AdminLegalVersion | null>(null);
-  const [showAll, setShowAll] = useState(false);
+  // Show all versions holds for the document it was asked on; another document starts short again.
+  const [showAllFor, setShowAllFor] = useState<LegalDocType | null>(null);
+  const showAll = showAllFor === doc;
 
   const overrideMap = overrides.against === drafts ? overrides.map : {};
   const draftFor = (type: LegalDocType): LegalDraft | null =>
@@ -91,18 +95,6 @@ export function LegalScreen({
         ? requested
         : defaultKey;
   const selectedVersion = selectedKey === DRAFT_KEY ? null : (docVersions.find((v) => v.id === selectedKey) ?? null);
-
-  function switchDoc(next: LegalDocType) {
-    setDoc(next);
-    setShowAll(false);
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.set("doc", next);
-      window.history.replaceState(null, "", url.toString());
-    } catch {
-      // The URL is a convenience; the switch itself has happened.
-    }
-  }
 
   function edit(patch: Partial<EditorState>) {
     setEditors((prev) => ({ ...prev, [doc]: { ...editor, ...patch } }));
@@ -203,8 +195,6 @@ export function LegalScreen({
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <PageHeader title="Legal" actions={<DocSwitch value={doc} onChange={switchDoc} />} />
-
       <StatStrip label={LEGAL_DOC_LABELS[doc]}>
         <StatTile label="Live version" value={current ? `v${current.version}` : "None"} footnote={current ? `effective ${legalDay(current.effective_date)}` : "nothing published"} />
         <StatTile
@@ -287,7 +277,7 @@ export function LegalScreen({
 
               {docVersions.length > VISIBLE_VERSIONS && (
                 <div className="px-4 py-2.5">
-                  <Button type="button" onClick={() => setShowAll((v) => !v)} variant="ghost" size="sm" className="px-0 text-[var(--accent-ink)]">
+                  <Button type="button" onClick={() => setShowAllFor(showAll ? null : doc)} variant="ghost" size="sm" className="px-0 text-[var(--accent-ink)]">
                     {showAll ? "Show fewer versions" : `Show all ${docVersions.length} versions`}
                   </Button>
                 </div>

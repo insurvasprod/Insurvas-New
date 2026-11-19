@@ -31,7 +31,7 @@ const td = "border-t border-[#ccd6e2] px-3 py-2 text-sm leading-[1.5] tracking-[
  * profile when it has one, and the owner's name and email. The board's sender address is not shown
  * — the platform stores no postal address of its own, and a printed invoice must not invent one.
  */
-export async function InvoicePrintView({ id, back }: { id: string; back?: { href: string; label: string } }) {
+export async function InvoicePrintView({ id, back, autoPrint = false }: { id: string; back?: { href: string; label: string }; /** Download PDF (billing-r2): open the print dialog, where "Save as PDF" is, as soon as the page is up. */ autoPrint?: boolean }) {
   const detail = await fetchInvoiceDetail(id);
   if (!detail) notFound();
   const { invoice, lines } = detail;
@@ -60,7 +60,7 @@ export async function InvoicePrintView({ id, back }: { id: string; back?: { href
       <div data-print-hide className="mb-8 flex flex-wrap items-center justify-between gap-3">
         {/* LA-8.5: the agency owner prints the same document from Settings › Plan & billing. */}
         <Link href={back?.href ?? `/admin/invoices/${invoice.id}`} className={`${bar} border-[#78838f] bg-white text-[#15191e] hover:bg-[#eef2f7]`}>{back?.label ?? "Back to invoice"}</Link>
-        <PrintButton className={`${bar} border-transparent bg-[var(--primary)] text-[var(--on-primary)]`}>Print or save as PDF</PrintButton>
+        <PrintButton autoPrint={autoPrint} className={`${bar} border-transparent bg-[var(--primary)] text-[var(--on-primary)]`}>Print or save as PDF</PrintButton>
       </div>
 
       <article className="mx-auto w-full max-w-[760px]">

@@ -1,0 +1,116 @@
+[
+  {
+    "src": "/docs/shots/settings/my-profile/1.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check your Full name",
+    "focus": {
+      "x": 418,
+      "y": 203,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/my-profile/2.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Add your Mobile phone",
+    "focus": {
+      "x": 720,
+      "y": 203,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/my-profile/3.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set Your time zone",
+    "focus": {
+      "x": 418,
+      "y": 305,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/my-profile/4.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Pick the Languages you speak with clients",
+    "focus": {
+      "x": 720,
+      "y": 315,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/my-profile/5.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Fill in Your NPN and licence numbers",
+    "focus": {
+      "x": 418,
+      "y": 425,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/my-profile/6.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Turn on Two-step verification",
+    "focus": {
+      "x": 504,
+      "y": 287,
+      "w": 936,
+      "h": 585
+    }
+  },
+  {
+    "src": "/docs/shots/settings/my-profile/7.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check Where you're signed in",
+    "focus": {
+      "x": 504,
+      "y": 315,
+      "w": 936,
+      "h": 585
+    }
+  },
+  {
+    "src": "/docs/shots/settings/my-profile/8.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set Quiet hours",
+    "focus": {
+      "x": 504,
+      "y": 287,
+      "w": 936,
+      "h": 585
+    }
+  },
+  {
+    "src": "/docs/shots/settings/my-profile/9.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Choose where each alert reaches you"
+  },
+  {
+    "src": "/docs/shots/settings/my-profile/10.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Press Save Changes at the foot of the card",
+    "focus": {
+      "x": 720,
+      "y": 450,
+      "w": 720,
+      "h": 450
+    }
+  }
+]

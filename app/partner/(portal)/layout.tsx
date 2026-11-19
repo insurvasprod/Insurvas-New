@@ -6,7 +6,7 @@ import { PartnerTopBar } from "@/components/partner/partner-top-bar";
 import { PortalPageTransition } from "@/components/portal/portal-page-transition";
 import { WarmPage } from "@/components/app/warm-page";
 import { DashboardStage } from "@/components/ui/dashboard-stage";
-import { getPartnerSession, resolvePartnerContext } from "@/lib/partnerAuth/requirePartner";
+import { getPartnerSession, partnerHasTeam, resolvePartnerContext } from "@/lib/partnerAuth/requirePartner";
 import { partnerRoleLabel } from "@/lib/partnerAuth/roles";
 import { readPartnerTopBarIdentity } from "@/lib/partnerAuth/topBarIdentity";
 
@@ -20,7 +20,11 @@ export default async function PartnerPortalLayout({ children }: { children: Reac
     session ? readPartnerTopBarIdentity(session.sub) : null,
   ]);
   if (!context) redirect("/partner/login");
-  const person = context.userId === session?.sub && identity ? identity : await readPartnerTopBarIdentity(context.userId);
+  const [person, hasTeam] = await Promise.all([
+    context.userId === session?.sub && identity ? identity : readPartnerTopBarIdentity(context.userId),
+    // Only the affiliate menu turns on it (lib/partnerAuth/portalAccess.ts).
+    context.partnerType === "affiliate" ? partnerHasTeam(context.tenantId, context.partnerId) : false,
+  ]);
 
   const roleLabel = partnerRoleLabel(context.role);
   const statusLabel = { draft: "Draft", active: "Active", paused: "Paused", offboarded: "Offboarded" }[context.partnerStatus];
@@ -32,6 +36,8 @@ export default async function PartnerPortalLayout({ children }: { children: Reac
         role={context.role}
         partnerStatus={context.partnerStatus}
         partnerName={context.partnerName}
+        partnerType={context.partnerType}
+        hasTeam={hasTeam}
       />
       {/* overflow-x-clip, not hidden — `hidden` turns <main> into a scroll container and the sticky
           top bar scrolls away with the page. See the agent shell. */}

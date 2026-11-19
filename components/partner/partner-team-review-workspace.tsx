@@ -211,10 +211,7 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
   }
   const conversionNow = metrics.conversion;
   const conversionPrev = previous?.conversion ?? null;
-
-  if (!loaded) return <PageLoading />;
-
-  return <div className="m-stagger flex min-h-0 w-full flex-1 flex-col gap-6">
+  const header = (
     <PageHeader
       title="Team performance"
       description="Review submitted leads and member performance."
@@ -245,6 +242,19 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
         <Button variant="outline" size="icon" asChild title="Export report"><a href={`/api/partner/leads/export?${new URLSearchParams({ limit: "5000", date_from: range.from, date_to: range.to })}`} aria-label="Export report"><Download aria-hidden="true" /></a></Button>
       </form>}
     />
+  );
+  // Frame first (UI-CONSISTENCY §7a): the title and its buttons draw at once; the page loads under them.
+  if (!loaded) {
+    return (
+      <div className="m-stagger flex min-h-0 w-full flex-1 flex-col gap-6">
+        {header}
+        <PageLoading header={false} />
+      </div>
+    );
+  }
+
+  return <div className="m-stagger flex min-h-0 w-full flex-1 flex-col gap-6">
+    {header}
     {rangeInvalid && <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">Choose an end date on or after the start date, within a year.</p>}
     {error && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">Team performance could not be loaded: {error}<Button type="button" variant="outline" size="sm" onClick={reload}>Try again</Button></p>}
 

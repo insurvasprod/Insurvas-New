@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/page-states";
 import { Meter } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
+import { StreamSection } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
 
 const ROLE: Record<string, string> = { owner: "Owner", producer: "Producer", setter: "Setter", assistant: "Assistant", bookkeeper: "Bookkeeper", manager: "Manager", retention: "Retention", admin: "Admin" };
@@ -30,6 +31,21 @@ export default async function TeamSetupPage() {
   if (!(actAsPage(guard, ["owner", "bookkeeper"]) || manager)) {
     return <RoleGateNotice featureLabel="Team setup" detail="The owner, admins, managers and the bookkeeper see the team's setup." />;
   }
+  // Frame first (UI-CONSISTENCY §7a): the gate above, then the frame; the team's progress streams in.
+  return (
+    <div className="flex w-full min-w-0 flex-col">
+      <AgencyPage
+        step="team-setup"
+        info="Who has finished setting up Insurvas. Each person follows their own Get started, guided on the real pages."
+        actions={<Button asChild variant="outline"><Link href="/app/agency">Back to the dashboard</Link></Button>}
+      >
+        <StreamSection shape="table" rows={6}><TeamSetupTable guard={guard} /></StreamSection>
+      </AgencyPage>
+    </div>
+  );
+}
+
+async function TeamSetupTable({ guard }: { guard: Extract<Awaited<ReturnType<typeof guardPage>>, { entitled: true }> }) {
   const context = guard.context;
   const [profile, switches, scope, solo] = await Promise.all([
     getSupabaseServiceClient().from("agency" as never).select("legal_name, dba_name").eq("tenant_id", context.tenantId).maybeSingle<{ legal_name: string; dba_name: string | null }>(),
@@ -46,12 +62,6 @@ export default async function TeamSetupPage() {
   const finished = people.filter((row) => row.finished).length;
 
   return (
-    <div className="flex w-full min-w-0 flex-col">
-      <AgencyPage
-        step="team-setup"
-        info="Who has finished setting up Insurvas. Each person follows their own Get started, guided on the real pages."
-        actions={<Button asChild variant="outline"><Link href="/app/agency">Back to the dashboard</Link></Button>}
-      >
         <TableCard title={people.length ? `${finished} of ${people.length} people finished` : undefined}>
           {people.length === 0 && rows.length <= 1 ? (
             <EmptyState title="Nobody to show yet" hint="Invite your team from Settings › Team & access. Their setup shows here." />
@@ -87,7 +97,5 @@ export default async function TeamSetupPage() {
             </table>
           )}
         </TableCard>
-      </AgencyPage>
-    </div>
   );
 }

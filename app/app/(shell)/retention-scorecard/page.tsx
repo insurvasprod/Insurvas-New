@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
@@ -22,6 +21,7 @@ import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { ViewSwitch } from "@/components/ui/view-switch";
+import { IntentLink } from "@/components/ui/nav-pending";
 
 const INFO = "What each person working Retention achieved on the ladder: cases open, saved (a carrier file proved it), lost and closed without a save, with the save rate per person and per step. Under 10 decided cases the counts are shown.";
 const TRAIL = [{ label: "Retention" }, { label: "Scorecard" }];
@@ -88,14 +88,14 @@ export default async function RetentionScorecardPage({ searchParams }: { searchP
       );
       const actions = (
         <span className="inline-flex flex-wrap items-center gap-2">
-          {previous && <Link href={scorecardHref({ period, rep: previous, show })} className={buttonVariants({ variant: "outline" })} title={`Previous person: ${names[previous] ?? "Someone"}`}><ChevronLeft aria-hidden="true" />{names[previous] ?? "Someone"}</Link>}
-          {next && <Link href={scorecardHref({ period, rep: next, show })} className={buttonVariants({ variant: "outline" })} title={`Next person: ${names[next] ?? "Someone"}`}>{names[next] ?? "Someone"}<ChevronRight aria-hidden="true" /></Link>}
+          {previous && <IntentLink transitionTypes={["nav-back"]} href={scorecardHref({ period, rep: previous, show })} className={buttonVariants({ variant: "outline" })} title={`Previous person: ${names[previous] ?? "Someone"}`}><ChevronLeft aria-hidden="true" />{names[previous] ?? "Someone"}</IntentLink>}
+          {next && <IntentLink transitionTypes={["nav-forward"]} href={scorecardHref({ period, rep: next, show })} className={buttonVariants({ variant: "outline" })} title={`Next person: ${names[next] ?? "Someone"}`}>{names[next] ?? "Someone"}<ChevronRight aria-hidden="true" /></IntentLink>}
           {viewSwitch}
           {periodSelect}
         </span>
       );
       return (
-        <RetentionPage step="scorecard" title={name} info={INFO} tabs={tabs} actions={actions} breadcrumbs={isOwner ? retentionTrail("scorecard", name) : TRAIL}>
+        <RetentionPage step="scorecard" title={name} info={INFO} tabs={tabs} actions={actions} show="chart" breadcrumbs={isOwner ? retentionTrail("scorecard", name) : TRAIL}>
           <CasePersonBoard steps={mine.steps} total={mine.total} owner={owner} name={name} period={period} rep={isOwner ? rep : null} show={show} />
         </RetentionPage>
       );
@@ -113,7 +113,7 @@ export default async function RetentionScorecardPage({ searchParams }: { searchP
       />
     );
     return (
-      <RetentionPage step="scorecard" title="Scorecard" info={INFO} tabs={tabs} actions={<span className="inline-flex flex-wrap items-center gap-2">{viewSwitch}{periodSelect}</span>} breadcrumbs={TRAIL}>
+      <RetentionPage step="scorecard" title="Scorecard" info={INFO} tabs={tabs} actions={<span className="inline-flex flex-wrap items-center gap-2">{viewSwitch}{periodSelect}</span>} show="chart" breadcrumbs={TRAIL}>
         <CaseScorecardBoard people={card.people} steps={card.steps} total={card.total} names={names} view={view} period={period} viewerId={viewerId} show={show} trend={trendOf(ladder.cases)} />
       </RetentionPage>
     );
@@ -145,7 +145,7 @@ export default async function RetentionScorecardPage({ searchParams }: { searchP
   ) : undefined;
 
   return (
-    <RetentionPage step="scorecard" title="Scorecard" info={fallbackInfo} tabs={fallbackTabs} actions={data.available ? <span className="inline-flex flex-wrap items-center gap-2">{viewSwitch}</span> : undefined} breadcrumbs={TRAIL}>
+    <RetentionPage step="scorecard" title="Scorecard" info={fallbackInfo} tabs={fallbackTabs} actions={data.available ? <span className="inline-flex flex-wrap items-center gap-2">{viewSwitch}</span> : undefined} show={data.available ? "chart" : undefined} breadcrumbs={TRAIL}>
       {data.available ? (
         <RetentionScorecardBoard data={data} period={period} selected={repParam ?? null} isOwner={isOwner} viewerId={viewerId} show={show} />
       ) : (

@@ -4,7 +4,8 @@
  * The overlay frame the LA-3 boards draw (l3-ov-capture, l3-ov-counteroffer, l3-ov-spouse): a white
  * card with a header row (title, one line under it, anything else, then Close), a padded body, and a
  * footer strip on the page grey with a one-line note on the left and the actions on the right,
- * primary last. Built on the shared Dialog, so focus, Escape and the backdrop behave as everywhere.
+ * primary last. Built on the shared Dialog, so focus, Escape and the backdrop behave as everywhere. A submit that
+ * leaves a field's error line showing shakes the actions once (`m-deny-now`, Wave B 2026-11-18).
  */
 
 import type { ClipboardEvent, FormEvent, ReactNode } from "react";
@@ -12,6 +13,7 @@ import { X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { useDenyShake } from "@/components/ui/use-deny-shake";
 import { cn } from "@/lib/utils";
 
 export function Overlay({ open, onOpenChange, width = 760, title, subtitle, headerExtra, children, footerNote, actions, onSubmit, onPaste }: {
@@ -28,6 +30,7 @@ export function Overlay({ open, onOpenChange, width = 760, title, subtitle, head
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
   onPaste?: (event: ClipboardEvent) => void;
 }) {
+  const refusal = useDenyShake();
   const inner = (
     <>
       <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] px-[22px] py-[18px]">
@@ -46,7 +49,7 @@ export function Overlay({ open, onOpenChange, width = 760, title, subtitle, head
       {(footerNote || actions) && (
         <div className="flex flex-wrap items-center justify-between gap-4 border-t border-[var(--border)] bg-[var(--canvas)] px-[22px] py-3.5">
           <span className="min-w-0 flex-1 text-xs text-[var(--muted)]">{footerNote}</span>
-          {actions && <span className="flex flex-wrap items-center gap-2.5">{actions}</span>}
+          {actions && <span className={cn("flex flex-wrap items-center gap-2.5", refusal.className)}>{actions}</span>}
         </div>
       )}
     </>
@@ -61,7 +64,7 @@ export function Overlay({ open, onOpenChange, width = 760, title, subtitle, head
           width === 720 ? "sm:max-w-[720px]" : width === 840 ? "sm:max-w-[840px]" : "sm:max-w-[760px]",
         )}
       >
-        {onSubmit ? <form onSubmit={onSubmit} noValidate className="flex min-w-0 flex-col">{inner}</form> : inner}
+        {onSubmit ? <form onSubmit={(event) => { const form = event.currentTarget; onSubmit(event); refusal.denyIfErrors(form); }} noValidate className="flex min-w-0 flex-col">{inner}</form> : inner}
       </DialogContent>
     </Dialog>
   );

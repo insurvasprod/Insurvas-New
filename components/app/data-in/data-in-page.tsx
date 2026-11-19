@@ -1,9 +1,10 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { cookies } from "next/headers";
 
 import { actAsPage, actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { StepFrame } from "@/components/app/step-frame/step-frame";
 import type { Crumb } from "@/components/ui/breadcrumbs";
+import { TitleShape } from "@/components/ui/stream-section";
 import { AREA_COOKIES, AREA_LABELS, DATA_IN_WAITING, SETUP_STEP_KEYS, areaOfStep, areaSteps, dataInStepLabel, type DataInStep } from "@/lib/dataIn/steps";
 
 /**
@@ -35,7 +36,8 @@ async function openSteps(): Promise<Set<DataInStep>> {
 /** The frame: the shared StepFrame, with the step's area, its rail and badges. */
 export async function DataInPage({ step, title, chip, facts, tabs, actions, breadcrumbs, children }: {
   step: DataInStep;
-  title?: string;
+  /** A record's name; while it is read, `<Suspense fallback={<TitleShape />}>` around it (UI-CONSISTENCY §7a). */
+  title?: ReactNode;
   /** A record's status chip, beside its title (round 3, owner 2026-11-02). */
   chip?: ReactNode;
   /** A record's one muted line of facts, under its title. */
@@ -65,4 +67,22 @@ export async function DataInPage({ step, title, chip, facts, tabs, actions, brea
       {children}
     </StepFrame>
   );
+}
+
+/**
+ * A record's name read from its data (a file, a policy, a rule), on a detail page whose frame has already drawn
+ * (UI-CONSISTENCY §7a, data-titled detail pages): its shape until the read lands, then the name. As `title`, the title's
+ * shape; with `crumb`, the trail's smaller one. A record not found draws nothing here; the page's body says so.
+ */
+export function RecordName({ read, crumb = false }: { read: Promise<string | null | undefined>; crumb?: boolean }) {
+  return <Suspense fallback={crumb ? <CrumbShape /> : <TitleShape />}><Name read={read} /></Suspense>;
+}
+
+async function Name({ read }: { read: Promise<string | null | undefined> }) {
+  return (await read) ?? "";
+}
+
+/** The trail's name, not known yet: a short bar on the crumb's line (it waits 180ms like every skeleton, .m-skel). */
+function CrumbShape() {
+  return <span aria-hidden="true" className="inline-block h-3 w-24 m-skel rounded-full align-middle" />;
 }

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 
+import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { BarList, BarSeries, ChartHeading, ChartLegend, type BarListRow } from "@/components/ui/chart";
 import { EmptyState } from "@/components/ui/page-states";
@@ -22,7 +23,8 @@ const kept = (cents: number) => (cents ? `${money(cents)}/mo` : null);
 const join = (...parts: Array<string | null | false>) => parts.filter(Boolean).join(" · ");
 /** The rate beside the saves: "3 of 3" under the floor, "75%" over it, nothing with none decided. */
 const rateShort = (text: string) => (text === "—" ? null : text.replace(/ saved$/, ""));
-const LINK = "whitespace-nowrap text-sm text-foreground underline-offset-2 hover:underline";
+// A way to the rows reads as a button (QA pass 2026-11), never a bare text link.
+const LINK = `${buttonVariants({ variant: "outline", size: "sm" })} no-underline`;
 
 /** A chart's card: the heading (its title, the period line, one link), the chart, its key. */
 /** `toolbar`: the board's own controls (the period, the person) over the heading, where its table card has them. */
@@ -30,7 +32,7 @@ export function ChartCard({ title, period, link, children, legend, toolbar }: { 
   return (
     <Card className="px-4">
       {toolbar}
-      <ChartHeading title={title} period={period} action={link ? <Link href={link.href} className={LINK}>{link.label} ›</Link> : undefined} />
+      <ChartHeading title={title} period={period} action={link ? <Link href={link.href} className={LINK}>{link.label}</Link> : undefined} />
       {children}
       {legend}
     </Card>

@@ -9,6 +9,7 @@ import { loadImportReview, planBuckets } from "@/lib/agentTemplates/importPrefli
 import { licensedStates } from "@/lib/leadLists/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { LeadsInPage } from "@/components/app/lead-sources/leads-in";
+import { StreamSection } from "@/components/ui/stream-section";
 
 /**
  * Module 2 §6 · the review step, on its own route.
@@ -33,18 +34,26 @@ export default async function ImportReviewPage({ params }: { params: Promise<{ b
   const tenantId = guard.context.tenantId;
 
   const { batchId } = await params;
-  const { plan, state, progress } = await loadImportReview(tenantId, batchId);
+  // Frame first (UI-CONSISTENCY §7a): the review step's title, rail and corner draw at once; the file's plan streams in
+  // under them. Every branch below is the same frame, so only what goes inside it waits on the read.
+  const review = loadImportReview(tenantId, batchId);
+  return <LeadsInPage step="review" ownContinue><StreamSection shape="strip+table"><ReviewStep tenantId={tenantId} batchId={batchId} read={review} /></StreamSection></LeadsInPage>;
+}
+
+/** What the review step shows for this batch: its scrub, a closed or finished file, or the plan to decide on. */
+async function ReviewStep({ tenantId, batchId, read }: { tenantId: string; batchId: string; read: ReturnType<typeof loadImportReview> }) {
+  const { plan, state, progress } = await read;
   // LA-2.2-10: the scrub is still running. The screen drives it and reloads into the review.
-  if (state === "screening" && progress) return <LeadsInPage step="review" ownContinue><ImportScreeningBridge progress={progress} /></LeadsInPage>;
+  if (state === "screening" && progress) return <ImportScreeningBridge progress={progress} />;
   if (!plan) {
     // A file this tenant discarded (or whose check was stopped) is a closed job, not a lost one: Back
     // after "Discard this file" lands here. Asked of this tenant's own row only, like the read above.
-    if (state === "missing" && (await closedBatch(tenantId, batchId))) return <LeadsInPage step="review" ownContinue><ImportNotUnderReview /></LeadsInPage>;
+    if (state === "missing" && (await closedBatch(tenantId, batchId))) return <ImportNotUnderReview />;
     // An id that was never staged, or is not this tenant's, is genuinely not found. One that was
     // already imported is not — and showing the framework's 404 for it reads as though the import
     // was lost rather than finished.
     if (state !== "committed") return notFound();
-    return <LeadsInPage step="review" ownContinue><ImportAlreadyImported /></LeadsInPage>;
+    return <ImportAlreadyImported />;
   }
 
   // The campaign's and vendor's names, so the screen can say what these leads will be attributed
@@ -59,6 +68,10 @@ export default async function ImportReviewPage({ params }: { params: Promise<{ b
     maybeSingle(): Promise<{ data: unknown; error: unknown }>;
   };
   const db = getSupabaseServiceClient() as unknown as { from(table: string): LooseQuery };
+  // Territory, as the lead lists count it, so the review can say before the commit how much of the
+  // file is in states nobody here is licensed in. A loss, not a vendor credit (user decision).
+  // Started beside the names rather than after them: the same reads, run side by side.
+  const territoryRead = licensedStates(tenantId).catch(() => null);
   const campaign = plan.campaignId
     ? ((await db.from("tenant_campaigns").select("name, status, vendor_id").eq("tenant_id", tenantId).eq("id", plan.campaignId).maybeSingle()).data as { name?: string; status?: string; vendor_id?: string } | null)
     : null;
@@ -68,10 +81,7 @@ export default async function ImportReviewPage({ params }: { params: Promise<{ b
     : null;
 
   const { buckets, rows, dncBreakdown } = planBuckets(plan);
-
-  // Territory, as the lead lists count it, so the review can say before the commit how much of the
-  // file is in states nobody here is licensed in. A loss, not a vendor credit (user decision).
-  const territory = await licensedStates(tenantId).catch(() => null);
+  const territory = await territoryRead;
   // The file's column that carries the state: the mapped one, or a header literally named "state"
   // when the file was staged without a saved mapping (the parser's by-name match).
   const stateHeader = plan.mapping
@@ -79,7 +89,7 @@ export default async function ImportReviewPage({ params }: { params: Promise<{ b
     : "state";
 
   // Step 3 · Clean of the one Leads page (owner pick B, 2026-10-28): what the file holds, before anything is written.
-  return <LeadsInPage step="review" ownContinue><ImportReviewBridge plan={{
+  return <ImportReviewBridge plan={{
     batchId,
     fileName: plan.fileName ?? null,
     totalRows: plan.totalRows,
@@ -97,7 +107,7 @@ export default async function ImportReviewPage({ params }: { params: Promise<{ b
     licensedStates: territory,
     stateHeader,
     noState: plan.noState ?? null,
-  }} /></LeadsInPage>;
+  }} />;
 }
 
 /** Whether this tenant has the batch and it was closed without importing (discarded, or its check stopped). */
@@ -106,6 +116,7 @@ async function closedBatch(tenantId: string, batchId: string) {
   type Row = { data: { status?: string } | null; error: unknown };
   type Query = { select(columns: string): Query; eq(column: string, value: unknown): Query; maybeSingle(): Promise<Row> };
   const db = getSupabaseServiceClient() as unknown as { from(table: string): Query };
-  const row = await db.from("agent_lead_import_batches").select("status").eq("tenant_id", tenantId).eq("id", batchId).maybeSingle().catch(() => null);
+  // A query builder is thenable but has no `.catch` of its own: wrap it, or a closed or unknown id throws instead of answering.
+  const row = await Promise.resolve(db.from("agent_lead_import_batches").select("status").eq("tenant_id", tenantId).eq("id", batchId).maybeSingle()).catch(() => null);
   return row?.data?.status === "failed";
 }

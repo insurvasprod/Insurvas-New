@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 
 import { useMedicationSuggest } from "./use-medication-suggest";
 
+import { CheckBox } from "@/components/ui/check-box";
 const DATALIST_ID = "medication-name-suggestions";
 const cell = cn(control, "mt-0");
 
@@ -98,9 +99,7 @@ export function MedicationTable({
                       <input aria-label={`What ${label} is prescribed for`} className={cn(cell, "min-w-36")} value={r.prescribedFor} disabled={readOnly} placeholder="Condition" onChange={(e) => patch(r.id, { prescribedFor: e.target.value })} />
                     )}
                     <label className="inline-flex shrink-0 items-center gap-1.5 text-sm text-muted-foreground">
-                      <input
-                        type="checkbox"
-                        className="size-4 accent-[var(--primary)]"
+                      <CheckBox
                         checked={r.prescribedForUnknown}
                         disabled={readOnly}
                         onChange={(e) => patch(r.id, { prescribedForUnknown: e.target.checked, prescribedFor: e.target.checked ? "" : r.prescribedFor })}

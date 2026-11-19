@@ -14,6 +14,7 @@ import { dateTime, dayMonth, dayMonthYear, viewerTimeZone } from "@/lib/format/d
 import { notify } from "@/lib/notify";
 import { ChoiceCard, CodeCard, send, ShownOnce, Steps, TickCard, whenWords } from "./shared";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * Settings › Integrations, round 8 option A · the key's pop-ups: the new-key steps (A4–A6), rotate
  * with overlap and revoke by name (A7), and the 90-day idle question (A8).
@@ -35,7 +36,7 @@ function KeyShownOnce({ apiKey, scopes, origin, presetLabel, copied, onCopied }:
         <CodeCard code={requestSample(language, origin, apiKey, samplePath(scopes))} language={language} onLanguage={setLanguage} />
       </div>
       <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--body)]">
-        <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={copied} onChange={(event) => onCopied(event.target.checked)} />
+        <CheckBox checked={copied} onChange={(event) => onCopied(event.target.checked)} />
         I&rsquo;ve copied the key somewhere safe
       </label>
     </div>

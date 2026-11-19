@@ -369,11 +369,12 @@ export function TableView({
 
   return (
     <div className="flex flex-col">
-      {/* The bulk actions, directly under the workspace toolbar, only while leads are ticked. */}
+      {/* The bulk actions, directly under the workspace toolbar: slides over the table's header while leads are ticked. */}
       <BulkBar
         count={selection.count}
         noun={["lead", "leads"]}
         onClear={selection.clear}
+        selectAll={<SelectAllCheckbox selection={selection} ids={pageIds} label="Select every lead on this page" />}
         actions={<>
           <Button type="button" variant="outline" onClick={exportSelected}><Download aria-hidden="true" />Export selected</Button>
           {/* One request for every ticked lead (POST /api/app/leads/move takes lead_ids); the

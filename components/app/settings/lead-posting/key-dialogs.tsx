@@ -5,9 +5,10 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { checkboxControl, control, Field } from "@/components/ui/field";
+import { control, Field } from "@/components/ui/field";
 import { ChoiceCard, CopyField, copyText, maskedAddress, NeedsUpdate } from "./shared";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * Rotate and revoke (board A10), and the new key shown once. Rotate can keep the old key working for
  * a 24-hour grace window (needs 20261112100100); revoke asks for the vendor's name.
@@ -27,7 +28,7 @@ export function RotateDialog({ vendorName, r8Ready, busy, onCancel, onRotate }: 
           <ChoiceCard name="rotate-grace" selected={grace} disabled={!r8Ready} onSelect={() => setGrace(true)} title={<>Old key works for 24 more hours{!r8Ready && <NeedsUpdate />}</>} sub="Gives them time to switch" />
         </div>
         <label className="flex items-center gap-2 text-sm text-[var(--body)]">
-          <input type="checkbox" className={checkboxControl} checked={email} onChange={(event) => setEmail(event.target.checked)} />
+          <CheckBox checked={email} onChange={(event) => setEmail(event.target.checked)} />
           Email {vendorName} the new instructions
         </label>
         <DialogFooter>
@@ -89,7 +90,7 @@ export function RevealDialog({ vendorName, value, postingUrl, graceUntil, onDone
         </DialogHeader>
         <KeyBox value={value} postingUrl={postingUrl} />
         <label className="flex items-center gap-2 text-sm text-[var(--body)]">
-          <input type="checkbox" className={checkboxControl} checked={copied} onChange={(event) => setCopied(event.target.checked)} />
+          <CheckBox checked={copied} onChange={(event) => setCopied(event.target.checked)} />
           I&rsquo;ve copied the key somewhere safe
         </label>
         <DialogFooter>

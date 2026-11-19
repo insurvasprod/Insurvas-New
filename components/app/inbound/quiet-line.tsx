@@ -61,8 +61,8 @@ export function QuietLine({ availability, statusSince, now, inLine, teammatesTak
       <section aria-label="Nobody in line" className="m-glass flex shrink-0 flex-wrap items-center gap-4 rounded-xl border border-border px-5 py-5">
         <span aria-hidden="true" className={cn("relative grid size-12 shrink-0 place-items-center rounded-full", ready ? "bg-[var(--primary-soft)] text-[var(--accent-ink)]" : onBreak ? "bg-[var(--warning-surface)] text-[var(--warning-ink)]" : "bg-[var(--surface-alt)] text-[var(--body)]")}>
           <Icon className="size-5" />
-          {/* A slow ring while you are reachable: small and calm, still under reduced motion. */}
-          {ready && <span className="absolute -inset-1.5 rounded-full border-[1.5px] border-[var(--primary)] opacity-0 motion-safe:animate-[m-ring_2.4s_ease-out_infinite]" />}
+          {/* One ring as you become reachable (Wave D: one pulse per change, never a loop); it rests after that. */}
+          {ready && <span className="m-listen-ring absolute -inset-1.5 rounded-full border-[1.5px] border-[var(--primary)] opacity-0" />}
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="m-0 text-base font-semibold tracking-[-0.01em] text-[var(--ink)]">{title}</h2>

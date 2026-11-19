@@ -1,0 +1,62 @@
+[
+  {
+    "src": "/docs/shots/settings/ai-assistant/1.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Read the status line",
+    "focus": {
+      "x": 264,
+      "y": 0,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/ai-assistant/2.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Look over What it does",
+    "focus": {
+      "x": 82,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/ai-assistant/3.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Your data tab",
+    "focus": {
+      "x": 190,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/ai-assistant/4.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check Data controls",
+    "focus": {
+      "x": 720,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/ai-assistant/5.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Join the early list if you want it",
+    "focus": {
+      "x": 720,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  }
+]

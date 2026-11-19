@@ -16,7 +16,7 @@ import { InfoTip } from "@/components/ui/info-tip";
 import { NextUp, type NextUpTone } from "@/components/app/lead-sources/next-up";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/ui/page-header";
-import { PageLoading } from "@/components/ui/page-loading";
+import { StreamFallback } from "@/components/ui/stream-section";
 import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import { Callout, DashedCard, st } from "@/components/app/settings/primitives";
@@ -664,7 +664,15 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
       </DashedCard>
     );
   }
-  if (!info && !loadFailed) return <PageLoading rows={6} />;
+  // Frame first (UI-CONSISTENCY §7a): the title draws at once and the form loads as one block where it will be.
+  if (!info && !loadFailed) {
+    return (
+      <div className="m-stagger flex w-full min-w-0 flex-col gap-4">
+        {!embedded && <PageHeader title="Import leads" />}
+        <StreamFallback shape="form" rows={4} />
+      </div>
+    );
+  }
 
   // Board LirI1 (owner pick 2026-10-29, Leads in round 3): one card, Into (the campaign, or your own
   // book, or a new campaign), Product, then the drop zone, which holds the file once it is dropped.
@@ -726,7 +734,7 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
       <Card role="region" aria-label="The list" className="min-w-0 gap-3.5 p-4.5">
         <div className={ROW}>
           <label htmlFor="lead-campaign" className={ROW_LABEL}>Into</label>
-          <select id="lead-campaign" className={cn(inputControl, "w-auto min-w-0 flex-1 sm:max-w-[420px]")} required value={campaignId} disabled={campaigns.length === 0} onChange={(event) => chooseCampaign(event.target.value)}>
+          <select id="lead-campaign" className={cn(inputControl, "w-auto min-w-0 flex-1 sm:max-w-[420px]")} required data-guide="lead-import-campaign" value={campaignId} disabled={campaigns.length === 0} onChange={(event) => chooseCampaign(event.target.value)}>
             <option value="">{campaigns.length === 0 ? "No campaign yet" : "Choose a campaign"}</option>
             {visibleCampaigns.map((item) => <option key={item.id} value={item.id}>{campaignLabel(item)}</option>)}
           </select>
@@ -770,7 +778,8 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
 
         {/* The drop zone. Before a file: the target. After it: the file, and a drop here replaces it. */}
         <div
-          className={cn("flex min-h-[220px] min-w-0 flex-col items-center justify-center gap-2.5 rounded-[14px] border-2 border-dashed px-6 py-8 text-center transition-colors", dragging ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[color-mix(in_srgb,var(--primary)_45%,transparent)] bg-[color-mix(in_srgb,var(--primary)_4%,transparent)]")}
+          data-drag-over={dragging ? "" : undefined}
+          className={cn("m-dropzone flex min-h-[220px] min-w-0 flex-col items-center justify-center gap-2.5 rounded-[14px] border-2 border-dashed px-6 py-8 text-center", dragging ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[color-mix(in_srgb,var(--primary)_45%,transparent)] bg-[color-mix(in_srgb,var(--primary)_4%,transparent)]")}
           onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={(event) => { event.preventDefault(); setDragging(false); void takeFile(event.dataTransfer.files?.[0]); }}
@@ -849,9 +858,9 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
           {!vendorId && <InfoTip label="About keeping this map">Choose the campaign above to keep this map for its vendor’s next file.</InfoTip>}
           {columnsSettled
             ? <span role="status" className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--accent-ink)]"><Check className="size-4" aria-hidden />{vendorId && mapUnchanged ? `Saved for ${vendorName}'s next file` : "Columns checked"}</span>
-            : <Button type="button" variant="outline" disabled={Boolean(mappingSummary.blockedReason)} title={mappingSummary.blockedReason ?? undefined} onClick={() => void confirmColumns()}>Looks right</Button>}
+            : <Button type="button" data-guide="lead-import-columns-ok" variant="outline" disabled={Boolean(mappingSummary.blockedReason)} title={mappingSummary.blockedReason ?? undefined} onClick={() => void confirmColumns()}>Looks right</Button>}
         </span>
-        <ul className="m-0 grid min-w-0 list-none gap-x-6 p-0 xl:grid-cols-2">
+        <ul data-guide="lead-import-columns" className="m-0 grid min-w-0 list-none gap-x-6 p-0 xl:grid-cols-2">
           {mappingRows.map((row) => {
             const status = mappingSummary.statuses.get(row.header);
             const { Icon, text, tone } = columnStatus(row, status);
