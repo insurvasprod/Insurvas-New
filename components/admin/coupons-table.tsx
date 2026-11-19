@@ -1,30 +1,23 @@
 "use client";
 
-import { StatusChip } from "@/components/ui/status-chip";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-import { Pager, paginate } from "@/components/ui/pager";
-import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
-import { EmptyState, NoMatches } from "@/components/admin/empty-state";
-import { st, pillTone } from "@/components/app/settings/primitives";
+import { CouponCreateSheet } from "@/components/admin/coupon-create-dialog";
+import { COUPON_CHIP, CouponSheet } from "@/components/admin/billing/coupon-sheet";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { ErrorState } from "@/components/ui/page-states";
+import { EmptyState, ErrorState, NoMatches } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
+import { StatusChip } from "@/components/ui/status-chip";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
+import { setParamsInPlace } from "@/components/ui/nav-pending";
 import type { CouponRow } from "@/lib/coupons/constants";
 import type { CouponStatus } from "@/lib/coupons/discount";
 import {
   COUPON_STATUS_LABEL,
-  COUPON_STATUS_TONE,
   EXPIRING_SOON_DAYS,
   describeDiscount,
   describeRedemptions,
@@ -37,54 +30,65 @@ import {
   type CouponPlanRef,
   type ExpiryFilter,
 } from "@/lib/coupons/format";
-import { notify } from "@/lib/notify";
-import { cn } from "@/lib/utils";
-
+import type { CouponOfferRef, CouponRedemption } from "@/lib/coupons/queries";
+import { formatCentsAsCurrency } from "@/lib/money";
 
 type StatusFilter = "all" | CouponStatus;
 type TypeFilter = "any" | "percent" | "fixed";
 
-const USD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const STATUSES: readonly StatusFilter[] = ["all", "active", "deactivated", "expired", "exhausted"];
+const TYPES: readonly TypeFilter[] = ["any", "percent", "fixed"];
+const EXPIRIES: readonly ExpiryFilter[] = ["any", "soon", "dated", "none"];
+const pick = <T extends string>(value: string | null, allowed: readonly T[], fallback: T): T => (value && (allowed as readonly string[]).includes(value) ? (value as T) : fallback);
 
 /**
- * The coupons list (board p-adm-coupons): one TableCard with its toolbar inside and the pager at
- * its foot.
+ * The coupons list (admin round 1, billing-r2 screen 8): one TableCard with its toolbar inside and the pager at its
+ * foot, one line a row, the status the row's one chip. A row opens the coupon as a right sheet.
  *
- * Every coupon is on the client (tens, not thousands), so search, the filters and paging are
- * instant and the counts exact. `nowIso` comes from the server so a coupon's status is decided once
- * and the browser cannot disagree with it during hydration.
- *
- * Deactivate is the one action a row has, in the last column.
+ * Every coupon is on the client (tens, not thousands), so search, the filters and paging are instant and the counts
+ * exact. The search, the filters, the open coupon (`?coupon=`) and the create sheet (`?new=1`, `&from=<id>` to
+ * duplicate) live in the URL without a round trip (setParamsInPlace), so a link or a reload lands on the same view.
+ * `nowIso` comes from the server so a coupon's status is decided once and the browser cannot disagree with it.
  */
 export function CouponsTable({
   coupons,
   plans,
   discountGiven,
+  redemptions,
+  offersByCoupon,
   nowIso,
   listError,
 }: {
   coupons: CouponRow[];
   /** Null when the plans could not be read. */
-  plans: CouponPlanRef[] | null;
+  plans: (CouponPlanRef & { is_archived: boolean })[] | null;
   /** Cents off our invoices per coupon id; null when it could not be read. */
   discountGiven: Record<string, number> | null;
+  /** Applications per coupon id; null when they could not be read. */
+  redemptions: Record<string, CouponRedemption[]> | null;
+  /** Offers per coupon id; null when they could not be read. */
+  offersByCoupon: Record<string, CouponOfferRef[]> | null;
   nowIso: string;
   listError: boolean;
 }) {
   const router = useRouter();
+  const params = useSearchParams();
   const [refreshing, startRefresh] = useTransition();
   const now = useMemo(() => new Date(nowIso), [nowIso]);
-  const planMap = useMemo(() => (plans ? new Map(plans.map((p) => [p.id, p])) : null), [plans]);
+  const planMap = useMemo(() => (plans ? new Map<string, CouponPlanRef>(plans.map((p) => [p.id, p])) : null), [plans]);
 
-  const [status, setStatus] = useState<StatusFilter>("all");
-  const [search, setSearch] = useState("");
-  const [expiry, setExpiry] = useState<ExpiryFilter>("any");
-  const [type, setType] = useState<TypeFilter>("any");
-  const [page, setPage] = useState(1);
+  const status = pick(params.get("status"), STATUSES, "all");
+  const type = pick(params.get("type"), TYPES, "any");
+  const expiry = pick(params.get("expiry"), EXPIRIES, "any");
+  const search = params.get("q") ?? "";
+  const page = Math.max(1, Number(params.get("page")) || 1);
+  const openId = params.get("coupon");
+  const creating = params.get("new") === "1";
+  const duplicateOf = creating ? coupons.find((c) => c.id === params.get("from")) ?? null : null;
   const pageSize = useFittingPageSize(480, 45);
-  const [pending, setPending] = useState<CouponRow | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [dialogError, setDialogError] = useState<string | null>(null);
+
+  const set = (patch: Record<string, string | null>) => setParamsInPlace(patch);
+  const filter = (patch: Record<string, string | null>) => set({ ...patch, page: null });
 
   const sorted = useMemo(() => sortActiveFirst(coupons, now), [coupons, now]);
   const filtered = useMemo(() => {
@@ -99,238 +103,118 @@ export function CouponsTable({
 
   const { current, rows: shown } = paginate(filtered, page, pageSize);
   const anyFilter = status !== "all" || expiry !== "any" || type !== "any" || search.trim() !== "";
-
-  function clearAll() {
-    setExpiry("any");
-    setType("any");
-    setStatus("all");
-    setSearch("");
-    setPage(1);
-  }
-
-  function closeDialog() {
-    if (busy) return;
-    setPending(null);
-    setDialogError(null);
-  }
-
-  async function deactivate(coupon: CouponRow) {
-    setBusy(true);
-    setDialogError(null);
-    const res = await fetch(`/api/admin/coupons/${coupon.id}/deactivate`, { method: "POST" }).catch(() => null);
-    const body = res ? await res.json().catch(() => null) : null;
-    setBusy(false);
-    if (!res || !res.ok) {
-      // Kept in the dialog: the answer says whether anything changed, and that must be read.
-      setDialogError(body?.error ?? "Whop could not be reached, so nothing was changed. Try again.");
-      return;
-    }
-    notify.done(body?.message ?? `${coupon.code} deactivated`);
-    setPending(null);
-    router.refresh();
-  }
+  const clearAll = () => filter({ status: null, type: null, expiry: null, q: null });
+  const open = openId ? coupons.find((c) => c.id === openId) ?? null : null;
 
   return (
     <>
       <TableCard
         className="min-w-0"
-        footer={<Pager page={current} pageSize={pageSize} total={filtered.length} noun={filtered.length === 1 ? "coupon" : "coupons"} suffix="active first, then newest" onPage={setPage} />}
+        footer={<Pager page={current} pageSize={pageSize} total={filtered.length} noun={filtered.length === 1 ? "coupon" : "coupons"} suffix="active first, then newest" onPage={(next) => set({ page: next > 1 ? String(next) : null })} />}
         toolbar={
           <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
-            <ToolbarSearch
-              value={search}
-              onChange={(value) => {
-                setSearch(value);
-                setPage(1);
-              }}
-              placeholder="Search code"
-            />
-            <select
-              aria-label="Status"
-              value={status}
-              onChange={(event) => {
-                setStatus(event.target.value as StatusFilter);
-                setPage(1);
-              }}
-              className={toolbarControl}
-            >
+            <ToolbarSearch value={search} onChange={(value) => filter({ q: value || null })} placeholder="Search code" />
+            <select aria-label="Status" value={status} onChange={(event) => filter({ status: event.target.value === "all" ? null : event.target.value })} className={toolbarControl}>
               <option value="all">All statuses</option>
               <option value="active">Active</option>
               <option value="deactivated">Deactivated</option>
               <option value="expired">Expired</option>
               <option value="exhausted">Exhausted</option>
             </select>
-            <select
-              aria-label="Expiry"
-              value={expiry}
-              onChange={(event) => {
-                setExpiry(event.target.value as ExpiryFilter);
-                setPage(1);
-              }}
-              className={toolbarControl}
-            >
+            <select aria-label="Discount type" value={type} onChange={(event) => filter({ type: event.target.value === "any" ? null : event.target.value })} className={toolbarControl}>
+              <option value="any">Any discount type</option>
+              <option value="percent">Percentage</option>
+              <option value="fixed">Fixed amount</option>
+            </select>
+            <select aria-label="Expiry" value={expiry} onChange={(event) => filter({ expiry: event.target.value === "any" ? null : event.target.value })} className={toolbarControl}>
               <option value="any">Any expiry</option>
               <option value="soon">Active, expiring within {EXPIRING_SOON_DAYS} days</option>
               <option value="dated">Has an expiry date</option>
               <option value="none">Never expires</option>
             </select>
-            <select
-              aria-label="Discount type"
-              value={type}
-              onChange={(event) => {
-                setType(event.target.value as TypeFilter);
-                setPage(1);
-              }}
-              className={toolbarControl}
-            >
-              <option value="any">Any discount type</option>
-              <option value="percent">Percentage</option>
-              <option value="fixed">Fixed amount</option>
-            </select>
-            {anyFilter && (
-              <Button type="button" variant="ghost" onClick={clearAll}>
-                Clear
-              </Button>
-            )}
+            {anyFilter && <Button type="button" variant="ghost" onClick={clearAll}>Clear</Button>}
           </DataToolbar>
         }
       >
-        <table className={cn(st.table, "min-w-[980px]")}>
-          <thead>
-            <tr className={st.headRow}>
-              <th scope="col" className={cn(st.th, "w-[150px]")}>Code</th>
-              <th scope="col" className={cn(st.th, "w-[120px]")}>Discount</th>
-              <th scope="col" className={st.th}>Restrictions</th>
-              <th scope="col" className={cn(st.th, "w-[130px]")}>Redemptions</th>
-              <th scope="col" className={cn(st.th, "w-[130px]")}>Expires</th>
-              <th scope="col" className={cn(st.th, "w-[130px]")}>Status</th>
-              <th scope="col" className={cn(st.th, "w-[120px] text-right")}>
-                <span className="sr-only">Action</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="m-seq">
-            {listError && (
-              <tr>
-                <td colSpan={7} className="border-t border-[var(--border)] p-0">
-                  <ErrorState
-                    title="The coupons could not be read"
-                    detail="The list did not load, so it is not shown as empty. Reload the page; if it keeps failing, the error is in the server log."
-                  />
-                </td>
-              </tr>
-            )}
-            {!listError && coupons.length === 0 && (
-              <tr>
-                <td colSpan={7} className="border-t border-[var(--border)] p-0">
-                  <EmptyState title="No coupons yet" hint="Create one to hand out a price break at Whop checkout." />
-                </td>
-              </tr>
-            )}
-            {coupons.length > 0 && filtered.length === 0 && (
-              <tr>
-                <td colSpan={7} className="border-t border-[var(--border)] p-0">
-                  <NoMatches noun="coupons" onClear={clearAll} />
-                </td>
-              </tr>
-            )}
-            {shown.map((coupon) => {
-              const state = statusOf(coupon, now);
-              const given = discountGiven?.[coupon.id];
-              return (
-                <tr key={coupon.id} className="m-row hover:bg-[var(--brand-50)]">
-                  <td className={st.td}>
-                    <code className="font-mono text-sm font-semibold text-[var(--ink)]">{coupon.code}</code>
-                  </td>
-                  <td
-                    className={cn(st.td, "whitespace-nowrap")}
-                    title={
-                      given === undefined
-                        ? undefined
-                        : `${USD.format(given / 100)} taken off our invoices so far (applied by staff or offers)`
-                    }
-                  >
-                    {describeDiscount(coupon)}
-                  </td>
-                  <td className={st.td}>{describeRestrictions(coupon, planMap)}</td>
-                  <td className={cn(st.td, "tabular-nums whitespace-nowrap")}>
-                    {describeRedemptions(coupon.redeemed_count, coupon.max_redemptions)}
-                  </td>
-                  <td className={cn(st.td, "tabular-nums")}>
-                    {coupon.expires_at ? <ExpiryDate iso={coupon.expires_at} /> : "—"}
-                  </td>
-                  <td className={st.td}>
-                    <StatusChip tone={pillTone(COUPON_STATUS_TONE[state])} dot>
-                      {COUPON_STATUS_LABEL[state]}
-                    </StatusChip>
-                  </td>
-                  <td className={cn(st.td, "text-right")}>
-                    {coupon.is_active && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="text-[var(--error-ink)]"
-                        onClick={() => {
-                          setDialogError(null);
-                          setPending(coupon);
-                        }}
-                        aria-label={`Deactivate ${coupon.code}`}
-                      >
-                        Deactivate
-                      </Button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        {listError ? (
+          <ErrorState title="The coupons could not be read" detail="The list did not load, so it is not shown as empty. Reload the page; if it keeps failing, the error is in the server log." />
+        ) : coupons.length === 0 ? (
+          <EmptyState title="No coupons yet" hint="Create one to hand out a price break at Whop checkout." />
+        ) : filtered.length === 0 ? (
+          <NoMatches noun="coupons" onClear={clearAll} />
+        ) : (
+          <Table className="min-w-[1040px]">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Code</TableHead>
+                <TableHead>Discount</TableHead>
+                <TableHead>Restrictions</TableHead>
+                <TableHead className="text-right">Redemptions</TableHead>
+                <TableHead>Expires</TableHead>
+                <TableHead>Used by offers</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead><span className="sr-only">Open</span></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {shown.map((coupon) => {
+                const state = statusOf(coupon, now);
+                const given = discountGiven?.[coupon.id];
+                const offers = offersByCoupon?.[coupon.id] ?? [];
+                const openRow = () => set({ coupon: coupon.id });
+                return (
+                  <TableRow key={coupon.id} className="cursor-pointer" onClick={openRow} aria-selected={openId === coupon.id}>
+                    <TableCell className="font-mono font-semibold text-foreground">
+                      <button type="button" className="hover:underline" onClick={(event) => { event.stopPropagation(); openRow(); }} aria-label={`Open ${coupon.code}`}>{coupon.code}</button>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap" title={given === undefined ? undefined : `${formatCentsAsCurrency(given)} taken off our invoices so far (applied by staff or offers)`}>
+                      {describeDiscount(coupon)}
+                    </TableCell>
+                    <TableCell className="max-w-[16rem] truncate" title={describeRestrictions(coupon, planMap)}>{describeRestrictions(coupon, planMap)}</TableCell>
+                    <TableCell className="text-right tabular-nums whitespace-nowrap">{describeRedemptions(coupon.redeemed_count, coupon.max_redemptions)}</TableCell>
+                    <TableCell className="tabular-nums whitespace-nowrap">
+                      {coupon.expires_at ? <time dateTime={coupon.expires_at} title={utcDayTime(coupon.expires_at)}>{utcDay(coupon.expires_at)}</time> : "—"}
+                    </TableCell>
+                    <TableCell className="max-w-[14rem] truncate" title={offers.map((o) => o.name).join(", ") || undefined}>
+                      {offersByCoupon === null ? <span className="text-muted-foreground">—</span> : offers.length === 0 ? <span className="text-muted-foreground">None</span> : offers.map((o) => o.name).join(", ")}
+                    </TableCell>
+                    <TableCell><StatusChip tone={COUPON_CHIP[state]} dot>{COUPON_STATUS_LABEL[state]}</StatusChip></TableCell>
+                    <TableCell className="text-right text-muted-foreground" aria-hidden="true">›</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
       </TableCard>
 
-      <Dialog open={pending !== null} onOpenChange={(value) => !value && closeDialog()}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Deactivate {pending?.code}</DialogTitle>
-            <DialogDescription>
-              {pending?.whop_promo_code_id
-                ? "Whop is asked to switch the promo code off first, so it can no longer be entered at checkout. Only when Whop confirms is it marked deactivated here; if Whop refuses or does not answer, nothing changes."
-                : "This coupon has no Whop promo code on record, so only this record changes."}{" "}
-              Subscriptions already carrying it keep their discount until it runs out. The coupon stays on this list.
-            </DialogDescription>
-          </DialogHeader>
-          {dialogError && (
-            <p role="alert" className="m-0 text-sm leading-[1.5] text-[var(--error-ink)]">
-              {dialogError}
-            </p>
-          )}
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={closeDialog} disabled={busy}>
-              Cancel
-            </Button>
-            <Button type="button" variant="destructive" onClick={() => pending && void deactivate(pending)} disabled={busy}>
-              {busy ? "Deactivating…" : "Deactivate coupon"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
+      {open && !creating && (
+        <CouponSheet
+          key={open.id}
+          coupon={open}
+          now={now}
+          planMap={planMap}
+          givenCents={discountGiven === null ? undefined : discountGiven[open.id] ?? 0}
+          redemptions={redemptions === null ? null : redemptions[open.id] ?? []}
+          offers={offersByCoupon === null ? null : offersByCoupon[open.id] ?? []}
+          onClose={() => set({ coupon: null })}
+          onDuplicate={() => set({ new: "1", from: open.id })}
+          onChanged={() => startRefresh(() => router.refresh())}
+        />
+      )}
 
-/** The expiry day in UTC, with the exact moment in UTC and in the reader's own time on hover. */
-function ExpiryDate({ iso }: { iso: string }) {
-  const ref = useRef<HTMLTimeElement>(null);
-  const full = utcDayTime(iso);
-  useEffect(() => {
-    const date = new Date(iso);
-    if (ref.current && !Number.isNaN(date.getTime())) {
-      ref.current.title = `${full} · ${date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "medium" })} your time`;
-    }
-  }, [iso, full]);
-  return (
-    <time ref={ref} dateTime={iso} title={full} className="whitespace-nowrap">
-      {utcDay(iso)}
-    </time>
+      {creating && (
+        <CouponCreateSheet
+          key={duplicateOf?.id ?? "new"}
+          plans={plans ? plans.filter((p) => !p.is_archived) : null}
+          duplicateOf={duplicateOf}
+          onClose={() => set({ new: null, from: null })}
+          onCreated={() => {
+            set({ new: null, from: null, coupon: null, q: null, status: null, type: null, expiry: null, page: null });
+            startRefresh(() => router.refresh());
+          }}
+        />
+      )}
+    </>
   );
 }

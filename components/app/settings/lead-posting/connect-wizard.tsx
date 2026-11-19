@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { checkboxControl, control, Field, Switch } from "@/components/ui/field";
+import { control, Field, Switch } from "@/components/ui/field";
 import { notify } from "@/lib/notify";
 import { centsFromInput, dollars, type LeadPostBoard } from "@/lib/leadPost/board";
 import type { TestResult } from "@/lib/leadPost/boardStore";
@@ -18,6 +18,7 @@ import { KeyBox } from "./key-dialogs";
 import { ChoiceCard, NeedsUpdate, send } from "./shared";
 import { DEFAULT_TEST_LEAD, describeLead, payloadFor, TestLeadDialog, TestResultCard, type TestLead } from "./test-runner";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * "Connect a vendor" (board A3–A6), four steps in one dialog:
  *   1 Vendor & campaign  a lead source, or a new name; the campaign their leads go to (campaigns whose
@@ -201,7 +202,7 @@ export function ConnectWizard({ board, origin, presetVendorId, onClose, onConnec
             {header(`${vendorName}'s key`, [campaignName, priceCents && !Number.isNaN(priceCents) ? `${dollars(priceCents)} per accepted lead` : null].filter(Boolean).join(" · ") || "Shown once")}
             <KeyBox value={minted.key} postingUrl={postingUrl} />
             <label className="flex items-center gap-2 text-sm text-[var(--body)]">
-              <input type="checkbox" className={checkboxControl} checked={copied} onChange={(event) => setCopied(event.target.checked)} />
+              <CheckBox checked={copied} onChange={(event) => setCopied(event.target.checked)} />
               I&rsquo;ve copied the key somewhere safe
             </label>
             <DialogFooter>

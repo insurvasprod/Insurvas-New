@@ -1,0 +1,110 @@
+[
+  {
+    "src": "/docs/shots/settings/team-access/1.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Invite someone",
+    "focus": {
+      "x": 720,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/team-access/2.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Enter their name and work email",
+    "focus": {
+      "x": 720,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/team-access/3.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Pick What they'll do",
+    "focus": {
+      "x": 720,
+      "y": 194,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/team-access/4.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Add the states they're Licensed in",
+    "focus": {
+      "x": 720,
+      "y": 406,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/team-access/5.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click a person to open their sheet",
+    "focus": {
+      "x": 264,
+      "y": 27,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/team-access/6.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check their Access",
+    "focus": {
+      "x": 663,
+      "y": 171,
+      "w": 777,
+      "h": 485
+    }
+  },
+  {
+    "src": "/docs/shots/settings/team-access/7.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Keep their Licensed in states up to date",
+    "focus": {
+      "x": 601,
+      "y": 317,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/team-access/8.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Invites tab",
+    "focus": {
+      "x": 206,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/team-access/9.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Deactivated tab",
+    "focus": {
+      "x": 299,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  }
+]

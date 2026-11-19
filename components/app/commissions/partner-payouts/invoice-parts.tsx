@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DoneStamp } from "@/components/ui/done-stamp";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, control } from "@/components/ui/field";
 import { MoreMenu } from "@/components/ui/more-menu";
@@ -48,10 +49,13 @@ export function InvoiceActions({ run, readOnly }: { run: { id: string; status: s
   const [paying, setPaying] = useState<Paying | null>(null);
   const [voiding, setVoiding] = useState<string | null>(null);
   const [identity, setIdentity] = useState(false);
+  // Marked paid: "Paid" stamps in where the button was, once (Tier 2 motion, 2026-11-18), and stays on the title line.
+  const [stamped, setStamped] = useState<string | null>(null);
   const act = async (payload: Record<string, unknown>, done: string) => {
     setBusy(true);
     try {
       await post(run.id, payload);
+      if (payload.action === "paid") setStamped("Paid");
       notify.done(done);
       setPaying(null);
       setVoiding(null);
@@ -74,8 +78,9 @@ export function InvoiceActions({ run, readOnly }: { run: { id: string; status: s
   if (readOnly) return <MoreMenu label="More for this invoice" items={downloads} />;
   return (
     <>
+      {stamped ? <DoneStamp label={stamped} className="self-center" /> : null}
       {run.status === "draft" ? <Button disabled={busy} onClick={() => void publish()}>Publish &amp; share</Button> : null}
-      {run.status === "published" && run.netCents > 0 ? <Button disabled={busy} onClick={() => setPaying({ on: today(), method: "ach", reference: "" })}>Mark paid</Button> : null}
+      {run.status === "published" && run.netCents > 0 && !stamped ? <Button disabled={busy} onClick={() => setPaying({ on: today(), method: "ach", reference: "" })}>Mark paid</Button> : null}
       <MoreMenu label="More for this invoice" items={[...downloads, run.status !== "void" && run.status !== "paid" && { label: "Void the invoice", onSelect: () => setVoiding("") }]} />
       {paying ? (
         <ConfirmDialog

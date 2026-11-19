@@ -8,9 +8,10 @@ import { loadFeatureSwitches } from "@/lib/features/killSwitch";
 import { applyKillSwitches } from "@/lib/features/killSwitchRules";
 import { nextSetupStep } from "@/lib/dashboard/checklist";
 import { allDocPages } from "@/lib/docs/content";
+import { docWhere } from "@/lib/docs/where";
 import { loadSetupPause, saveSetupGuideState } from "@/lib/dashboard/setupProgress";
 import { loadSetupCounts } from "@/lib/dashboard/setupCounts";
-import { loadViewerSetup } from "@/lib/dashboard/setupViewer";
+import { loadViewerSetup, startViewerSetupReads } from "@/lib/dashboard/setupViewer";
 import { SetupCelebration } from "@/components/app/setup/setup-celebration";
 import { SetupPath } from "@/components/app/setup/setup-path";
 import { buttonVariants } from "@/components/ui/button";
@@ -31,11 +32,14 @@ import { TableCard } from "@/components/ui/table-card";
 export default async function SetupPage({ searchParams }: { searchParams: Promise<{ celebrate?: string | string[]; step?: string | string[] }> }) {
   const context = await resolveTenantContext();
   if (!context) redirect("/app/login");
+  // Every read starts now, beside the plan read (one round trip, not two).
+  const reads = startViewerSetupReads(context.tenantId, context.userId, context.role === "owner" ? "owner" : "member");
+  const pausedRead = loadSetupPause(context.tenantId, context.userId);
   const [entitlement, switches] = await Promise.all([getEntitlement(context.tenantId), loadFeatureSwitches()]);
   const available = applyKillSwitches(entitlement.features, switches, context.tenantId);
   const [viewer, serverPaused] = await Promise.all([
-    loadViewerSetup(context, available, entitlement.limits.max_seats),
-    loadSetupPause(context.tenantId, context.userId),
+    loadViewerSetup(context, available, entitlement.limits.max_seats, reads),
+    pausedRead,
   ]);
   if (viewer.needsStamp) afterResponse(viewer.stamp);
   // The first visit writes this person's row, so their next sign-in lands on the dashboard (firstLoginLanding).
@@ -52,19 +56,19 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
 
   const pathStep = (step: (typeof checklist.steps)[number]) => ({
     key: step.key, label: step.label, path: step.path, why: step.why, instruction: step.instruction, target: step.target,
-    minutes: step.minutes, complete: step.complete, skipped: step.skipped, optional: step.optional,
+    minutes: step.minutes, complete: step.complete, skipped: step.skipped, optional: step.optional, where: docWhere(step.path),
   });
   const required = checklist.steps.filter((step) => !step.optional).map(pathStep);
   const optional = checklist.steps.filter((step) => step.optional).map(pathStep);
   const requiredDone = required.filter((step) => step.complete).length;
-  // Each step's Docs page: its video slot, "Watch how" and "Read it in Docs".
-  const docs = Object.fromEntries(allDocPages().filter((page) => page.chapter === "setup").map((page) => [page.slug, page.video]));
+  // Each step's Docs page, for "Read it in Docs" (its pictures come from lib/docs/shots.ts).
+  const docs = Object.fromEntries(allDocPages().filter((page) => page.chapter === "setup").map((page) => [page.slug, { key: page.slug, title: page.title }]));
   const docPages = allDocPages().filter((page) => page.chapter !== "setup").length;
   // The finished summary's figures (R4 G2): only for the owner, and only once Ready to sell is done.
   const counts = owner && required.length > 0 && requiredDone === required.length ? await loadSetupCounts(context.tenantId) : null;
 
   return (
-    <div className="flex min-h-0 flex-grow flex-col gap-4">
+    <div className="flex min-h-0 w-full flex-grow flex-col gap-4">
       {celebrate ? <SetupCelebration steps={checklist.total} done={checklist.completed} audience={viewer.audience} /> : null}
       <PageHeader
         title={owner ? "Get set up" : "Get started"}
@@ -83,7 +87,7 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
       />
       {checklist.steps.length === 0 ? (
         <TableCard>
-          <EmptyState title="Nothing to set up" hint="Your plan has no setup steps for your role." action={<Link href="/app/dashboard" className={buttonVariants({ variant: "outline" })}>Go to the dashboard</Link>} />
+          <EmptyState title="Nothing to set up" hint="Your plan has no setup steps for your role." action={<Link href="/app/dashboard" className={buttonVariants({ variant: "outline" })}>Go to the Dashboard</Link>} />
         </TableCard>
       ) : (
         <SetupPath

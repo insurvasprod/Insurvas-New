@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, Suspense, use, useContext, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,7 @@ import { localDay } from "./servicing-shared";
  * never a toast; the toasts say what happened, in board 2·2's words.
  */
 
-type DialogKey = "send" | "check" | "cancel";
+export type DialogKey = "send" | "check" | "cancel";
 
 async function post(body: Record<string, unknown>) {
   const response = await fetch("/api/app/retention/servicing", {
@@ -68,10 +68,27 @@ const Ctx = createContext<((key: DialogKey) => void) | null>(null);
 /**
  * Wraps the request page so its title line and its body open the same dialogs. `back` is the page's own address
  * without `?step=`, where a saved step lands.
+ *
+ * Frame first (UI-CONSISTENCY §7a): the page draws before its read lands, so the request's facts and the dialog
+ * `?step=` opens on arrival come as one promise (`read`); the dialogs wait for it on their own, never the page.
  */
-export function ServicingRequestShell({ request: facts, back, initial, children }: { request: RequestFacts; back: string; initial: DialogKey | null; children: ReactNode }) {
+export function ServicingRequestShell({ read, back, children }: { read: Promise<{ facts: RequestFacts; initial: DialogKey | null } | null>; back: string; children: ReactNode }) {
+  // undefined: nothing chosen yet, so the dialog `?step=` asked for (once the read says it can open) is the one open.
+  const [open, setOpen] = useState<DialogKey | null | undefined>(undefined);
+  return (
+    <Ctx.Provider value={setOpen}>
+      {children}
+      <Suspense fallback={null}><RequestDialogs read={read} back={back} open={open} setOpen={setOpen} /></Suspense>
+    </Ctx.Provider>
+  );
+}
+
+function RequestDialogs({ read, back, open: chosen, setOpen }: { read: Promise<{ facts: RequestFacts; initial: DialogKey | null } | null>; back: string; open: DialogKey | null | undefined; setOpen: (key: DialogKey | null) => void }) {
   const router = useRouter();
-  const [open, setOpen] = useState<DialogKey | null>(initial);
+  const loaded = use(read);
+  if (!loaded) return null;
+  const { facts, initial } = loaded;
+  const open = chosen === undefined ? initial : chosen;
   const close = () => {
     setOpen(null);
     if (initial) router.replace(back, { scroll: false });
@@ -82,12 +99,11 @@ export function ServicingRequestShell({ request: facts, back, initial, children 
     router.refresh();
   };
   return (
-    <Ctx.Provider value={setOpen}>
-      {children}
+    <>
       {open === "send" && <MarkSentDialog facts={facts} onClose={close} onDone={done} />}
       {open === "check" && <CheckItDialog facts={facts} onClose={close} onDone={done} />}
       <CancelRequestDialog id={facts.id} name={facts.name} kind={facts.kind} open={open === "cancel"} onOpenChange={(next) => { if (!next) close(); }} onDone={done} />
-    </Ctx.Provider>
+    </>
   );
 }
 

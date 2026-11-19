@@ -6,17 +6,23 @@
  *   crumbs are kept, for a menu), and keeps the last two.
  * - On a narrow screen only the parent is shown, as "← Parent" (`parentOf`).
  */
-export type Crumb = { label: string; href?: string };
+import type { ReactNode } from "react";
+
+/**
+ * `node`, when given, is drawn in place of `label`: a record's name streamed in behind its shape (UI-CONSISTENCY §7a,
+ * data-titled detail pages). `label` still names the crumb (its key, and whether it is kept).
+ */
+export type Crumb = { label: string; href?: string; node?: ReactNode };
 
 export type TrailEntry =
-  | { kind: "crumb"; label: string; href?: string; current: boolean }
+  | { kind: "crumb"; label: string; href?: string; node?: ReactNode; current: boolean }
   | { kind: "more"; hidden: Crumb[] };
 
 export function buildTrail(crumbs: Crumb[], max = 4): TrailEntry[] {
   const items = crumbs.filter((crumb) => crumb.label.trim().length > 0);
   const last = items.length - 1;
   // The current page is plain text, whatever href it was given.
-  const entry = (crumb: Crumb, index: number): TrailEntry => ({ kind: "crumb", label: crumb.label, href: index === last ? undefined : crumb.href, current: index === last });
+  const entry = (crumb: Crumb, index: number): TrailEntry => ({ kind: "crumb", label: crumb.label, href: index === last ? undefined : crumb.href, current: index === last, ...(crumb.node === undefined ? {} : { node: crumb.node }) });
   if (items.length <= max) return items.map(entry);
   return [entry(items[0], 0), { kind: "more", hidden: items.slice(1, -2) }, entry(items[last - 1], last - 1), entry(items[last], last)];
 }

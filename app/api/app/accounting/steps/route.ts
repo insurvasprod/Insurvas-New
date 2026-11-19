@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
-import { getEntitlement } from "@/lib/entitlements/get";
 import type { AccountingStepCounts } from "@/lib/accounting/steps";
 import { loadTodo } from "@/lib/accounting/todoStore";
 import { todoCounts } from "@/lib/accounting/todoCore";
@@ -23,7 +22,8 @@ export async function GET() {
   const auth = await requireFeatureRole("profit_and_loss", ROLES);
   if (auth instanceof NextResponse) return auth;
   const tenantId = auth.context.tenantId;
-  const features = await getEntitlement(tenantId).then((e) => e.features, () => [] as string[]);
+  // The feature check already read the plan: no second trip for it.
+  const features = auth.entitlement.features;
   const payouts = features.includes("payout_runs");
   const tax = features.includes("tax_summaries");
   const { items, failed } = await loadTodo(tenantId, { bank: true, bills: true, expenses: true, payouts, tax });

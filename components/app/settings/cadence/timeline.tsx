@@ -12,6 +12,8 @@
  */
 
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { useFlip } from "@/components/ui/use-flip";
+import { holdAt, holdUp, letGo } from "@/components/ui/use-drag-lift";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BANDS, shortWait, type Band } from "@/lib/cadence/draft";
@@ -66,6 +68,9 @@ export function CadenceTimeline({
   const suppressClick = useRef(false);
   const [target, setTarget] = useState<{ n: number; day: number; band: Band } | null>(null);
   const [focusCall, setFocusCall] = useState<number | null>(null);
+  // Wave C (plan item 12): a held dot lifts and follows the pointer; let go, it glides into its new day (or back home),
+  // and the later calls a move pushes along glide to theirs (useFlip, keyed per call). Arrow-key moves glide too.
+  const flip = useFlip(gridRef);
 
   // A move re-places the dot; keep the keyboard on it.
   useEffect(() => {
@@ -86,7 +91,8 @@ export function CadenceTimeline({
   const later = calls.filter((call) => call.day >= days).length;
 
   const cellAt = (x: number, y: number) => {
-    const element = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-cell]");
+    // The held dot rides under the pointer, so look through it to the day beneath.
+    const element = document.elementsFromPoint(x, y).find((hit) => !hit.closest(".m-lifted"))?.closest<HTMLElement>("[data-cell]");
     if (!element || !gridRef.current?.contains(element)) return null;
     return { day: Number(element.dataset.day), band: element.dataset.band as Band };
   };
@@ -100,7 +106,9 @@ export function CadenceTimeline({
     const state = drag.current;
     if (!state) return;
     if (!state.moved && Math.hypot(event.clientX - state.x, event.clientY - state.y) < 5) return;
+    if (!state.moved) holdUp(event.currentTarget);
     state.moved = true;
+    holdAt(event.currentTarget, event.clientX - state.x, event.clientY - state.y);
     const cell = cellAt(event.clientX, event.clientY);
     if (cell) setTarget({ n: state.n, ...cell });
   };
@@ -108,6 +116,7 @@ export function CadenceTimeline({
     const state = drag.current;
     drag.current = null;
     if (!state?.moved) return;
+    flip.place(`call-${call.n}`, letGo(event.currentTarget));
     suppressClick.current = true;
     const cell = cellAt(event.clientX, event.clientY) ?? (target ? { day: target.day, band: target.band } : null);
     setTarget(null);
@@ -219,6 +228,7 @@ export function CadenceTimeline({
                   <button
                     type="button"
                     data-call={call.n}
+                    data-flip-key={`call-${call.n}`}
                     aria-label={name}
                     className={cn(
                       dotClass(look, compact ? "sm" : "md", openCall === call.n),
@@ -228,7 +238,7 @@ export function CadenceTimeline({
                     onPointerDown={(event) => onPointerDown(event, call)}
                     onPointerMove={onPointerMove}
                     onPointerUp={(event) => onPointerUp(event, call)}
-                    onPointerCancel={() => { drag.current = null; setTarget(null); }}
+                    onPointerCancel={(event) => { if (drag.current?.moved) letGo(event.currentTarget); drag.current = null; setTarget(null); }}
                     onKeyDown={(event) => onKeyDown(event, call)}
                     onClick={(event) => {
                       if (suppressClick.current) {

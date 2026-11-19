@@ -22,7 +22,8 @@ export default async function PartnerQualityLeadsPage({ params, searchParams }: 
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Partner quality" description="Compare lead quality and conversion across partners." />;
   if (!actAsPage(guard, ["owner", "producer", "bookkeeper"])) return <RoleGateNotice featureLabel="Partner quality" detail="Owners, producers, and bookkeepers can review partner lead quality." />;
   if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Partner quality" detail="In an agency, the owner and admins review partner quality." />;
-  const [{ partnerId }, query] = await Promise.all([params, searchParams]);
+  const { partnerId } = await params;
+  const query = await searchParams;
   const metric = single(query.metric) ?? "";
   if (!UUID.test(partnerId) || !PARTNER_QUALITY_METRICS.includes(metric as PartnerQualityMetric)) notFound();
   const period = validPartnerQualityPeriod(single(query.from), single(query.to)) ?? defaultPartnerQualityPeriod();

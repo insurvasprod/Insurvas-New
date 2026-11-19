@@ -14,6 +14,7 @@ import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
+import { CheckBox } from "@/components/ui/check-box";
 export type EditorTarget = { kind: "pair"; row: CoverageRow } | { kind: "new" };
 
 const STATUS: Record<StateDisclosure["status"], { label: string; tone: "success" | "info" | "neutral" }> = {
@@ -345,7 +346,7 @@ export function StateDisclosureEditor({
                 <legend className="sr-only">States</legend>
                 {US_STATES.map(([code, name]) => (
                   <label key={code} className="flex items-center gap-2 text-sm leading-[1.5] text-[var(--body)]" title={name}>
-                    <input type="checkbox" checked={states.includes(code)} onChange={() => toggleState(code)} />
+                    <CheckBox checked={states.includes(code)} onChange={() => toggleState(code)} />
                     {code}
                   </label>
                 ))}

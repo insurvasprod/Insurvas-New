@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * The one toolbar every list uses (2026-09-28 review: "filters somewhere, the search bar somewhere
  * else — nothing is consistent"). It goes in <TableCard toolbar={…}> and always reads the same way:
@@ -228,7 +229,7 @@ export function ToolbarCheckbox({ checked, onChange, label, disabled = false, ti
 }) {
   return (
     <label title={title} className={cn("inline-flex h-9 cursor-pointer items-center gap-2 rounded-md px-1 text-sm text-foreground select-none", disabled && "cursor-not-allowed opacity-50")}>
-      <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
+      <CheckBox checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
       {label}
     </label>
   );

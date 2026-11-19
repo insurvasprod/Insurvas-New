@@ -31,6 +31,7 @@ import { MoreMenu } from "@/components/ui/more-menu";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
+import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -125,12 +126,16 @@ const CELL_PILL: Record<CellStatus["kind"], { tone: StatusTone; label: (status: 
   ended: { tone: "neutral", label: () => "Ended" },
 };
 
+/** The vault's read, as the app's cache keys it (lib/client/resource-cache.ts). */
+const VAULT_KEY = "/api/app/appointment-vault";
+
 /**
  * `readOnlyReason`: why editing is off for an owner whose account is read-only (LA-4.10). The edit
  * controls are already hidden (`canEdit`); this one line says why, instead of them just vanishing.
  */
 export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = null, framed = false }: { canEdit: boolean; isOwner: boolean; readOnlyReason?: string | null; framed?: boolean }) {
-  const [vault, setVault] = useState<Vault | null>(null);
+  // A repeat visit draws the last vault at once, then asks again (lib/client/resource-cache.ts).
+  const [vault, setVault] = useState<Vault | null>(() => seed<Vault>(VAULT_KEY)?.data ?? null);
   const [saving, setSaving] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
   // The checkbox grid's draft, exactly as Settings › States & licences keeps it.
@@ -178,14 +183,14 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
     setSelected(new Set(active));
   }, []);
 
-  const fetchVault = useCallback(async () => {
-    const response = await fetch("/api/app/appointment-vault", { cache: "no-store" });
-    const body = await response.json().catch(() => null);
-    if (!response.ok) {
-      notify.block(body?.error ?? "Could not load the appointment vault");
+  // Through the app's cache: `fresh` after a change, so it is never the old answer.
+  const fetchVault = useCallback(async (fresh = true) => {
+    try {
+      return await (fresh ? loadResource<Vault>(VAULT_KEY) : readResource<Vault>(VAULT_KEY));
+    } catch (cause) {
+      notify.block(cause instanceof Error && cause.message ? cause.message : "Could not load the appointment vault");
       return null;
     }
-    return body as Vault;
   }, []);
 
   const load = useCallback(async () => {
@@ -197,7 +202,10 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const next = await fetchVault();
+      // A fresh document starts from the kept vault once it has hydrated, then asks again.
+      const kept = peek<Vault>(VAULT_KEY);
+      if (kept?.data) applyVault(kept.data);
+      const next = await fetchVault(false);
       if (!cancelled && next) applyVault(next);
     })();
     return () => {
@@ -267,7 +275,13 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
   }
 
   // Inside Compliance the frame already draws the title, so only the rows wait.
-  if (!vault) return framed ? <TableCard><SectionLoading rows={6} columns={5} label="Loading appointments and licences" /></TableCard> : <PageLoading />;
+  // Standalone, the title draws at once and the page loads under it (UI-CONSISTENCY §7a, frame first).
+  if (!vault) return framed ? <TableCard><SectionLoading rows={6} columns={5} label="Loading appointments and licences" /></TableCard> : (
+    <div className="flex w-full min-w-0 flex-col gap-4">
+      <PageHeader title="Appointments & licences" description="Whether you may legally write this product in this state today." />
+      <PageLoading header={false} />
+    </div>
+  );
 
   const extended = vault.extendedFields !== false;
   const detailsAvailable = vault.appointmentDetails !== false;

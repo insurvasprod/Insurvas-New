@@ -249,7 +249,7 @@ export function CarriersSettings() {
   if (firstRun) {
     return (
       <SettingsStack className="gap-4">
-        <SettingsSectionHeader actions={<><ToolbarSearch value={setupSearch} onChange={setSetupSearch} placeholder="Find a carrier or state" className="sm:w-60" /><Button type="button" variant="ghost" onClick={() => { setFirstRun(false); if (window.location.hash.includes("carriers-setup")) window.location.hash = "#carriers"; }}>{yours.length ? "Done" : "Skip for now"}</Button></>} />
+        <SettingsSectionHeader actions={<><span data-guide="carriers-setup-search" className="inline-flex"><ToolbarSearch value={setupSearch} onChange={setSetupSearch} placeholder="Find a carrier or state" className="sm:w-60" /></span><Button type="button" variant="ghost" onClick={() => { setFirstRun(false); if (window.location.hash.includes("carriers-setup")) window.location.hash = "#carriers"; }}>{yours.length ? "Done" : "Skip for now"}</Button></>} />
         {deepLinks}
         <StatusLine tone={selling.length ? "ok" : "warn"}>
           {selling.length ? `${selling.length} ${selling.length === 1 ? "carrier" : "carriers"} picked · saved as you tick` : "No carriers yet · quotes, appointments and commission files need at least one"}

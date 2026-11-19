@@ -1,23 +1,25 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 
 import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { fileDay } from "@/lib/ingestion/constants";
-import { loadFileHead, loadRowStory } from "@/lib/ingestion/fileOutcomeStore";
+import { loadFileHead, loadRowStory, type FileHead } from "@/lib/ingestion/fileOutcomeStore";
 import { CHANGE_FIELD_LABELS, ROW_OUTCOME_LABELS, ROW_OUTCOME_TONES, changeValue, policyHref } from "@/lib/ingestion/fileStages";
 import { TARGET_FIELDS, unwrapExcelText } from "@/lib/ingestion/layout";
 import { isRecordUuid } from "@/lib/ingestion/path";
 import { fileHref, rowHref, type ColumnTrace } from "@/lib/ingestion/trace";
 import { loadRowTrace } from "@/lib/ingestion/traceStore";
 import type { NeedsYouKind } from "@/lib/needsYou/kinds";
-import { DataInPage } from "@/components/app/data-in/data-in-page";
+import { DataInPage, RecordName } from "@/components/app/data-in/data-in-page";
 import { RowAsSent, type AsSentEntry } from "@/components/app/book/row/row-as-sent";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { Button } from "@/components/ui/button";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
+import { StreamSection } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
 
 /**
@@ -105,9 +107,36 @@ export default async function RawRowPage({ params }: { params: Promise<{ fileId:
   const n = Number(rowNumber);
   if (!isRecordUuid(fileId) || !Number.isInteger(n) || n < 1) notFound();
   const tenantId = guard.context.tenantId;
-  const [row, head] = await Promise.all([loadRowTrace(tenantId, fileId, n), loadFileHead(tenantId, fileId)]);
-  if (!row || !head) notFound();
-  const story = await loadRowStory(tenantId, fileId, n);
+  // Frame first (UI-CONSISTENCY §7a): the trail, the stepper and the frame draw at once; the row's name (and its file's)
+  // wait behind their shapes, and the row streams in. The three reads are today's, all started before the frame
+  // returns (the row's story beside the row and the file, as it needs neither).
+  const story = loadRowStory(tenantId, fileId, n);
+  story.catch(() => undefined);
+  const model = Promise.all([loadRowTrace(tenantId, fileId, n), loadFileHead(tenantId, fileId)]).then(async ([row, head]) => (row && head ? rowModel(row, head, await story) : null));
+
+  return (
+    <DataInPage
+      step="files"
+      title={<RecordName read={model.then((m) => m?.title)} />}
+      breadcrumbs={[
+        { label: "Book of business", href: "/app/carrier-files" },
+        { label: "Carrier files", href: "/app/carrier-files" },
+        { label: "The file", href: fileHref(fileId), node: <RecordName read={model.then((m) => m?.row.file.name ?? "The file")} crumb /> },
+        { label: "Row", node: <RecordName read={model.then((m) => m?.rowWord ?? `Row ${n}`)} crumb /> },
+      ]}
+      chip={<Suspense fallback={null}><Chip read={model} /></Suspense>}
+      facts={<Suspense fallback={null}><Facts read={model} /></Suspense>}
+      actions={<Suspense fallback={<Stepper />}><Steps read={model} /></Suspense>}
+    >
+      <StreamSection shape="strip+table"><RowBody read={model} /></StreamSection>
+    </DataInPage>
+  );
+}
+
+type Model = Promise<ReturnType<typeof rowModel> | null>;
+
+/** What the row page shows, worked out from the row, its file and its story (none of it reads anything). */
+function rowModel(row: NonNullable<Awaited<ReturnType<typeof loadRowTrace>>>, head: FileHead, story: Awaited<ReturnType<typeof loadRowStory>>) {
   const outcome = story?.row ?? null;
   const policy = row.snapshot?.policyNumber ?? outcome?.policyNumber ?? row.lines[0]?.policyNumber ?? null;
   const carrierId = row.snapshot?.carrierId ?? row.lines[0]?.carrierId ?? head.carrierId;
@@ -202,52 +231,76 @@ export default async function RawRowPage({ params }: { params: Promise<{ fileId:
         { label: "Client", value: linkedTo, footnote: outcome?.reviewId ? "pick the client below" : outcome?.linkedBy && outcome.linkedBy !== "Not linked" ? outcome.linkedBy.toLowerCase() : "no client yet" },
       ];
 
+  return { row, title, rowWord, outcome, prev, next, policy: policyLink(), summary, steps, acted, idle, missing };
+}
+
+async function Chip({ read }: { read: Model }) {
+  const m = await read;
+  return m?.outcome ? <StatusChip tone={ROW_OUTCOME_TONES[m.outcome.outcome]}>{ROW_OUTCOME_LABELS[m.outcome.outcome]}</StatusChip> : null;
+}
+
+async function Facts({ read }: { read: Model }) {
+  const m = await read;
+  if (!m) return null;
+  const { row, rowWord } = m;
   return (
-    <DataInPage
-      step="files"
-      title={title}
-      breadcrumbs={[{ label: "Book of business", href: "/app/carrier-files" }, { label: "Carrier files", href: "/app/carrier-files" }, { label: row.file.name, href: fileHref(row.file.id) }, { label: rowWord }]}
-      chip={outcome ? <StatusChip tone={ROW_OUTCOME_TONES[outcome.outcome]}>{ROW_OUTCOME_LABELS[outcome.outcome]}</StatusChip> : undefined}
-      facts={
-        <p className="m-0 mt-1 flex min-w-0 flex-wrap gap-x-1.5 text-sm leading-normal text-muted-foreground">
-          <span title={`Line ${row.rowNumber} of the file as sent (line 1 is the header)`}>{rowWord} in</span>
-          <Link href={fileHref(row.file.id)} className="text-foreground hover:underline" title="Back to the file">{row.file.name}</Link>
-          <span>· {row.file.carrierName ?? "Carrier not known"} · file of {fileDay(row.file.fileDate)}</span>
-        </p>
-      }
-      actions={<>
-        {prev ? <Button asChild variant="outline"><Link href={prev} title="The row before this one">‹ Row</Link></Button> : <Button type="button" variant="outline" disabled title="This is the file's first row">‹ Row</Button>}
-        {next ? <Button asChild variant="outline"><Link href={next} title="The row after this one">Row ›</Link></Button> : <Button type="button" variant="outline" disabled title="This is the file's last row">Row ›</Button>}
-        {policyLink() ? <Button asChild><Link href={policyLink()!}>Open the policy</Link></Button> : <Button type="button" disabled title="This row made no policy">Open the policy</Button>}
-      </>}
-    >
-      <StatStrip label="This row">
-        {summary.map((tile) => <StatTile key={tile.label} label={tile.label} value={tile.value} footnote={tile.footnote} />)}
-      </StatStrip>
-      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-start gap-4 min-[1100px]:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-        <TableCard title="What happened" description={`${acted.length} of ${steps.length} steps did something for this row`}>
-          <ol className="m-0 list-none border-t border-border p-0">
-            {acted.map((step, index) => (
-              // One line per step (owner 2026-11-11): the stage, what it did (the whole sentence is the tooltip), one chip
-              // for its state and a short next step.
-              <li key={step.stage} className="grid min-h-[2.75rem] grid-cols-[24px_112px_minmax(0,1fr)_auto_auto] items-center gap-x-3 border-b border-border px-4 py-2 text-sm">
-                <span aria-hidden="true" className="tabular-nums text-muted-foreground">{index + 1}</span>
-                <span className="whitespace-nowrap font-medium text-foreground">{step.stage}</span>
-                <span className="min-w-0 truncate text-foreground" title={typeof step.text === "string" ? step.text : undefined}>{step.text}</span>
-                <StatusChip tone={step.state === "needs" ? "warning" : "good"}>{DOT_SAID[step.state]}</StatusChip>
-                <span className="whitespace-nowrap text-right [&>a:hover]:underline">{step.action ? <>{step.action} ›</> : null}</span>
-              </li>
-            ))}
-          </ol>
-          {idle.length > 0 && (
-            <p className="m-0 px-4 py-3 text-sm text-muted-foreground" title={idle.map((step) => `${step.stage}: ${typeof step.text === "string" ? step.text : ""}`).join("\n")}>
-              Nothing to do for this row: {idle.map((step) => step.stage).join(", ")}
-              {idle.find((step) => step.action) ? <> · {idle.filter((step) => step.action).map((step) => <span key={step.stage} className={linkWrap}>{step.action}</span>)}</> : null}
-            </p>
-          )}
-        </TableCard>
-        <RowAsSent entries={row.columns.map(asSent)} missing={missing} noMap={!row.map} />
-      </div>
-    </DataInPage>
+    <p className="m-0 mt-1 flex min-w-0 flex-wrap gap-x-1.5 text-sm leading-normal text-muted-foreground">
+      <span title={`Line ${row.rowNumber} of the file as sent (line 1 is the header)`}>{rowWord} in</span>
+      <Link href={fileHref(row.file.id)} className="text-foreground hover:underline" title="Back to the file">{row.file.name}</Link>
+      <span>· {row.file.carrierName ?? "Carrier not known"} · file of {fileDay(row.file.fileDate)}</span>
+    </p>
+  );
+}
+
+/** ‹ Row, Row › and Open the policy: disabled until the row is read, and where there is none. */
+function Stepper({ prev = null, next = null, policy = null }: { prev?: string | null; next?: string | null; policy?: string | null }) {
+  return (
+    <>
+      {prev ? <Button asChild variant="outline"><Link href={prev} title="The row before this one">‹ Row</Link></Button> : <Button type="button" variant="outline" disabled title="This is the file's first row">‹ Row</Button>}
+      {next ? <Button asChild variant="outline"><Link href={next} title="The row after this one">Row ›</Link></Button> : <Button type="button" variant="outline" disabled title="This is the file's last row">Row ›</Button>}
+      {policy ? <Button asChild><Link href={policy}>Open the policy</Link></Button> : <Button type="button" disabled title="This row made no policy">Open the policy</Button>}
+    </>
+  );
+}
+
+async function Steps({ read }: { read: Model }) {
+  const m = await read;
+  return m ? <Stepper prev={m.prev} next={m.next} policy={m.policy} /> : <Stepper />;
+}
+
+async function RowBody({ read }: { read: Model }) {
+  const m = await read;
+  if (!m) notFound();
+  const { row, summary, steps, acted, idle, missing } = m;
+  return (
+    <>
+    <StatStrip label="This row">
+      {summary.map((tile) => <StatTile key={tile.label} label={tile.label} value={tile.value} footnote={tile.footnote} />)}
+    </StatStrip>
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-start gap-4 min-[1100px]:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+      <TableCard title="What happened" description={`${acted.length} of ${steps.length} steps did something for this row`}>
+        <ol className="m-0 list-none border-t border-border p-0">
+          {acted.map((step, index) => (
+            // One line per step (owner 2026-11-11): the stage, what it did (the whole sentence is the tooltip), one chip
+            // for its state and a short next step.
+            <li key={step.stage} className="grid min-h-[2.75rem] grid-cols-[24px_112px_minmax(0,1fr)_auto_auto] items-center gap-x-3 border-b border-border px-4 py-2 text-sm">
+              <span aria-hidden="true" className="tabular-nums text-muted-foreground">{index + 1}</span>
+              <span className="whitespace-nowrap font-medium text-foreground">{step.stage}</span>
+              <span className="min-w-0 truncate text-foreground" title={typeof step.text === "string" ? step.text : undefined}>{step.text}</span>
+              <StatusChip tone={step.state === "needs" ? "warning" : "good"}>{DOT_SAID[step.state]}</StatusChip>
+              <span className="whitespace-nowrap text-right [&>a:hover]:underline">{step.action ? <>{step.action} ›</> : null}</span>
+            </li>
+          ))}
+        </ol>
+        {idle.length > 0 && (
+          <p className="m-0 px-4 py-3 text-sm text-muted-foreground" title={idle.map((step) => `${step.stage}: ${typeof step.text === "string" ? step.text : ""}`).join("\n")}>
+            Nothing to do for this row: {idle.map((step) => step.stage).join(", ")}
+            {idle.find((step) => step.action) ? <> · {idle.filter((step) => step.action).map((step) => <span key={step.stage} className={linkWrap}>{step.action}</span>)}</> : null}
+          </p>
+        )}
+      </TableCard>
+      <RowAsSent entries={row.columns.map(asSent)} missing={missing} noMap={!row.map} />
+    </div>
+    </>
   );
 }

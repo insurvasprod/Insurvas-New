@@ -77,7 +77,7 @@ export function sampleToday(scale = 1): HomeToday {
       sampled: false,
     },
     policies30: { count: 64, premiumCents: 8_426_000 },
-    setterWeek: { booked: 23, showed: 15, noShow: 4, closedOut: 19, closeable: 21 },
+    setterWeek: { booked: 23, showed: 15, noShow: 4, closedOut: 19, closeable: 21, days: [] },
     closeOut: { showed: 41, noShow: 9, awaiting: 4 },
   };
 }

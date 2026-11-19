@@ -45,6 +45,7 @@ import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
+import { useRowExit } from "@/components/ui/use-row-exit";
 import { StepSlot } from "@/components/app/step-frame/step-slot";
 import { StatementMappingFields } from "@/components/app/statement-import";
 import { STATEMENT_TAB_HOLDS, cleanPolicyNumber, statementFileHref, type StatementTab } from "@/components/app/commissions/statements/list-order";
@@ -67,6 +68,8 @@ import { cn } from "@/lib/utils";
 // Which lines each tab holds lives in list-order.ts (a plain module), so the server page can count them.
 const TAB_HOLDS = STATEMENT_TAB_HOLDS;
 const isWaiting = (line: StatementLineView) => TAB_HOLDS.waiting(line.review);
+/** Where a decision puts a line (the API's rule, lib/ledger/statementService.ts): what the row leaves for. */
+const AFTER: Record<StatementLineDecision["action"], StatementLineReview> = { accept: "accepted", match: "accepted", reject: "unmatched", leave_unmatched: "left_unmatched" };
 
 type Chip = "unmatched" | "proposed" | "chargeback";
 
@@ -250,6 +253,9 @@ export function StatementReview({
   const [search, setSearch] = useState("");
   const [openId, setOpenId] = useState<string | null>(initialLineId && lines.some((line) => line.id === initialLineId) ? initialLineId : null);
   const [refreshing, startRefresh] = useTransition();
+  // Tier 1 motion (2026-11-17): a decided line plays out, then the refresh takes it. A table row cannot close its
+  // height, so it fades and slides; the rows under it move up when the refresh lands.
+  const leave = useRowExit(lines);
   const pageSize = useFittingPageSize(420, 49);
   const unmatchedCount = lines.filter((line) => line.review === "unmatched").length;
   // LA-4.3 option c: lines set aside on purpose join a re-match only when the person ticks the box.
@@ -288,7 +294,13 @@ export function StatementReview({
       const next = options.from ? nextAfter(options.from) : null;
       notify.done(done, { detail: options.detail ?? (next ? `Row ${next.lineNumber} is open next.` : undefined) });
       if (options.from) setOpenId(next?.id ?? null);
-      router.refresh();
+      // The rows the decision takes off this view (an Accept leaves Waiting; a Reject leaves only the Proposed chip).
+      const leaving = decisions.filter((decision) => {
+        const review = AFTER[decision.action];
+        return !TAB_HOLDS[tab](review) || (chip !== null && chip !== "chargeback" && chip !== review);
+      }).map((decision) => decision.line_id);
+      if (leaving.length) void leave.exit(leaving, () => router.refresh());
+      else router.refresh();
       return true;
     } catch (reason) {
       notify.fail("The decision was not recorded.", { detail: reason instanceof Error ? reason.message : "Nothing was changed." });
@@ -393,7 +405,7 @@ export function StatementReview({
                 const chip = lineState(line);
                 return (
                   // A row opens its line's dialog (board 1·2); the policy link inside keeps its own way.
-                  <tr key={line.id} tabIndex={0} aria-label={`Open ${lineTitle(line)}`} className={cn("m-row cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", openId === line.id && "bg-[var(--primary-soft)]")}
+                  <tr key={line.id} {...leave.rowProps(line.id)} tabIndex={0} aria-label={`Open ${lineTitle(line)}`} className={cn("m-row cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", openId === line.id && "bg-[var(--primary-soft)]")}
                     onClick={(event) => { if (!(event.target as HTMLElement).closest("a, button")) setOpenId(line.id); }}
                     onKeyDown={(event) => { if ((event.key === "Enter" || event.key === " ") && event.target === event.currentTarget) { event.preventDefault(); setOpenId(line.id); } }}>
                     <td className="whitespace-nowrap font-medium text-foreground">

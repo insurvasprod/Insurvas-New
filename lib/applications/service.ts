@@ -5,6 +5,7 @@ import { appointmentIsActiveAt } from "@/lib/appointments/eligibility";
 import { maskFromLast4, normaliseProse } from "./formats";
 import { applicationKeysForLeadKeys, clientStateOf, prefillFromLead } from "./prefill";
 import { encryptSensitive } from "./crypto";
+import { openLeadValues } from "@/lib/leadValues/seal";
 import { fieldSetRequired, interviewQuestions, type StoredDefinition } from "./templates";
 import { fieldSetLayout } from "./fieldSetLayout";
 import { ApplicationError, db, isMissingSchema, rows, SchemaPendingError } from "./db";
@@ -94,7 +95,9 @@ export async function ensurePrimaryAttempt(input: { tenantId: string; userId: st
   const applicationId = created.data.id as string;
   if (role === "primary") {
     const lead = await client.from("agent_leads").select("values").eq("tenant_id", input.tenantId).eq("id", kase.data.lead_id).maybeSingle();
-    const values = (lead.data?.values ?? {}) as Record<string, unknown>;
+    // A sealed SSN on the lead (lib/leadValues/seal.ts) is opened here only to be encrypted again under
+    // the application's own scope below; it is never returned.
+    const values = openLeadValues(input.tenantId, lead.data?.values ?? {});
     const prefill = prefillFromLead(values).map((p) => {
       if (p.sensitive) {
         const enc = encryptSensitive(String(p.value), { tenantId: input.tenantId, applicationId, fieldKey: p.key });

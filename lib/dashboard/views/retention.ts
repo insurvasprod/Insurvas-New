@@ -181,7 +181,7 @@ const RETENTION_PAGES = {
 export async function loadRetentionView(props: DashViewProps): Promise<RetentionViewData> {
   const { context, available, scope, solo, zone, now, noMoney } = props;
   const role = context.role;
-  const open = (keys: readonly string[]) => firstOpenable(keys, available, role, solo);
+  const open = (keys: readonly string[]) => firstOpenable(keys, available, role, solo, props.gate);
   const links = {
     cases: open(["retention.save-queue"]),
     servicing: open(["retention.payment-repair"]),

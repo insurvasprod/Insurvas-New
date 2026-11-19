@@ -1,7 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit/log";
-import { getAdminSession } from "@/lib/adminAuth/requireAdminRole";
+import { resolveAdminContext } from "@/lib/adminAuth/requireAdminRole";
+import { endAdminSessions, type SessionVersionClient } from "@/lib/adminAuth/sessionVersion";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import {
   ADMIN_PENDING_2FA_COOKIE,
   ADMIN_SESSION_COOKIE,
@@ -10,17 +12,25 @@ import {
 } from "@/lib/adminAuth/session";
 
 export async function POST(request: NextRequest) {
-  // Who is signing out, from the verified cookie. No session (already expired, or never signed
-  // in) means there is nobody to attribute the sign-out to, and nothing is written.
-  const session = await getAdminSession();
+  // Who is signing out, from a session that is still live: signed, unexpired, an active admin and
+  // the current session version. A cookie that was already ended (or never valid) ends nothing
+  // further and writes nothing; otherwise a copied old cookie could keep signing its owner out.
+  const session = await resolveAdminContext();
 
   if (session) {
+    // Security review 2026-11, M-2: signing out ends this admin's sessions on the server, every
+    // browser at once, so a copy of the cookie stops working too. Until 20261117200000 is applied
+    // this is "unavailable" and signing out only clears the cookie, as before.
+    const ended = await endAdminSessions(getSupabaseServiceClient() as unknown as SessionVersionClient, session.sub);
+    if (ended === "error") console.error("[admin-logout] could not end the admin's sessions on the server");
+
     try {
       await audit({
         actorId: session.sub,
         action: "admin.logout",
         targetType: "admin_user",
         targetId: session.sub,
+        metadata: { sessions_ended: ended === "ended" },
         request,
       });
     } catch (error) {

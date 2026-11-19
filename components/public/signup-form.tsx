@@ -11,6 +11,7 @@ import { GoogleButton } from "@/components/portal/google-button";
 import { NewPasswordField, passwordLongEnough } from "@/components/app/password-field";
 import { BILLING_CYCLES, type BillingCycle } from "@/lib/money";
 
+import { CheckBox } from "@/components/ui/check-box";
 type LegalDoc = { id: string; doc_type: string; version: number; title: string; is_draft: boolean };
 
 type Props = {
@@ -128,12 +129,10 @@ export function SignupForm({ initialPlanCode, initialCycle, googleEnabled = fals
           <div className="space-y-2">
             {/* 44px tall only for a finger; with a mouse the line is its own height. */}
             <label className="flex cursor-pointer items-start gap-3 text-sm leading-normal tracking-[-0.02em] text-[var(--body)] pointer-coarse:min-h-11">
-              <input
-                type="checkbox"
+              <CheckBox
                 name="acceptTerms"
                 checked={accepted}
-                onChange={(event) => setAccepted(event.target.checked)}
-                className="mt-0.5 size-5 shrink-0 accent-[var(--accent-ink)]"
+                onChange={(event) => setAccepted(event.target.checked)} className="mt-0.5"
               />
               <span>
                 I agree to the{" "}

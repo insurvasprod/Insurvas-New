@@ -4,6 +4,7 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { AssignmentWorkspace } from "@/components/app/assignment-workspace";
 import { isAgencyTenant } from "@/lib/agency/audience";
+import { scopeFor } from "@/lib/agency/visibility";
 import { LeadsInPage } from "@/components/app/lead-sources/leads-in";
 import { isSoloWorkspace } from "@/lib/tenantTeam/solo";
 
@@ -16,7 +17,8 @@ export default async function AssignmentsPage() {
   const [agency, solo] = await Promise.all([isAgencyTenant(guard.context.tenantId), isSoloWorkspace(guard.context.tenantId)]);
   // Solo mode (owner 2026-10-29): an individual agent with no other caller has nobody to route to.
   if (solo) return <RoleGateNotice reason="solo" featureLabel="Lead routing" detail="You work alone, so new leads go straight to your dialer." action={{ href: "/app/dialer", label: "Open the dialer" }} />;
-  if (agency && guard.role !== "owner") return <RoleGateNotice reason="agency" featureLabel="Lead assignment" detail="In an agency the owner or an admin routes leads. Your assigned leads are in your queue." />;
+  // A narrowed session (producer, manager, assistant, setter) in an agency; the menu no longer offers this page to them.
+  if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Lead assignment" detail="In an agency the owner or an admin routes leads. Your assigned leads are in your queue." action={{ href: "/app/dialer", label: "Open the dialer" }} />;
   // One page with the agency's Lead routing (2026-10-26): in an agency the unassigned pool is a tab.
   // Step 5 · Route of the one Leads page (owner pick B, 2026-10-28).
   // Round 3 (board LirT1, 2026-10-30): the corner holds the step's own "Edit rules" and "Hand out N now".

@@ -19,6 +19,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
+import { useFlip } from "@/components/ui/use-flip";
 import type { PartnerLeadRow, PartnerPipelinePayload } from "@/lib/partnerLeads/types";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { stageLabel, stageTone, when } from "@/components/partner/lead-format";
@@ -31,6 +32,10 @@ import { countersFromLanes } from "@/lib/partnerLeads/counters";
 import { AGE_TONE_TEXT, ageShort, ageTone, boardColumns, laneOf, nobodyClaimedRow, oldestOpenIsStuck, type AgeThresholds, type AgeTone } from "@/lib/partnerLeads/view";
 import { NOBODY_CLAIMED_LABEL, type PartnerLane } from "@/lib/partnerLeads/lanes";
 import { cn } from "@/lib/utils";
+import { PARTNER_WORDS } from "@/lib/partnerAuth/portalAccess";
+import type { PartnerType } from "@/lib/partners/constants";
+
+const capitalWord = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
 
 type PipelineResponse = PartnerPipelinePayload;
 
@@ -77,9 +82,12 @@ function Age({ row, now, thresholds, className }: { row: PartnerLeadRow; now: nu
 
 function LeadCard({ row, href, now, thresholds, showSubmitter }: { row: PartnerLeadRow; href: string; now: number | null; thresholds?: AgeThresholds; showSubmitter?: boolean }) {
   const flagged = nobodyClaimedRow(row);
+  // Wave C (plan item 12): a card settles in where it lands (m-drop-in) — on a lane page, and in its new lane when the
+  // agency moves the lead — and one that changes place glides there (data-flip-key, useFlip on the board).
   return <Link
     href={href}
-    className="group block w-full rounded-md border border-border bg-card p-3 text-left no-underline transition-colors hover:border-[var(--primary)] hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+    data-flip-key={row.id}
+    className="m-drop-in group block w-full rounded-md border border-border bg-card p-3 text-left no-underline transition-colors hover:border-[var(--primary)] hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
   >
     <span className="flex items-start justify-between gap-2">
       <span className="min-w-0">
@@ -105,8 +113,8 @@ function LeadCard({ row, href, now, thresholds, showSubmitter }: { row: PartnerL
 /**
  * The filters a link opened the page with (LA-4.20: the partner home's figures open the rows behind
  * them), e.g. /partner/pipeline?stage_id=…&view=table or ?lane=new. A ?lead=<id> is handled by
- * the route, which redirects to that lead's own page. The page renders PageLoading
- * until its first read, so the server's empty state and this one draw the same markup.
+ * the route, which redirects to that lead's own page. Until its first read the page draws its title and a
+ * skeleton only, so the server's markup and this one match.
  */
 function linkedState() {
   const params = typeof window === "undefined" ? new URLSearchParams() : new URLSearchParams(window.location.search);
@@ -122,7 +130,8 @@ function linkedState() {
   };
 }
 
-export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerStatus: "draft" | "active" | "paused" | "offboarded"; role: PartnerRole; partnerName?: string | null; preview?: PipelinePreview }) {
+export function PartnerLeadPipeline({ role, partnerStatus, preview, partnerType = "publisher" }: { partnerStatus: "draft" | "active" | "paused" | "offboarded"; role: PartnerRole; partnerName?: string | null; preview?: PipelinePreview; /** LA-1.1: the page speaks the type's words ("Referrals" for an affiliate). */ partnerType?: PartnerType }) {
+  const words = PARTNER_WORDS[partnerType];
   const [linked] = useState(linkedState);
   const [data, setData] = useState<PipelineResponse | null>(preview?.data ?? null);
   const [filters, setFilters] = useState<Filters>(linked.filters);
@@ -137,6 +146,9 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   const [onlyFlagged, setOnlyFlagged] = useState(false);
   /** Age and Submitted are the same instant read two ways, so one direction serves both columns. */
   const [sort, setSort] = useState<{ key: "age" | "submitted"; dir: "asc" | "desc" }>({ key: "submitted", dir: "desc" });
+  /** The board's cards glide when a refresh moves one to another stage (the same kit as the Leads board). */
+  const boardRef = useRef<HTMLDivElement>(null);
+  useFlip(boardRef);
   /** Each pipeline lane pages independently so one busy stage doesn't affect the others. */
   const [lanePages, setLanePages] = useState<Partial<Record<PartnerLane, number>>>({});
   const [loading, setLoading] = useState(!preview);
@@ -284,7 +296,22 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
     (filters.date_from || filters.date_to) && { key: "dates", label: "Submitted", value: `${filters.date_from || "any"} to ${filters.date_to || "today"}`, onRemove: () => { setFilters((current) => ({ ...current, date_from: "", date_to: "" })); setPage(1); setLanePages({}); } },
   ].filter(Boolean) as ActiveFilter[];
 
-  if (firstLoad) return <PageLoading />;
+  // Frame first (UI-CONSISTENCY §7a): the title and its button draw at once; the figures and the board load under
+  // them. Nothing here reads the link's filters, so the server's markup and this one still match.
+  if (firstLoad) {
+    return (
+      <div className="m-stagger flex min-h-[calc(100dvh_-_7rem)] w-full min-w-0 flex-col gap-6">
+        <PageHeader
+          title={words.pipelineTitle}
+          description={role === "partner_admin" ? "Track leads submitted by you and your team." : "Track the leads you submitted."}
+          hideTitle
+          breadcrumbs={[{ label: "Leads" }, { label: words.pipelineTitle }]}
+          actions={partnerStatus === "active" ? <Button asChild size="sm"><a href={words.submitPath}><Send aria-hidden="true" />{words.submitLabel}</a></Button> : undefined}
+        />
+        <PageLoading header={false} />
+      </div>
+    );
+  }
 
   // The context selector leads the search; the view, inline filter and refresh controls match the
   // ordering in the manager's reference image.
@@ -422,7 +449,7 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   const empty = <div className="flex min-h-[24rem] flex-1 items-center justify-center">
     {search.trim() || hasFilters
       ? <NoMatches noun="leads" onClear={clearAll} />
-      : <EmptyState title="No leads yet" hint="Leads you submit appear here as they move through the pipeline." action={<Button asChild variant="outline" size="sm"><a href="/partner/submit-lead">Submit New Lead</a></Button>} />}
+      : <EmptyState title={`No ${words.many} yet`} hint={`${capitalWord(words.many)} you send appear here as they move through the pipeline.`} action={<Button asChild variant="outline" size="sm"><a href={words.submitPath}>{words.submitLabel}</a></Button>} />}
   </div>;
 
   const loadMore = canLoadMore && data
@@ -439,7 +466,7 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   // pager advances to the next set. Never constrain a lane's card list to a scrollable viewport:
   // that made a handful of leads scroll inside a column while also showing pagination.
   // Below md the lanes stack into one vertical read; on wider screens they sit side by side.
-  const board = !visibleRows.length ? empty : <div className="flex min-h-[24rem] flex-1 flex-col gap-3 overflow-x-auto p-3 md:flex-row">
+  const board = !visibleRows.length ? empty : <div ref={boardRef} className="flex min-h-[24rem] flex-1 flex-col gap-3 overflow-x-auto p-3 md:flex-row">
     {columns.map((column) => {
       const rows = laneRows.get(column.key) ?? [];
       const total = laneTotal(column.key);
@@ -516,13 +543,13 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
 
   return <div className="m-stagger flex min-h-[calc(100dvh_-_7rem)] w-full min-w-0 flex-col gap-6">
     <PageHeader
-      title="Lead Pipeline"
+      title={words.pipelineTitle}
       description={role === "partner_admin" ? "Track leads submitted by you and your team." : "Track the leads you submitted."}
       hideTitle
-      breadcrumbs={[{ label: "Leads" }, { label: "Lead Pipeline" }]}
+      breadcrumbs={[{ label: "Leads" }, { label: words.pipelineTitle }]}
       actions={<>
         {data && <LiveStamp updatedAt={data.generatedAt} staleAfterSeconds={45} />}
-        {partnerStatus === "active" && <Button asChild size="sm"><a href="/partner/submit-lead"><Send aria-hidden="true" />Submit New Lead</a></Button>}
+        {partnerStatus === "active" && <Button asChild size="sm"><a href={words.submitPath}><Send aria-hidden="true" />{words.submitLabel}</a></Button>}
       </>}
     />
     {error && data && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">{error}<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button></p>}

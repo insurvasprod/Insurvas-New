@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Callout, control, Field } from "@/components/app/settings/primitives";
+import { control, Field } from "@/components/app/settings/primitives";
 import type { CarrierRow } from "@/lib/carriers/constants";
 import {
   blockingSentence,
@@ -73,13 +73,14 @@ export function CarrierDeactivateDialog({
               </DialogDescription>
             </DialogHeader>
 
-            <Callout tone="warning" title="What deactivating does to those tenants">
-              <ul className="m-0 list-disc space-y-1 pl-5">
+            <section className="rounded-md border border-border p-3 text-sm leading-[1.5]" aria-label="What deactivating does to those tenants">
+              <h3 className="m-0 text-sm font-semibold text-foreground">What deactivating does to those tenants</h3>
+              <ul className="m-0 mt-1.5 list-disc space-y-1 pl-5 text-muted-foreground">
                 {DEACTIVATION_CONSEQUENCES.map((line) => (
                   <li key={line}>{line}</li>
                 ))}
               </ul>
-            </Callout>
+            </section>
 
             {canOverride && (
               <Field

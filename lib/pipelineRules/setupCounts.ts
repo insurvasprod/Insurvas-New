@@ -29,7 +29,7 @@ async function distinct(read: PromiseLike<{ data: Loose[] | null; error: unknown
 export const setupTabCounts = cache(async (tenantId: string): Promise<{ "rate-card": number | null; "carrier-rules": number | null; "agent-codes": number | null }> => {
   const [rates, rules, codes] = await Promise.all([
     distinct(db().from("expected_commission").select("carrier_id").eq("tenant_id", tenantId).eq("confidence", "no_rate_card").limit(10_000), (row) => row.carrier_id).catch(() => null),
-    loadCarrierCoverage(tenantId).then((view) => (view.available ? missingRuleCount(view.carriers) : null)).catch(() => null),
+    loadCarrierCoverage(tenantId, true).then((view) => (view.available ? missingRuleCount(view.carriers) : null)).catch(() => null),
     distinct(db().from("policy_current").select("carrier_id, agent_identifier").eq("tenant_id", tenantId).not("agent_identifier", "is", null).is("agent_user_id", null).limit(10_000), (row) => `${row.carrier_id}|${row.agent_identifier}`).catch(() => null),
   ]);
   return { "rate-card": rates, "carrier-rules": rules, "agent-codes": codes };

@@ -1,10 +1,8 @@
 "use client";
 
-import { useRouteSheet } from "@/components/app/route-sheet";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { AdminPageHeader } from "@/components/admin/page-header";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, toolbarControl } from "@/components/ui/data-toolbar";
 import { Input } from "@/components/ui/input";
@@ -24,13 +22,13 @@ import { call, layoutHref, readSample, sampleView } from "./shared";
 const keyFrom = (text: string, fileType: string) => `${text}_${fileType}`.toLowerCase().replace(/[^a-z0-9_]/g, "_").replace(/_+/g, "_").replace(/^[^a-z]+/, "").replace(/_$/, "").slice(0, 60);
 
 /**
- * A new layout on its own page (redesign 2026-10-14, owner request): 1 the carrier's sample file,
+ * A new layout (redesign 2026-10-14, owner request; admin round 1: a right sheet from the list, or its own page inside
+ * the Catalog frame, which draw the title): 1 the carrier's sample file,
  * 2 every column found in it, 3 a name. "From a sample file" lists every column: the ones the
  * software uses are matched to its fields, the rest kept as information. The file is read in
  * memory and dropped; the draft is saved only on Create.
  */
 export function NewLayout() {
-  const sheet = useRouteSheet();
   const router = useRouter();
   const [start, setStart] = useState<"sample" | "empty">("sample");
   const [fileType, setFileType] = useState<CarrierFileType>("policies");
@@ -83,10 +81,8 @@ export function NewLayout() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* In a route sheet the panel names it (route-sheet.tsx). */}
-      {!sheet && <AdminPageHeader title="New layout" subtitle="Read a carrier's file, check its columns, name it." backHref="/admin/layout-maps" backLabel="Layout maps" />}
-
-      {error && <div role="alert" className="rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--error-ink)]">{error}</div>}
+      {/* The title is the frame's (its page) or the panel's (route-sheet.tsx); a failure is one quiet line, not a card. */}
+      {error && <p role="alert" className="m-0 flex items-center gap-2 text-sm text-[var(--error-ink)]"><span className="size-1.5 shrink-0 rounded-full bg-[var(--error)]" aria-hidden="true" />{error}</p>}
 
       <TableCard title="1 · The file">
         <div className="grid gap-4 px-4 py-4 text-sm">

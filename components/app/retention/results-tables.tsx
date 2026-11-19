@@ -11,7 +11,10 @@ import { MIN_RESULTS_DECIDED, hasFigures, resultRateText, type ResultLine, type 
 import type { CaseTrend } from "@/lib/retention/cases/trend";
 
 import { CountLink, RateChip, casesHref, money } from "./scorecard-tables";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
+import { titleCaseNode } from "@/components/ui/title-case";
 /**
  * Retention › Results, what the ladder saved (round 7, owner pick 6·A, 2026-11-10; docs/la4/mockups-r7/retention.html).
  * Server-drawn. Saves: four figures, then a row a step the case was on; By carrier: the same table a row a carrier;
@@ -28,7 +31,7 @@ const nothing = (l: ResultLine) => !hasFigures(l);
 /** Six columns (round 7, 10·1): closed without a save leaves the rows and is a link on the toolbar line when not zero. */
 const closedLink = (total: ResultLine) => total.closedNoSave ? (
   <DataToolbar>
-    <Link href={casesHref({ step: "closed" })} className="text-sm text-foreground underline-offset-2 hover:underline">{total.closedNoSave.toLocaleString("en-US")} closed without a save ›</Link>
+    <Link href={casesHref({ step: "closed" })} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "no-underline")}>{titleCaseNode(<>{total.closedNoSave.toLocaleString("en-US")} closed without a save</>)}</Link>
   </DataToolbar>
 ) : undefined;
 

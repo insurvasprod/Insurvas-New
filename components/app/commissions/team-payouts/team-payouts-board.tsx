@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataToolbar, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DoneStamp } from "@/components/ui/done-stamp";
 import { Field, ToggleRow, control } from "@/components/ui/field";
 import { MoreMenu } from "@/components/ui/more-menu";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
@@ -19,6 +20,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
+import { afterStamp } from "@/components/ui/use-done-stamps";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Segmented } from "@/components/ui/view-tabs";
 import { StepSlot } from "@/components/app/step-frame/step-slot";
@@ -311,6 +313,9 @@ function ConfirmPay({ month, people, pctBp, onClose, onDone }: {
   const [changing, setChanging] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  // The month is paid: "Paid" stamps in for the confirm button, and the dialog hands back once the check has drawn
+  // (Tier 2 motion, 2026-11-18).
+  const [stamped, setStamped] = useState(false);
   const label = longMonth(month);
   const total = people.reduce((sum, x) => sum + x.payCents, 0);
   const paid = people.filter((x) => x.payCents > 0);
@@ -335,7 +340,8 @@ function ConfirmPay({ month, people, pctBp, onClose, onDone }: {
     setBusy(false);
     if (error) { setProblem(`That didn't save. ${label} is not marked paid; try again. (${error})`); return; }
     notify.done(`${label} is paid: ${people.length} ${people.length === 1 ? "person" : "people"}, ${dollars(total)}. Each has a private statement.`);
-    onDone();
+    setStamped(true);
+    afterStamp(onDone);
   }
 
   const howFields = (value: How, set: (next: How) => void, key: string) => (
@@ -392,8 +398,8 @@ function ConfirmPay({ month, people, pctBp, onClose, onDone }: {
           {problem ? <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{problem}</p> : null}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={busy}>Back</Button>
-          <Button onClick={() => void confirm()} disabled={busy || !all.paidOn}>{busy ? "Saving…" : "Confirm and mark paid"}</Button>
+          <Button variant="outline" onClick={onClose} disabled={busy || stamped}>Back</Button>
+          {stamped ? <DoneStamp label="Paid" className="self-center" /> : <Button onClick={() => void confirm()} disabled={busy || !all.paidOn}>{busy ? "Saving…" : "Confirm and mark paid"}</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>

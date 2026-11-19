@@ -8,6 +8,7 @@ import { buildAdminNav } from "@/lib/adminNav/build";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { AdminTopBar } from "@/components/admin/admin-top-bar";
 import { WarmPage } from "@/components/app/warm-page";
+import { PortalPageTransition } from "@/components/portal/portal-page-transition";
 
 export default async function AdminLayout({ children, sheet }: { children: React.ReactNode; sheet: React.ReactNode }) {
   const admin = await getCurrentAdmin();
@@ -20,11 +21,7 @@ export default async function AdminLayout({ children, sheet }: { children: React
     // bar and page spacing as the app): the fixed rail's offset for <main>, the page ground, card
     // edges and the 32px page title all come from it, so the two shells cannot drift apart.
     <div className="portal-agent flex min-h-screen flex-col md:flex-row">
-      <AdminSidebar
-        nodes={buildAdminNav(admin.role)}
-        adminName={admin.name}
-        roleLabel={ADMIN_ROLE_LABELS[admin.role]}
-      />
+      <AdminSidebar nodes={buildAdminNav(admin.role)} />
       {/* min-w-0 is load-bearing. A flex item defaults to min-width:auto, so <main> refused to
           shrink below its widest child — a wide table pushed main, main pushed the page, and the
           sidebar scrolled off the left on every screen with a table. With it, main can shrink and
@@ -41,7 +38,7 @@ export default async function AdminLayout({ children, sheet }: { children: React
         <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-6 lg:p-8 lg:pt-6">
         {/* Foundation v3 (2026-10-27): every page on the one stage, ribbon and glass. */}
         {/* data-page-root: the page area whose links are loaded ahead once it is up (warm-page.tsx). */}
-        <DashboardStage className="flex min-w-0 flex-1 flex-col"><div data-page-root className="contents">{children}</div>{/* A "New…" opened from a page: a panel over it (@sheet, route-sheet.tsx). */}{sheet}</DashboardStage>
+        <DashboardStage className="flex min-w-0 flex-1 flex-col"><div data-page-root className="contents">{/* Wave D (2026-11-18): the app's calm cascade and forward/back slides, on every admin page. */}<PortalPageTransition>{children}</PortalPageTransition></div>{/* A "New…" opened from a page: a panel over it (@sheet, route-sheet.tsx). */}{sheet}</DashboardStage>
         <Suspense fallback={null}><WarmPage /></Suspense>
       </div>
       </main>

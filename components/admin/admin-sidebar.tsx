@@ -2,13 +2,17 @@
 
 import { usePagePathname } from "@/components/ui/page-pathname";
 import { useState, type ReactNode } from "react";
-import Link from "next/link";
+import { IntentLink } from "@/components/ui/nav-pending";
 import {
   BadgePercent,
   BookCheck,
   Boxes,
   Building2,
   ChevronDown,
+  CircleAlert,
+  LockKeyhole,
+  MonitorSmartphone,
+  Scale3d,
   Compass,
   Flag,
   ContactRound,
@@ -37,7 +41,6 @@ import {
   ScrollText,
   ServerCog,
   Settings2,
-  ShieldUser,
   ShieldCheck,
   SlidersHorizontal,
   TableProperties,
@@ -86,6 +89,13 @@ const ICONS: Record<SidebarIconKey, typeof LayoutDashboard> = {
   limits: Gauge,
   revenue: TrendingUp,
   "payments-setup": PlugZap,
+  "failed-payments": CircleAlert,
+  reconciliation: Scale3d,
+  "catalog-workspace": LayoutGrid,
+  "monitoring-workspace": LayoutGrid,
+  lockouts: LockKeyhole,
+  "staff-sessions": MonitorSmartphone,
+  jobs: ServerCog,
   payments: CreditCard,
   // Catalog
   plans: Package,
@@ -115,7 +125,8 @@ const ICONS: Record<SidebarIconKey, typeof LayoutDashboard> = {
 };
 
 
-type Props = { nodes: SidebarNode[]; adminName: string; roleLabel: string; footer?: ReactNode };
+// Who is signed in is the top bar's account menu (owner 2026-11-18: no "Signed in as" card on the sidebar).
+type Props = { nodes: SidebarNode[]; footer?: ReactNode };
 
 /** One row, drawn with the agent rail's own classes so the two rails cannot drift apart. */
 function NavItemLink({ entry, nested = false, onNavigate }: { entry: SidebarLink; nested?: boolean; onNavigate?: () => void }) {
@@ -125,8 +136,10 @@ function NavItemLink({ entry, nested = false, onNavigate }: { entry: SidebarLink
 
   return (
     <li>
-      <Link
+      {/* An area move (Wave D, 2026-11-18): the arriving admin page rises in the calm cascade, as from the app rail. */}
+      <IntentLink
         href={entry.href}
+        transitionTypes={["nav-area"]}
         onClick={onNavigate}
         aria-current={active ? "page" : undefined}
         title={entry.label}
@@ -136,7 +149,7 @@ function NavItemLink({ entry, nested = false, onNavigate }: { entry: SidebarLink
           <Icon className="portal-agent-nav-icon" aria-hidden="true" />
           <span className="portal-agent-nav-label">{entry.label}</span>
         </span>
-      </Link>
+      </IntentLink>
     </li>
   );
 }
@@ -226,23 +239,13 @@ function NavList({
  * the staff menu and who is signed in. Only the accent differs, and that is a token
  * (app/admin/admin-plane.css), not a style here.
  */
-export function AdminSidebar({ nodes, adminName, roleLabel, footer }: Props) {
+export function AdminSidebar({ nodes, footer }: Props) {
   const [open, setOpen] = useState(false);
 
   const brandMark = (tone?: "dark") => (
     <div className="flex items-center gap-2.5">
       <InsurvasLogo size="sidebar" tone={tone} />
     </div>
-  );
-
-  // The agent rail's plan card, holding what is true for staff: who is signed in and in what role.
-  // No sign-out here — it is the labelled last row of the top bar's account menu.
-  const staffCard = (
-    <section className="portal-agent-plan-card" aria-label="Signed in as">
-      <p className="portal-agent-plan-card-label">Staff</p>
-      <p className="portal-agent-plan-card-name truncate">{adminName}</p>
-      <p className="portal-agent-plan-card-role">{roleLabel}</p>
-    </section>
   );
 
   return (
@@ -286,7 +289,6 @@ export function AdminSidebar({ nodes, adminName, roleLabel, footer }: Props) {
               </div>
               <NavList nodes={nodes} onNavigate={() => setOpen(false)} />
             </div>
-            {staffCard}
             {footer && <div className="portal-agent-sidebar-footer">{footer}</div>}
           </div>
         </div>
@@ -298,10 +300,9 @@ export function AdminSidebar({ nodes, adminName, roleLabel, footer }: Props) {
         label="Admin navigation"
         homeHref="/admin"
         items={nodes.map((node): RailNode => node.kind === "group"
-          ? { key: node.id, label: node.label, icon: ICONS[node.icon], items: node.links.map((entry) => ({ key: entry.href, label: entry.label, href: entry.href, icon: ICONS[entry.icon] })) }
+          ? { key: node.id, label: node.label, icon: ICONS[node.icon], href: node.area, items: node.links.map((entry) => ({ key: entry.href, label: entry.label, href: entry.href, icon: ICONS[entry.icon] })) }
           : { key: node.href, label: node.label, href: node.href, icon: ICONS[node.icon] })}
         foot={[]}
-        card={{ label: "Signed in as", icon: ShieldUser, body: <>{staffCard}{footer && <div className="portal-agent-sidebar-footer">{footer}</div>}</> }}
         isActive={isLinkActive}
       />
     </>

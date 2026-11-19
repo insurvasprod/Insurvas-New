@@ -9,6 +9,8 @@ import { getDisputeLetter, letterBody } from "@/lib/discrepancies/letter";
 import { BusinessIdentityMissingError } from "@/lib/agencyProfile/identity";
 import { BUSINESS_FIELD_ANCHORS } from "@/lib/agencyProfile/requirements";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import { statementDay, statementMoney, statementPeriod } from "@/lib/ledger/statementConstants";
 
 export const metadata: Metadata = { title: "Commission dispute" };
@@ -42,15 +44,17 @@ export default async function DisputeLetterPage({ searchParams }: { searchParams
     return (
       <main className="mx-auto flex max-w-2xl flex-col items-center gap-3 px-6 py-16 text-center text-sm">
         <p className="m-0">{error.message}</p>
-        <Link className="font-semibold underline" href={`/app/settings#business-identity/${BUSINESS_FIELD_ANCHORS[error.missing[0]]}`}>Open Business identity</Link>
+        <Button asChild><Link className="no-underline" href={`/app/settings#business-identity/${BUSINESS_FIELD_ANCHORS[error.missing[0]]}`}>Open Business identity</Link></Button>
       </main>
     );
   }
 
   if (!letter) {
     return (
-      <main className="mx-auto max-w-2xl px-6 py-16 text-center text-sm text-muted-foreground">
-        Choose one carrier&rsquo;s pay issues on Pay issues, then open the letter again.
+      <main className="mx-auto flex max-w-2xl flex-col gap-4 px-6 py-16 text-sm text-muted-foreground">
+        <PageHeader title="Dispute letter" />
+        <p className="m-0">Choose one carrier&rsquo;s pay issues on Pay issues, then open the letter again.</p>
+        <Button asChild className="w-fit"><Link href="/app/discrepancies" className="no-underline">Open Pay issues</Link></Button>
       </main>
     );
   }

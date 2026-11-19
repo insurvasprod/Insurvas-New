@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Activity, AlertTriangle, Archive, ArrowRight, BadgeCheck, BadgeDollarSign, CalendarDays, CheckCircle2, Coins, Hourglass, Layers, LifeBuoy, ListChecks, Loader2,
-  ArrowLeft, ChevronDown, Package, Pause, Pencil, Settings as SettingsIcon, Phone, PhoneCall, PieChart, Play, Plus, Receipt, RefreshCw, Repeat, ShieldAlert, ShieldCheck, Store, Trash2, Upload, WifiOff, XCircle,
+  ArrowLeft, ChevronDown, ChevronRight, Package, Pause, Pencil, Settings as SettingsIcon, Phone, PhoneCall, PieChart, Play, Plus, Receipt, RefreshCw, Repeat, ShieldAlert, ShieldCheck, Store, Trash2, Upload, WifiOff, XCircle,
 } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { useSoldProducts } from "@/components/app/products/use-sold-products";
@@ -25,6 +25,7 @@ import {
 } from "@/lib/campaigns/constants";
 
 import { Button } from "@/components/ui/button";
+import { inReadySetupRun } from "@/components/app/setup/setup-guide-bar";
 import { ToolbarSearch } from "@/components/ui/data-toolbar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RowActions } from "@/components/app/campaigns/row-actions";
@@ -562,7 +563,8 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
       const newId: string = body.campaign.id;
       const product = newCampaign.product_code.trim() || null;
       // The next step is the list: offered on the toast, and the new campaign opens beside its vendor.
-      notify.done(`${body.campaign.name} created as a draft`, { action: { label: "Import its list", onClick: () => router.push(importHref(newId, product)) }, durationMs: 8000 });
+      // In a Ready to sell run the guide itself goes on to Import, so the toast does not offer a second way.
+      notify.done(`${body.campaign.name} created as a draft`, inReadySetupRun() ? { durationMs: 4000 } : { action: { label: "Import its list", onClick: () => router.push(importHref(newId, product)) }, durationMs: 8000 });
       setVendorFilter(newCampaign.vendor_id);
       setView("campaigns");
       setOnlyIds(null);
@@ -622,7 +624,15 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
   const shown = tabbed.slice(currentPage * gridPageSize, currentPage * gridPageSize + gridPageSize);
   const vendorRows = paginate(vendors, vendorListPage, gridPageSize);
 
-  if (loading) return <PageLoading />;
+  // Frame first (UI-CONSISTENCY §7a): the title draws at once (in a frame, the frame's); the list loads under it.
+  if (loading) {
+    return (
+      <div className="m-stagger flex w-full min-w-0 flex-col gap-4 text-[var(--ink)] lg:min-h-0 lg:flex-1">
+        {!embedded && <PageHeader title="Vendors & campaigns" />}
+        <PageLoading header={false} />
+      </div>
+    );
+  }
 
   // Usage against the cap, on the screen where the cap bites. Paused campaigns do not count.
   const activeUsage = limits.find((item) => item.key === "max_active_campaigns") ?? null;
@@ -814,7 +824,7 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
   // one, or the full vendor view (scorecards, compare, edit, delete), one click from the same menu.
   const vendorPicker = <DropdownMenu>
     <DropdownMenuTrigger asChild>
-      <Button type="button" variant="outline" aria-label="Filter by vendor">
+      <Button type="button" variant="outline" aria-label="Filter by vendor" data-guide="campaign-vendor-picker">
         {pickedVendor ? (isOwnBookVendor(pickedVendor.name) ? "No vendor" : pickedVendor.name) : "Vendor"}<ChevronDown aria-hidden="true" />
       </Button>
     </DropdownMenuTrigger>
@@ -833,7 +843,7 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
       })}
       <DropdownMenuSeparator />
       <div className="flex items-center justify-between gap-2">
-        <DropdownMenuItem disabled={locked !== null} onSelect={openNewVendor} className="font-semibold text-[var(--accent-ink)]"><Plus aria-hidden="true" />Add a vendor</DropdownMenuItem>
+        <DropdownMenuItem data-guide="campaign-vendor-add" disabled={locked !== null} onSelect={openNewVendor} className="font-semibold text-[var(--accent-ink)]"><Plus aria-hidden="true" />Add a vendor</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => router.push("/app/campaigns/vendors")} className="font-semibold text-[var(--accent-ink)]">Manage vendors<ArrowRight aria-hidden="true" /></DropdownMenuItem>
       </div>
     </DropdownMenuContent>
@@ -1056,7 +1066,7 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
       {/* A vendor picked in the filter: one line to its own page (scorecard, settings, delete). */}
       {pickedVendor && !vendorId && <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--ink)]">
         <span>Showing <strong className="font-semibold">{isOwnBookVendor(pickedVendor.name) ? "No vendor" : pickedVendor.name}</strong>&apos;s campaigns</span>
-        <Link href={`/app/campaigns/vendors/${pickedVendor.id}`} className="font-semibold text-[var(--accent-ink)] hover:underline">Open the vendor →</Link>
+        <Button asChild variant="outline" size="sm"><Link href={`/app/campaigns/vendors/${pickedVendor.id}`} className="no-underline">Open the vendor<ChevronRight aria-hidden="true" /></Link></Button>
       </div>}
       {loadError ? <ErrorState title="Campaigns did not load" detail={loadError} action={<Button variant="outline" onClick={() => void refresh()}>Try again</Button>} />
         : campaigns.length === 0 ? (vendors.length === 0
@@ -1531,7 +1541,7 @@ function CampaignSettings({ campaign, vendors, products, isTest, savedStates, ot
             <Button type="submit" variant="outline" disabled={!stateText.trim() || disabled} className={stateError ? "mb-6" : undefined}><Plus aria-hidden="true" />Add</Button>
           </form>
         </div>}
-        <Link href={`/app/settings?cadenceCampaign=${campaign.campaign_id}#cadence`} className="w-fit text-sm font-semibold text-[var(--accent-ink)] hover:underline">Its calling cadence →</Link>
+        <Button asChild variant="outline" size="sm" className="w-fit"><Link href={`/app/settings?cadenceCampaign=${campaign.campaign_id}#cadence`} className="no-underline">Its calling cadence<ChevronRight aria-hidden="true" /></Link></Button>
       </section>
       <section aria-label="Status" className="flex flex-col gap-3">
         {label("Status")}

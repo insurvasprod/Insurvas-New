@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cardSurface } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { checkboxControl, control, Field } from "@/components/ui/field";
+import { control, Field } from "@/components/ui/field";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FactTable } from "@/components/ui/fact-table";
 import { MoreMenu } from "@/components/ui/more-menu";
@@ -28,6 +28,7 @@ import type { CaseCall, CaseRow } from "@/lib/retention/cases/store";
 import type { RequestType } from "@/lib/retention/servicing";
 import { notify } from "@/lib/notify";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * A Retention case's page, the client parts (pick A, owner 2026-11-05): the header's buttons, "What to do" for the
  * case's step, and the Calls tab. Everything is in place; only "close without a save" and "assign" are pop-ups
@@ -464,7 +465,7 @@ export function WhatToDo({ row, reinstatement, readOnly, unreachableAfter, ifNot
                   {(plan.sequential && shownKey === s.key && s.body) || null}
                   {checklist && state === "plain" && open && (
                     <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <input type="checkbox" className={checkboxControl} checked={s.done} onChange={(e) => setChecked(e.target.checked ? [...checked, s.key] : checked.filter((x) => x !== s.key))} />Done
+                      <CheckBox checked={s.done} onChange={(e) => setChecked(e.target.checked ? [...checked, s.key] : checked.filter((x) => x !== s.key))} />Done
                     </label>
                   )}
                 </div>

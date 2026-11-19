@@ -12,7 +12,7 @@ import { useEffect, useState } from "react";
 import { DollarSign, FileText, PhoneCall, PhoneOutgoing } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { EmptyState, SectionLoading } from "@/components/ui/page-states";
+import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import type { AgentLine, DialFunnel, FunnelStep } from "@/lib/dealFlow/dialFunnel";
@@ -64,10 +64,9 @@ export function DealFlowFunnel({ from, to, agentId, isToday }: { from: string; t
 
   if (error && !data) {
     return (
-      <div role="alert" className="rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--error-ink)]">
-        The dial funnel did not load: {error}{" "}
-        <button type="button" className="font-semibold underline underline-offset-2" onClick={() => setReload((value) => value + 1)}>Try again</button>
-      </div>
+      <section role="alert" className="m-glass overflow-hidden rounded-lg border border-border">
+        <ErrorState title="The dial funnel did not load" detail={error} action={<Button type="button" variant="outline" size="sm" onClick={() => setReload((value) => value + 1)}>Try again</Button>} />
+      </section>
     );
   }
   if (!data) {

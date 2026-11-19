@@ -24,7 +24,8 @@ import type { DisclosureInput, DisclosureItem, DisclosureLibrary } from "@/lib/s
 import { US_STATES } from "@/lib/signup/constants";
 import { cn } from "@/lib/utils";
 
-import { WithReason, checkbox } from "./shared";
+import { WithReason } from "./shared";
+import { CheckBox } from "@/components/ui/check-box";
 
 const STATE_CODES = US_STATES.map(([code]) => code as string);
 const STATE_NAME = new Map(US_STATES.map(([code, name]) => [code as string, name as string]));
@@ -160,7 +161,8 @@ function PdfField({ item, readOnly, busy, onUpload, onOpenPdf, onRemovePdf }: {
           onDragOver={(e) => { e.preventDefault(); setOver(true); }}
           onDragLeave={() => setOver(false)}
           onDrop={(e) => { e.preventDefault(); setOver(false); take(e.dataTransfer.files?.[0]); }}
-          className={cn("flex flex-col items-center gap-2 rounded-lg border border-dashed p-5 text-center transition-colors duration-150", over ? "border-[var(--primary)] bg-[var(--surface-alt)]" : "border-[var(--border-strong)]")}
+          data-drag-over={over ? "" : undefined}
+          className={cn("m-dropzone flex flex-col items-center gap-2 rounded-lg border border-dashed p-5 text-center", over ? "border-[var(--primary)] bg-[var(--surface-alt)]" : "border-[var(--border-strong)]")}
         >
           <span className="text-sm font-semibold text-[var(--ink)]">Drop the carrier&apos;s or the state&apos;s PDF here</span>
           <Button type="button" variant="outline" disabled={busy} onClick={choose}>Choose a file</Button>
@@ -351,7 +353,7 @@ function RuleEditor({ draft, setDraft, readOnly, library, clauseErrors }: {
               return (
                 <div key={c}>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="w-9 shrink-0 text-xs font-semibold uppercase text-[var(--muted)]">{c === 0 ? "If" : "and"}</span>
+                    <span className="w-9 shrink-0 text-xs font-semibold text-[var(--muted)]">{c === 0 ? "If" : "and"}</span>
                     <select id={`${id}-field`} aria-label={`${name}: field`} className={cn(control, "mt-0 w-auto min-w-[220px] flex-1")} value={cl.field} disabled={readOnly} onChange={(e) => setClause(r, c, { field: e.target.value, ...fieldOf(e.target.value) })}>
                       {!knownField && <option value={cl.field}>{cl.field}</option>}
                       {library.interviewFields.length > 0 && (
@@ -442,13 +444,13 @@ export function ScopeFields({ draft, setDraft, library, readOnly, clauseErrors, 
             <div className="flex flex-wrap gap-x-5 gap-y-2">
               {library.carriers.map((c) => (
                 <label key={c.id} className="inline-flex items-center gap-2 text-sm text-[var(--body)]">
-                  <input type="checkbox" className={checkbox} disabled={readOnly} checked={draft.carrierIds.includes(c.id)} onChange={(e) => set({ carrierIds: e.target.checked ? [...draft.carrierIds, c.id] : draft.carrierIds.filter((x) => x !== c.id) })} />
+                  <CheckBox disabled={readOnly} checked={draft.carrierIds.includes(c.id)} onChange={(e) => set({ carrierIds: e.target.checked ? [...draft.carrierIds, c.id] : draft.carrierIds.filter((x) => x !== c.id) })} />
                   {c.name}
                 </label>
               ))}
               {extraCarriers.map((id) => (
                 <label key={id} className="inline-flex items-center gap-2 text-sm text-[var(--muted)]" title="A carrier your agency no longer has">
-                  <input type="checkbox" className={checkbox} disabled={readOnly} checked onChange={() => set({ carrierIds: draft.carrierIds.filter((x) => x !== id) })} />
+                  <CheckBox disabled={readOnly} checked onChange={() => set({ carrierIds: draft.carrierIds.filter((x) => x !== id) })} />
                   Former carrier
                 </label>
               ))}

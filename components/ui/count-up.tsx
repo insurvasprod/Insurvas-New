@@ -40,13 +40,23 @@ function format(n: number, decimals: number, grouped: boolean) {
   return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals, useGrouping: grouped });
 }
 
-export function CountUp({ text, fromZero = false }: { text: string; fromZero?: boolean }) {
+export function CountUp({ text, fromZero = false, changesOnly = false, duration }: {
+  text: string;
+  fromZero?: boolean;
+  /**
+   * Roll only when the value changes after mount, never on the first paint (Tier 1, 2026-11-17): a badge or a tab
+   * count that rolls 3 → 4 when a row is decided, but does not count up from 0 every time a page opens.
+   */
+  changesOnly?: boolean;
+  /** How long a roll takes, in ms; the same ease-out curve. Defaults to 700 (1100 with `fromZero`). */
+  duration?: number;
+}) {
   const [shown, setShown] = useState(text);
   const previous = useRef<string | null>(null);
 
   useEffect(() => {
     const target = parse(text);
-    const from = previous.current === null ? (hydrated || fromZero ? 0 : null) : parse(previous.current)?.value ?? null;
+    const from = previous.current === null ? (!changesOnly && (hydrated || fromZero) ? 0 : null) : parse(previous.current)?.value ?? null;
     previous.current = text;
     hydrated = true;
 
@@ -59,7 +69,7 @@ export function CountUp({ text, fromZero = false }: { text: string; fromZero?: b
     let frame = 0;
     const start = performance.now();
     const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / (fromZero ? 1100 : DURATION));
+      const t = Math.min(1, (now - start) / (duration ?? (fromZero ? 1100 : DURATION)));
       const eased = 1 - Math.pow(1 - t, 3);
       if (t >= 1) {
         setShown(text);
@@ -70,7 +80,7 @@ export function CountUp({ text, fromZero = false }: { text: string; fromZero?: b
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [text, fromZero]);
+  }, [text, fromZero, changesOnly, duration]);
 
   // The final text is what a screen reader hears; the counting frames are visual only.
   return (

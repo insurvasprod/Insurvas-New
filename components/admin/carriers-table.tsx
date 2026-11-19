@@ -1,26 +1,24 @@
 "use client";
 
-import { StatusChip } from "@/components/ui/status-chip";
-import { useCallback, useMemo, useState } from "react";
+import Link from "next/link";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { MoreHorizontal } from "lucide-react";
 
-import { notify } from "@/lib/notify";
-import { PageHeader } from "@/components/ui/page-header";
+import { CarrierSetupDot, CarrierSetupLegend } from "@/components/admin/catalog/carrier-setup-dot";
+import { Switch } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
-import { TableCard } from "@/components/ui/table-card";
-import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
-import { Pager, paginate } from "@/components/ui/pager";
-import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
-import { st, pillTone, Switch } from "@/components/app/settings/primitives";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { setParamsInPlace } from "@/components/ui/nav-pending";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
+import { StatusChip } from "@/components/ui/status-chip";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import type { CarrierRow } from "@/lib/carriers/constants";
+import { carrierHref, FACET_INFO, FACETS, isFacet, needsLook, type CarrierSetup, type FacetKey } from "@/lib/carriers/setup";
 import {
   CARRIER_IN_USE_CODE,
   USAGE_UNKNOWN_TITLE,
@@ -29,12 +27,10 @@ import {
   type CarrierBlockingUsage,
   type CarrierUsageSnapshot,
 } from "@/lib/carriers/usage";
+import { notify } from "@/lib/notify";
 import { recordDate, recordDateTime } from "@/lib/tenants/recordFormat";
-import { cn } from "@/lib/utils";
 import { CarrierDialog } from "./carrier-dialog";
 import { CarrierDeactivateDialog } from "./carrier-deactivate-dialog";
-
-const MENU_ITEM = "text-sm tracking-[-0.02em] text-[var(--ink)]";
 
 type StateFilter = "all" | "active" | "inactive";
 type UsageFilter = "any" | "in_use" | "unused";
@@ -48,49 +44,45 @@ const USAGE_OPTIONS: { value: UsageFilter; label: string }[] = [
   { value: "in_use", label: "In use by a tenant" },
   { value: "unused", label: "Not in use" },
 ];
+const pick = <T extends string>(value: string | null, allowed: readonly T[], fallback: T): T => (value && (allowed as readonly string[]).includes(value) ? (value as T) : fallback);
+
+/** The short column heads over the dots; the full name is in each head's hover. */
+const DOT_HEAD: Record<FacetKey, string> = { facts: "Facts", rules: "Rules", layouts: "Layouts", status: "Status words", fields: "Field maps", guide: "Portal guide", servicing: "Servicing", reports: "Reports" };
 
 /**
- * The Carriers board (p-adm-carriers): header, four figures, and the platform library table with
- * its toolbar and footer. Rows, usage and figures are refreshed from
- * /api/admin/carriers after every change.
+ * The carrier library (admin round 1, catalog.html screen 7): one TableCard, one line a row. Code, carrier, the
+ * state switch, sort, usage and created as before, plus the carrier's eight set-up facets as dots — each opens that
+ * part of the carrier's record — and a "Missing" filter. A row opens the carrier's record page.
+ *
+ * The switch and the row menu run the same checks as before: switching off a carrier tenants use is refused and
+ * opens the in-use dialog (a super admin may override with a reason). The search and the filters live in the URL.
  */
-export function CarriersTable({
-  initialCarriers,
-  initialUsage,
-  canOverride,
-}: {
-  initialCarriers: CarrierRow[];
-  initialUsage: CarrierUsageSnapshot;
+export function CarriersTable({ carriers, usage, setup, canOverride }: {
+  carriers: CarrierRow[];
+  usage: CarrierUsageSnapshot;
+  setup: Record<string, CarrierSetup>;
   /** super_admin: may deactivate a carrier tenants use, with a reason. */
   canOverride: boolean;
 }) {
-  const [carriers, setCarriers] = useState(initialCarriers);
-  const [usage, setUsage] = useState<CarrierUsageSnapshot>(initialUsage);
-  const [search, setSearch] = useState("");
-  const [stateFilter, setStateFilter] = useState<StateFilter>("all");
-  const [usageFilter, setUsageFilter] = useState<UsageFilter>("any");
-  const [page, setPage] = useState(1);
-  const pageSize = useFittingPageSize(480, 45);
-  const [creating, setCreating] = useState(false);
+  const router = useRouter();
+  const params = useSearchParams();
+  const [refreshing, startRefresh] = useTransition();
   const [editing, setEditing] = useState<CarrierRow | null>(null);
   const [blocked, setBlocked] = useState<{ carrier: CarrierRow; usage: CarrierBlockingUsage | null } | null>(null);
   const [pending, setPending] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
 
-  const refresh = useCallback(async () => {
-    const response = await fetch("/api/admin/carriers", { cache: "no-store" }).catch(() => null);
-    if (!response?.ok) return;
-    const body = (await response.json()) as { carriers: CarrierRow[]; usage: CarrierUsageSnapshot };
-    setCarriers(body.carriers);
-    setUsage(body.usage);
-  }, []);
+  const search = params.get("q") ?? "";
+  const stateFilter = pick(params.get("state"), ["all", "active", "inactive"] as const, "all");
+  const usageFilter = pick(params.get("usage"), ["any", "in_use", "unused"] as const, "any");
+  const missingParam = params.get("missing");
+  const missing: FacetKey | "any" | null = missingParam === "any" ? "any" : isFacet(missingParam) ? missingParam : null;
+  const page = Math.max(1, Number(params.get("page")) || 1);
+  const creating = params.get("new") === "1";
+  const pageSize = useFittingPageSize(480, 45);
 
-  async function reload() {
-    setRefreshing(true);
-    await refresh();
-    setRefreshing(false);
-  }
-
+  const set = (patch: Record<string, string | null>) => setParamsInPlace(patch);
+  const filter = (patch: Record<string, string | null>) => set({ ...patch, page: null });
+  const refresh = () => startRefresh(() => router.refresh());
   const usageFor = (id: string) => (usage.available ? usage.byCarrier[id] : undefined);
 
   async function deactivate(carrier: CarrierRow) {
@@ -141,152 +133,85 @@ export function CarriersTable({
           const inUse = (usage.byCarrier[carrier.id]?.tenants ?? 0) > 0;
           if (usageFilter === "in_use" ? !inUse : inUse) return false;
         }
+        if (missing) {
+          const cells = setup[carrier.id];
+          if (!cells) return false;
+          if (missing === "any" ? !FACETS.some((key) => needsLook(cells[key])) : !needsLook(cells[missing])) return false;
+        }
         return !term || carrier.name.toLowerCase().includes(term) || carrier.code.toLowerCase().includes(term);
       }),
-    [carriers, stateFilter, usageFilter, usage, term],
+    [carriers, stateFilter, usageFilter, usage, term, missing, setup],
   );
   const { current, rows } = paginate(visible, page, pageSize);
-
-  function clearAll() {
-    setSearch("");
-    setStateFilter("all");
-    setUsageFilter("any");
-    setPage(1);
-  }
-
-  // Figures. Usage-based ones read "—" until migration 20260924357000 — never a 0 that means "unknown".
-  const inactive = carriers.filter((carrier) => !carrier.is_active).length;
-  const inUseCount = usage.available ? carriers.filter((carrier) => (usage.byCarrier[carrier.id]?.tenants ?? 0) > 0).length : null;
-  const blockedCount = usage.available
-    ? carriers.filter((carrier) => carrier.is_active && (usage.byCarrier[carrier.id]?.tenants ?? 0) > 0).length
-    : null;
-  const unknown = "—";
+  const anyFilter = Boolean(term) || stateFilter !== "all" || usageFilter !== "any" || missing !== null;
+  const clearAll = () => filter({ q: null, state: null, usage: null, missing: null });
+  const missingCount = (key: FacetKey) => carriers.filter((carrier) => carrier.is_active && setup[carrier.id] && needsLook(setup[carrier.id][key])).length;
 
   return (
-    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <PageHeader
-        title="Carriers"
-        actions={
-          <Button type="button" onClick={() => setCreating(true)}>
-            New carrier
-          </Button>
-        }
-      />
-
-      <BoardStatGrid>
-        <BoardStatTile label="Carriers" value={carriers.length.toLocaleString("en-US")} footnote={`${inactive.toLocaleString("en-US")} inactive`} />
-        <BoardStatTile
-          label="In use"
-          value={inUseCount === null ? unknown : inUseCount.toLocaleString("en-US")}
-          tone={inUseCount ? "success" : "default"}
-          footnote={usage.available ? `by ${usage.totals.tenants.toLocaleString("en-US")} ${usage.totals.tenants === 1 ? "tenant" : "tenants"}` : "usage not available yet"}
-          title={usage.available ? "Carriers with at least one tenant holding an active contract or an open appointment" : USAGE_UNKNOWN_TITLE}
-        />
-        <BoardStatTile
-          label="Appointments recorded"
-          value={usage.available ? usage.totals.appointments.toLocaleString("en-US") : unknown}
-          footnote="across all tenants"
-          title={usage.available ? `${usage.totals.openAppointments.toLocaleString("en-US")} open, the rest terminated` : USAGE_UNKNOWN_TITLE}
-        />
-        <BoardStatTile
-          label="Deactivations blocked"
-          value={blockedCount === null ? unknown : blockedCount.toLocaleString("en-US")}
-          tone={blockedCount ? "warning" : "default"}
-          footnote="active carriers tenants still use"
-          title={
-            usage.available
-              ? canOverride
-                ? "Deactivating one of these needs a recorded reason"
-                : "Only a super admin can deactivate one of these, with a recorded reason"
-              : USAGE_UNKNOWN_TITLE
-          }
-        />
-      </BoardStatGrid>
-
+    <>
       <TableCard
-        footer={<Pager page={current} pageSize={pageSize} total={visible.length} noun={visible.length === 1 ? "carrier" : "carriers"} suffix="by sort order, then name" onPage={setPage} />}
+        className="min-w-0"
+        footer={
+          <div className="flex w-full min-w-0 flex-col gap-2">
+            <CarrierSetupLegend />
+            <Pager page={current} pageSize={pageSize} total={visible.length} noun={visible.length === 1 ? "carrier" : "carriers"} suffix="by sort order, then name" onPage={(next) => set({ page: next > 1 ? String(next) : null })} />
+          </div>
+        }
         toolbar={
-          <DataToolbar actions={<RefreshButton onClick={() => void reload()} refreshing={refreshing} />}>
-            <ToolbarSearch
-              value={search}
-              onChange={(value) => {
-                setSearch(value);
-                setPage(1);
-              }}
-              placeholder="Search carriers"
-              label="Search carriers by name or code"
-            />
-            <select
-              aria-label="State"
-              className={toolbarControl}
-              value={stateFilter}
-              onChange={(event) => {
-                setStateFilter(event.target.value as StateFilter);
-                setPage(1);
-              }}
-            >
-              {STATE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
+          <DataToolbar actions={<RefreshButton onClick={refresh} refreshing={refreshing} />}>
+            <ToolbarSearch value={search} onChange={(value) => filter({ q: value || null })} placeholder="Search carriers" label="Search carriers by name or code" />
+            <select aria-label="State" className={toolbarControl} value={stateFilter} onChange={(event) => filter({ state: event.target.value === "all" ? null : event.target.value })}>
+              {STATE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
             {usage.available && (
-              <select
-                aria-label="Usage"
-                className={toolbarControl}
-                value={usageFilter}
-                onChange={(event) => {
-                  setUsageFilter(event.target.value as UsageFilter);
-                  setPage(1);
-                }}
-              >
-                {USAGE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
+              <select aria-label="Usage" className={toolbarControl} value={usageFilter} onChange={(event) => filter({ usage: event.target.value === "any" ? null : event.target.value })}>
+                {USAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             )}
+            <select aria-label="Missing" className={toolbarControl} value={missing ?? ""} onChange={(event) => filter({ missing: event.target.value || null })}>
+              <option value="">Any set-up</option>
+              <option value="any">Missing anything</option>
+              {FACETS.map((key) => <option key={key} value={key}>{FACET_INFO[key].missing} ({missingCount(key)})</option>)}
+            </select>
+            {anyFilter && <Button type="button" variant="ghost" onClick={clearAll}>Clear</Button>}
           </DataToolbar>
         }
       >
-        <div className="min-w-0 overflow-x-auto">
-          <table className={cn(st.table, "min-w-[860px]")}>
-            <thead>
-              <tr className={st.headRow}>
-                <th scope="col" className={cn(st.th, "w-[120px]")}>Code</th>
-                <th scope="col" className={st.th}>Carrier</th>
-                <th scope="col" className={cn(st.th, "w-[160px]")}>State</th>
-                <th scope="col" className={cn(st.th, "w-[90px]")}>Sort</th>
-                <th scope="col" className={cn(st.th, "w-[230px]")}>Usage</th>
-                <th scope="col" className={cn(st.th, "w-[140px]")}>Created</th>
-                <th scope="col" className={cn(st.th, "w-12")}>
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="m-seq">
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="p-0">
-                    {carriers.length === 0 ? (
-                      <EmptyState title="No carriers yet" hint="Add the platform library before agents configure appointments." />
-                    ) : (
-                      <NoMatches noun="carriers" onClear={clearAll} />
-                    )}
-                  </td>
-                </tr>
-              )}
+        {carriers.length === 0 ? (
+          <EmptyState title="No carriers yet" hint="Add the platform library before agents configure appointments." />
+        ) : visible.length === 0 ? (
+          <NoMatches noun="carriers" onClear={clearAll} />
+        ) : (
+          <Table className="min-w-[1500px]">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[130px]">Code</TableHead>
+                <TableHead>Carrier</TableHead>
+                {FACETS.map((key) => <TableHead key={key} className="w-[76px] text-center" title={FACET_INFO[key].label}>{DOT_HEAD[key]}</TableHead>)}
+                <TableHead className="w-[150px]">State</TableHead>
+                <TableHead className="w-[60px] text-right">Sort</TableHead>
+                <TableHead className="w-[170px]">Usage</TableHead>
+                <TableHead className="w-[110px]">Created</TableHead>
+                <TableHead className="w-12"><span className="sr-only">Actions</span></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rows.map((carrier) => {
                 const rowUsage = usageFor(carrier.id);
+                const cells = setup[carrier.id];
+                const open = () => router.push(carrierHref(carrier.code));
                 return (
-                  <tr key={carrier.id} className="m-row hover:bg-[var(--brand-50)]">
-                    <td className={st.td}>
-                      <code className="font-mono text-sm">{carrier.code}</code>
-                    </td>
-                    <td className={st.td}>{carrier.name}</td>
-                    <td className={st.td}>
+                  <TableRow key={carrier.id} className="cursor-pointer" onClick={open}>
+                    <TableCell><code className="font-mono text-sm">{carrier.code}</code></TableCell>
+                    <TableCell className="font-semibold text-foreground">
+                      <Link href={carrierHref(carrier.code)} onClick={(event) => event.stopPropagation()} className="block max-w-[16rem] truncate hover:underline">{carrier.name}</Link>
+                    </TableCell>
+                    {FACETS.map((key) => (
+                      <TableCell key={key} className="text-center">
+                        {cells ? <CarrierSetupDot cell={cells[key]} label={`${carrier.name} · ${FACET_INFO[key].label}`} href={carrierHref(carrier.code, FACET_INFO[key].tab)} showCount={key === "reports"} /> : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                    ))}
+                    <TableCell onClick={(event) => event.stopPropagation()}>
                       {/* The switch runs the same checks as the row menu: switching off a carrier in
                           use is refused and opens the in-use dialog, and the switch stays on. */}
                       <span className="inline-flex items-center gap-2">
@@ -296,55 +221,41 @@ export function CarriersTable({
                           label={`${carrier.name}: ${carrier.is_active ? "active, switch off" : "inactive, switch on"}`}
                           onChange={(next) => void (next ? reactivate(carrier) : deactivate(carrier))}
                         />
-                        <StatusChip tone={pillTone(carrier.is_active ? "success" : "neutral")}>
-                          {carrier.is_active ? "Active" : "Inactive"}
-                        </StatusChip>
+                        <StatusChip tone={carrier.is_active ? "good" : "neutral"}>{carrier.is_active ? "Active" : "Inactive"}</StatusChip>
                       </span>
-                    </td>
-                    <td className={cn(st.td, "tabular-nums")}>{carrier.sort_order}</td>
-                    <td className={cn(st.td, "tabular-nums")} title={usage.available ? usageTitle(rowUsage) : USAGE_UNKNOWN_TITLE}>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{carrier.sort_order}</TableCell>
+                    <TableCell className="whitespace-nowrap tabular-nums" title={usage.available ? usageTitle(rowUsage) : USAGE_UNKNOWN_TITLE}>
                       {usage.available ? usageLine(rowUsage) : "Usage unknown"}
-                    </td>
-                    <td className={cn(st.td, "whitespace-nowrap")} title={recordDateTime(carrier.created_at)}>
-                      {recordDate(carrier.created_at)}
-                    </td>
-                    <td className={cn(st.td, "py-1 text-right")}>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap" title={recordDateTime(carrier.created_at)}>{recordDate(carrier.created_at)}</TableCell>
+                    <TableCell className="py-1 text-right" onClick={(event) => event.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="ghost" size="sm" className="w-[30px] px-0"
-                            disabled={pending === carrier.id}
-                            aria-label={`Actions for ${carrier.name}`}
-                          >
-                            <MoreHorizontal className="size-4" aria-hidden="true" />
+                          <Button type="button" variant="ghost" size="icon-sm" disabled={pending === carrier.id} aria-label={`Actions for ${carrier.name}`}>
+                            <MoreHorizontal aria-hidden="true" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem className={MENU_ITEM} onSelect={() => setEditing(carrier)}>
-                            Edit
-                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={open}>Open the record</DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setEditing(carrier)}>Edit</DropdownMenuItem>
                           {carrier.is_active ? (
-                            <DropdownMenuItem variant="destructive" className="text-sm tracking-[-0.02em]" onSelect={() => deactivate(carrier)}>
-                              Deactivate
-                            </DropdownMenuItem>
+                            <DropdownMenuItem variant="destructive" onSelect={() => void deactivate(carrier)}>Deactivate</DropdownMenuItem>
                           ) : (
-                            <DropdownMenuItem className={MENU_ITEM} onSelect={() => reactivate(carrier)}>
-                              Reactivate
-                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => void reactivate(carrier)}>Reactivate</DropdownMenuItem>
                           )}
                         </DropdownMenuContent>
                       </DropdownMenu>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        )}
       </TableCard>
 
-      <CarrierDialog open={creating} onClose={() => setCreating(false)} onSaved={refresh} />
+      <CarrierDialog key={creating ? "new-open" : "new-closed"} open={creating} onClose={() => set({ new: null })} onSaved={refresh} />
       <CarrierDialog key={editing?.id ?? "edit-none"} open={Boolean(editing)} carrier={editing} onClose={() => setEditing(null)} onSaved={refresh} />
       <CarrierDeactivateDialog
         key={blocked?.carrier.id ?? "blocked-none"}
@@ -358,6 +269,6 @@ export function CarriersTable({
           refresh();
         }}
       />
-    </div>
+    </>
   );
 }

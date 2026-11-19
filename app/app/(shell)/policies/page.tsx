@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { PolicyBook } from "@/components/app/policy-book";
@@ -8,6 +9,7 @@ import { carrierPicker } from "@/lib/carriers/agency";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { Callout } from "@/components/app/settings/primitives";
+import { PageLoading } from "@/components/ui/page-loading";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { scopeFor } from "@/lib/agency/visibility";
 import { actAsPage, actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
@@ -61,24 +63,35 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
   const carriers = carrierList.map((carrier) => carrier.name);
   const actions = <PolicyEntryActions canAdd={canAdd} carriers={carriers} blockedReason={readOnly ? "Your account is read-only" : "Adding policies is for the owner and producers"} />;
 
-  if (view === "changes") {
-    // LA-4.6: what moved between the carriers' policy files.
-    const changes = await listPolicyChanges(guard.context.tenantId);
-    return (
-      <DataInPage step="policies" tabs={lead} actions={actions}>
-        <PolicyChangesTable
-          changes={changes.changes}
-          emptyTitle={changes.available ? "No policy has changed yet" : "Policy changes are not available yet"}
-          emptyHint={changes.available ? "Changes appear when a carrier's next policy file differs from the one before it." : "They appear once the database update (20261008140000) is applied."}
-        />
-      </DataInPage>
-    );
-  }
+  // Speed pass 2026-11-12: the title line, the views and the Add button draw at once; the list streams in under them.
+  return (
+    <DataInPage step="policies" tabs={lead} actions={actions}>
+      <Suspense key={view} fallback={<PageLoading header={false} strip={view === "book"} />}>
+        {view === "changes" ? <PolicyChanges guard={guard} /> : <PoliciesBook viewer={viewer} params={params} canAddRate={!readOnly && holdsAnyRole(guard.roles, ["owner", "bookkeeper"])} readOnly={readOnly} isProducer={guard.role === "producer"} />}
+      </Suspense>
+    </DataInPage>
+  );
+}
 
+/** LA-4.6: what moved between the carriers' policy files. */
+async function PolicyChanges({ guard }: { guard: { context: { tenantId: string } } }) {
+  const changes = await listPolicyChanges(guard.context.tenantId);
+  return (
+    <PolicyChangesTable
+      changes={changes.changes}
+      emptyTitle={changes.available ? "No policy has changed yet" : "Policy changes are not available yet"}
+      emptyHint={changes.available ? "Changes appear when a carrier's next policy file differs from the one before it." : "They appear once the database update (20261008140000) is applied."}
+    />
+  );
+}
+
+type Viewer = Parameters<typeof loadBook>[0];
+
+async function PoliciesBook({ viewer, params, canAddRate, readOnly, isProducer }: { viewer: Viewer; params: Record<string, string | string[] | undefined>; canAddRate: boolean; readOnly: boolean; isProducer: boolean }) {
   const lists = Promise.all([loadBook(viewer), loadHandPolicies(viewer), loadIssuedAwaiting(viewer).catch(() => [])]);
   // Where each policy's money stands, over exactly the rows this person may see. Its reads need only the tenant, so
   // they start now, beside the book's, and wait for the rows only to add them up (perf pass 2026-11-08).
-  const moneyRead = loadBookMoney(guard.context.tenantId, lists.then(([book, hand, issued]) => [...(book.available ? book.rows : []), ...hand, ...issued])).catch((error) => {
+  const moneyRead = loadBookMoney(viewer.tenantId, lists.then(([book, hand, issued]) => [...(book.available ? book.rows : []), ...hand, ...issued])).catch((error) => {
     console.error("[policies] money", error);
     return null;
   });
@@ -91,18 +104,18 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
   const listRows = rows.map((row) => ({ ...row, money: money?.byKey.get(`${row.carrierId}|${row.policyNumber}`) ?? null }));
 
   return (
-    <DataInPage step="policies" tabs={lead} actions={actions}>
+    <>
       {/* LA-4.13: the share of the book no rate can check, and the one place to fix it — one line (round 3). */}
       {unpriced && (
         <Callout tone="warning" title={`${unpriced.top.policies.toLocaleString("en-US")} ${unpriced.top.carrierName} ${unpriced.top.policies === 1 ? "policy" : "policies"}, $${Math.round(unpriced.top.monthlyCents / 100).toLocaleString("en-US")}/mo, have no rate, so their commission can't be checked${unpriced.carriers > 1 ? ` (${unpriced.policies.toLocaleString("en-US")} policies across ${unpriced.carriers} carriers in all)` : ""}.`}>
-          {guard.role !== "producer" && <Link href="/app/rate-card" className="font-semibold underline">Add rates</Link>}
+          {!isProducer && <Link href="/app/rate-card" className="font-semibold underline">Add rates</Link>}
         </Callout>
       )}
       {!book.available && <Callout tone="warning" title={POLICY_BOOK_PENDING_MESSAGE} />}
       {!money && rows.length > 0 && <Callout tone="warning" title="Where each policy's money stands couldn't be worked out just now, so those figures show —. Reload to try again." />}
       {(book.available || hand.length > 0 || issued.length > 0) && (
-        <PolicyBook rows={listRows} strip={money?.strip ?? null} initialQuery={query} saved={book.available ? book.savedFilters : []} savedAvailable={book.available && book.savedFiltersAvailable} scoped={guard.role === "producer"} readOnly={readOnly} canAddRate={!readOnly && holdsAnyRole(guard.roles, ["owner", "bookkeeper"])} />
+        <PolicyBook rows={listRows} strip={money?.strip ?? null} initialQuery={query} saved={book.available ? book.savedFilters : []} savedAvailable={book.available && book.savedFiltersAvailable} scoped={isProducer} readOnly={readOnly} canAddRate={canAddRate} />
       )}
-    </DataInPage>
+    </>
   );
 }

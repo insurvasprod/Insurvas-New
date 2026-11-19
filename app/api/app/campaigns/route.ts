@@ -8,6 +8,7 @@ import { assertOutboundLimit, outboundLimitResponse, outboundLimitSnapshot } fro
 import { isSchemaGap, type SchemaGapNotice } from "@/lib/supabase/schemaGap";
 import { campaignExtras } from "@/lib/campaigns/extras";
 import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
+import { precounted } from "@/lib/supabase/precount";
 
 const roles = ["owner", "producer"] as const;
 type Result<T> = { data: T; error: { message: string; code?: string } | null };
@@ -49,7 +50,9 @@ const FUNNEL_PENDING: SchemaGapNotice = {
  * same campaign. Null with a notice until that migration is applied; a real fault is a fault.
  */
 async function campaignFunnel(tenantId: string): Promise<{ rows: Record<string, FunnelRow> | null; pending: SchemaGapNotice | null }> {
-  const { data, error } = await (getSupabaseServiceClient() as unknown as { rpc(name: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }> }).rpc("tenant_campaign_funnel", { p_tenant_id: tenantId });
+  // Counts every lead's dial, contact and quote: read from its pre-counted copy (20261118100000), live until applied.
+  const live = () => (getSupabaseServiceClient() as unknown as { rpc(name: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }> }).rpc("tenant_campaign_funnel", { p_tenant_id: tenantId });
+  const { data, error } = await precounted(tenantId, "campaign_funnel", {}, live);
   if (error) {
     if (isSchemaGap(error) || error.code === "PGRST202" || /could not find the function/i.test(error.message)) return { rows: null, pending: FUNNEL_PENDING };
     throw new Error(`Could not count each campaign's contacts: ${error.message}`);

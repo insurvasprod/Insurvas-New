@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { acquisitionDefaults, ExpenseError, listExpenses, type ExpenseRow } from "@/lib/accounting/expenseStore";
@@ -29,6 +30,7 @@ import { ClickRow } from "@/components/app/book/policy/click-row";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
+import { StreamSection, TitleShape } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { formatCentsAsCurrency } from "@/lib/money";
@@ -60,24 +62,44 @@ export default async function ExpensePage({ params, searchParams }: { params: Pr
   const [{ id }, { tab: askedTab, from: askedFrom }] = await Promise.all([params, searchParams]);
   const tenantId = guard.context.tenantId;
   const readOnly = guard.entitlement.access === "read_only";
-  let expenses: ExpenseRow[] | null = null;
-  let defaults: Awaited<ReturnType<typeof acquisitionDefaults>> | null = null;
-  let problem: string | null = null;
-  try {
-    [expenses, defaults] = await Promise.all([listExpenses(tenantId), acquisitionDefaults(tenantId)]);
-  } catch (error) {
-    if (!(error instanceof ExpenseError)) throw error;
-    problem = error.message;
-  }
-  const row = UUID.test(id) ? expenses?.find((e) => e.id === id) ?? null : null;
-  if (!expenses || !defaults || !row) {
-    return (
-      <AccountingPage step="expenses" title="Expense">
-        <TableCard><EmptyState title={problem ? "Not switched on yet" : "That expense isn't in this agency"} hint={problem ?? "It may have been opened from an old link."} action={<Link className="text-sm font-medium text-[var(--accent-ink)] hover:underline" href="/app/expenses">All expenses</Link>} /></TableCard>
-      </AccountingPage>
-    );
-  }
+  // Frame first (UI-CONSISTENCY §7a): the expenses are read now; the name streams in behind a title shape, and the
+  // tabs, ‹ › and buttons when it lands (until then, Details and Receipt without counts).
+  const read: ExpenseRead = (async () => {
+    try {
+      const [expenses, defaults] = await Promise.all([listExpenses(tenantId), acquisitionDefaults(tenantId)]);
+      const row = UUID.test(id) ? expenses.find((e) => e.id === id) ?? null : null;
+      return { expenses, defaults, row, problem: null };
+    } catch (error) {
+      if (!(error instanceof ExpenseError)) throw error;
+      return { expenses: null, defaults: null, row: null, problem: error.message };
+    }
+  })();
+  const earlyFrom: ExpenseList | undefined = (EXPENSE_LISTS as readonly string[]).includes(askedFrom ?? "") ? (askedFrom as ExpenseList) : undefined;
+  const early = (t: Tab) => expenseHref(id, earlyFrom, t === "details" ? undefined : t);
+  const tabs = (
+    <Suspense fallback={<ViewTabs label="Expense" value={askedTab === "receipt" ? "receipt" : "details"} tabs={[{ key: "details", label: "Details", href: early("details") }, { key: "receipt", label: "Receipt", href: early("receipt") }]} />}>
+      <ExpenseTabs read={read} askedTab={askedTab} askedFrom={askedFrom} />
+    </Suspense>
+  );
+  const stepper = <Suspense fallback={<span aria-hidden="true" className="h-9" />}><ExpenseStepper read={read} askedTab={askedTab} askedFrom={askedFrom} /></Suspense>;
+  const actions = <Suspense fallback={null}><ExpenseActions read={read} askedTab={askedTab} askedFrom={askedFrom} readOnly={readOnly} /></Suspense>;
 
+  return (
+    <AccountingPage step="expenses" title={<Suspense fallback={<TitleShape />}><ExpenseName read={read} /></Suspense>} tabs={tabs} stepper={stepper} actions={actions}>
+      <StreamSection shape="strip+table">
+        <ExpenseBody read={read} askedTab={askedTab} askedFrom={askedFrom} readOnly={readOnly} />
+      </StreamSection>
+    </AccountingPage>
+  );
+}
+
+type ExpenseRead = Promise<{ expenses: ExpenseRow[] | null; defaults: Awaited<ReturnType<typeof acquisitionDefaults>> | null; row: ExpenseRow | null; problem: string | null }>;
+type Found = { expenses: ExpenseRow[]; defaults: Awaited<ReturnType<typeof acquisitionDefaults>>; row: ExpenseRow };
+
+const found = (r: Awaited<ExpenseRead>): Found | null => (r.expenses && r.defaults && r.row ? { expenses: r.expenses, defaults: r.defaults, row: r.row } : null);
+
+/** Everything the record's blocks draw from: its list (for ‹ ›), its copies, its tab, and the strip's figures. */
+function recordOf({ expenses, row }: Found, askedTab: string | undefined, askedFrom: string | undefined) {
   const state = expenseState(row);
   const from: ExpenseList = (EXPENSE_LISTS as readonly string[]).includes(askedFrom ?? "") ? (askedFrom as ExpenseList) : homeListOf(row);
   // ‹ › walk the list the expense was opened from, in its order (newest first, as the list shows it).
@@ -91,13 +113,6 @@ export default async function ExpensePage({ params, searchParams }: { params: Pr
   const missing = needsReceipt && !row.hasReceipt ? 1 : 0;
   const tab: Tab = askedTab === "months" && monthly ? "months" : askedTab === "receipt" && state !== "template" ? "receipt" : "details";
   const at = (t: Tab) => expenseHref(row.id, from, t === "details" ? undefined : t);
-  const tabs = (
-    <ViewTabs label="Expense" value={tab} tabs={[
-      { key: "details", label: "Details", href: at("details") },
-      ...(monthly ? [{ key: "months" as const, label: "Months", count: copies.length, href: at("months") }] : []),
-      ...(state !== "template" ? [{ key: "receipt" as const, label: "Receipt", count: missing || null, tone: "danger" as const, href: at("receipt") }] : []),
-    ]} />
-  );
 
   // The strip: Amount · Bucket · Counts as · Status · In the P&L.
   const bucket = bucketOf(row.category);
@@ -120,48 +135,89 @@ export default async function ExpensePage({ params, searchParams }: { params: Pr
     : state === "void" ? (row.voidReason ?? "voided")
     : row.recurrenceEndOn ? `until ${shortDate(row.recurrenceEndOn)}` : "no end";
 
+  return { state, from, previous, next, template, copies, monthly, missing, tab, at, bucket, detail, pnlHref, amountNote, bucketHref, inPnl, statusNote };
+}
+
+async function ExpenseName({ read }: { read: ExpenseRead }) {
+  const r = found(await read);
+  return r ? expenseTitle(r.row, new Date().getUTCFullYear()) : "Expense";
+}
+
+async function ExpenseTabs({ read, askedTab, askedFrom }: { read: ExpenseRead; askedTab?: string; askedFrom?: string }) {
+  const r = found(await read);
+  if (!r) return null;
+  const { tab, monthly, copies, state, missing, at } = recordOf(r, askedTab, askedFrom);
+  return (
+    <ViewTabs label="Expense" value={tab} tabs={[
+      { key: "details", label: "Details", href: at("details") },
+      ...(monthly ? [{ key: "months" as const, label: "Months", count: copies.length, href: at("months") }] : []),
+      ...(state !== "template" ? [{ key: "receipt" as const, label: "Receipt", count: missing || null, tone: "danger" as const, href: at("receipt") }] : []),
+    ]} />
+  );
+}
+
+async function ExpenseStepper({ read, askedTab, askedFrom }: { read: ExpenseRead; askedTab?: string; askedFrom?: string }) {
+  const r = found(await read);
+  if (!r) return null;
+  const { previous, next, from } = recordOf(r, askedTab, askedFrom);
   const thisYear = new Date().getUTCFullYear();
-  const stepper = (
+  return (
     <RecordStepper noun="expense"
       previous={previous ? { href: expenseHref(previous.id, from), label: expenseShortName(previous, thisYear) } : null}
       next={next ? { href: expenseHref(next.id, from), label: expenseShortName(next, thisYear) } : null} />
   );
-  const actions = <ExpenseRecordActions row={row} readOnly={readOnly} receiptHref={at("receipt")} />;
+}
 
+async function ExpenseActions({ read, askedTab, askedFrom, readOnly }: { read: ExpenseRead; askedTab?: string; askedFrom?: string; readOnly: boolean }) {
+  const r = found(await read);
+  if (!r) return null;
+  const { at } = recordOf(r, askedTab, askedFrom);
+  return <ExpenseRecordActions row={r.row} readOnly={readOnly} receiptHref={at("receipt")} />;
+}
+
+async function ExpenseBody({ read, askedTab, askedFrom, readOnly }: { read: ExpenseRead; askedTab?: string; askedFrom?: string; readOnly: boolean }) {
+  const loaded = await read;
+  const r = found(loaded);
+  if (!r) {
+    const problem = loaded.problem;
+    return <TableCard><EmptyState title={problem ? "Not switched on yet" : "That expense isn't in this agency"} hint={problem ?? "It may have been opened from an old link."} action={<Link className="text-sm font-medium text-[var(--accent-ink)] hover:underline" href="/app/expenses">All expenses</Link>} /></TableCard>;
+  }
+  const { row, defaults } = r;
+  const { state, template, copies, tab, bucket, detail, pnlHref, amountNote, bucketHref, inPnl, statusNote } = recordOf(r, askedTab, askedFrom);
   return (
-    <AccountingPage step="expenses" title={expenseTitle(row, thisYear)} tabs={tabs} stepper={stepper} actions={actions}>
-      <StatStrip label={`${row.vendorName} at a glance`}>
-        <StatTile label="Amount" value={money(row.amountCents)} footnote={amountNote} href={state === "paid" || state === "unpaid" ? pnlHref : undefined} />
-        <StatTile label="Bucket" valueSize="text" value={EXPENSE_BUCKET_COPY[bucket].short} footnote={detail} href={bucketHref} />
-        <StatTile label="Counts as" valueSize="text" value={row.isAcquisitionCost ? "Acquisition" : "Overhead"} footnote={row.acquisitionOverridden ? "your choice for this one" : "the category default"} href="/app/accounting-settings" />
-        <StatTile label="Status" valueSize="text" value={stateChip(row)} footnote={statusNote} href={state === "waiting" ? "/app/expenses?view=confirm" : state === "template" ? "/app/expenses?view=recurring" : `/app/expenses?view=booked&status=${state}`} />
-        <StatTile label="In the P&L" valueSize="text" value={inPnl.value} footnote={inPnl.note} href={state === "template" ? undefined : pnlHref} />
-      </StatStrip>
-      {tab === "details" ? (
-        <ExpenseFacts row={row} defaults={defaults} readOnly={readOnly} pnlHref={state === "template" ? null : pnlHref}
-          template={template ? { href: expenseHref(template.id, "recurring"), name: template.vendorName } : null} />
-      ) : tab === "months" ? (
-        <TableCard footer={<span>{copies.length} month{copies.length === 1 ? "" : "s"} · {money(copies.filter((e) => e.status === "confirmed").reduce((s, e) => s + e.amountCents, 0))} booked</span>}>
-          {copies.length === 0 ? <EmptyState title="No months yet" hint="Each month a copy comes back for you to OK." /> : (
-            <table className="portal-lead-table w-full min-w-160 text-left text-sm">
-              <thead><tr><th>Month</th><th className="text-right">Amount</th><th>Status</th><th>Receipt</th><th><span className="sr-only">Open</span></th></tr></thead>
-              <tbody>
-                {copies.map((e) => (
-                  <ClickRow key={e.id} href={expenseHref(e.id, "months")} label={`Open ${monthName(e.incurredOn)}`} className={e.id === row.id ? "bg-[var(--surface-alt)]" : undefined}>
-                    <td className="whitespace-nowrap font-medium text-foreground">{monthName(e.incurredOn)}</td>
-                    <td className="whitespace-nowrap text-right tabular-nums">{money(e.amountCents)}</td>
-                    <td>{stateChip(e)}</td>
-                    <td className="whitespace-nowrap">{e.hasReceipt ? "Attached" : e.status === "void" ? <span className="text-muted-foreground">—</span> : "Missing"}</td>
-                  </ClickRow>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </TableCard>
-      ) : (
-        <ExpenseReceipt id={row.id} documentName={row.documentName} hasReceipt={row.hasReceipt}
-          canAttach={!readOnly && state !== "void"} reason={readOnly ? "This plan is read-only here: the receipt can be opened, not replaced." : state === "void" ? "A void expense keeps the receipt it had." : null} />
-      )}
-    </AccountingPage>
+    <>
+    <StatStrip label={`${row.vendorName} at a glance`}>
+      <StatTile label="Amount" value={money(row.amountCents)} footnote={amountNote} href={state === "paid" || state === "unpaid" ? pnlHref : undefined} />
+      <StatTile label="Bucket" valueSize="text" value={EXPENSE_BUCKET_COPY[bucket].short} footnote={detail} href={bucketHref} />
+      <StatTile label="Counts as" valueSize="text" value={row.isAcquisitionCost ? "Acquisition" : "Overhead"} footnote={row.acquisitionOverridden ? "your choice for this one" : "the category default"} href="/app/accounting-settings" />
+      <StatTile label="Status" valueSize="text" value={stateChip(row)} footnote={statusNote} href={state === "waiting" ? "/app/expenses?view=confirm" : state === "template" ? "/app/expenses?view=recurring" : `/app/expenses?view=booked&status=${state}`} />
+      <StatTile label="In the P&L" valueSize="text" value={inPnl.value} footnote={inPnl.note} href={state === "template" ? undefined : pnlHref} />
+    </StatStrip>
+    {tab === "details" ? (
+      <ExpenseFacts row={row} defaults={defaults} readOnly={readOnly} pnlHref={state === "template" ? null : pnlHref}
+        template={template ? { href: expenseHref(template.id, "recurring"), name: template.vendorName } : null} />
+    ) : tab === "months" ? (
+      <TableCard footer={<span>{copies.length} month{copies.length === 1 ? "" : "s"} · {money(copies.filter((e) => e.status === "confirmed").reduce((s, e) => s + e.amountCents, 0))} booked</span>}>
+        {copies.length === 0 ? <EmptyState title="No months yet" hint="Each month a copy comes back for you to OK." /> : (
+          <table className="portal-lead-table w-full min-w-160 text-left text-sm">
+            <thead><tr><th>Month</th><th className="text-right">Amount</th><th>Status</th><th>Receipt</th><th><span className="sr-only">Open</span></th></tr></thead>
+            <tbody>
+              {copies.map((e) => (
+                <ClickRow key={e.id} href={expenseHref(e.id, "months")} label={`Open ${monthName(e.incurredOn)}`} className={e.id === row.id ? "bg-[var(--surface-alt)]" : undefined}>
+                  <td className="whitespace-nowrap font-medium text-foreground">{monthName(e.incurredOn)}</td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{money(e.amountCents)}</td>
+                  <td>{stateChip(e)}</td>
+                  <td className="whitespace-nowrap">{e.hasReceipt ? "Attached" : e.status === "void" ? <span className="text-muted-foreground">—</span> : "Missing"}</td>
+                </ClickRow>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </TableCard>
+    ) : (
+      <ExpenseReceipt id={row.id} documentName={row.documentName} hasReceipt={row.hasReceipt}
+        canAttach={!readOnly && state !== "void"} reason={readOnly ? "This plan is read-only here: the receipt can be opened, not replaced." : state === "void" ? "A void expense keeps the receipt it had." : null} />
+    )}
+    </>
   );
 }

@@ -1,10 +1,13 @@
+import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
+import { Await, FactsShape } from "@/components/app/reports/await";
 import { ReportsPage } from "@/components/app/reports/reports-page";
 import { ScorecardRecord } from "@/components/app/agency/scorecards-board";
+import { StreamSection, TitleShape } from "@/components/ui/stream-section";
 import { producerScores } from "@/lib/agency/scorecardStore";
 import { scopeFor } from "@/lib/agency/visibility";
 import { asShown, byIssued, dayMonth, defaultPeriod, recordHref, SCORECARDS_HREF, teamFigures } from "@/lib/agency/scorecardView";
@@ -25,7 +28,8 @@ export default async function ProducerScorecardPage({ params, searchParams }: { 
   const guard = await guardPage("producer_scorecards");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Producer scorecards" description="Who is profitable, not just busy." />;
   if (!actAsPage(guard, ["owner", "bookkeeper", "producer"])) return <RoleGateNotice featureLabel="Producer scorecards" detail="Producers see their own scorecard; the owner, admins, managers and the bookkeeper see the team's." />;
-  const [{ producerUserId }, query] = await Promise.all([params, searchParams]);
+  const { producerUserId } = await params;
+  const query = await searchParams;
   if (!UUID.test(producerUserId)) notFound();
   const scoped = guard.role === "producer" && guard.context.memberRole !== "manager";
   const period = sharedPeriod(query) ?? defaultPeriod();
@@ -34,31 +38,39 @@ export default async function ProducerScorecardPage({ params, searchParams }: { 
   const scope = await scopeFor(guard.context);
   if (scope !== null && !scope.includes(producerUserId)) notFound();
 
-  const data = await producerScores(guard.context, period, undefined, { scope });
-  const ordered = byIssued(asShown(data.rows));
-  const at = ordered.findIndex((r) => r.producerUserId === producerUserId);
-  if (!data.available || at < 0) notFound();
-  const row = ordered[at];
-  const before = at > 0 ? ordered[at - 1] : null;
-  const after = at < ordered.length - 1 ? ordered[at + 1] : null;
+  // Frame first (§7a): the scores are started here; the frame draws at once, the producer's name and figures stream in.
+  // A producer outside the read (or no carrier files) is still a 404 page, drawn where the record would be.
+  const record = producerScores(guard.context, period, undefined, { scope }).then((data) => {
+    const ordered = byIssued(asShown(data.rows));
+    const at = ordered.findIndex((r) => r.producerUserId === producerUserId);
+    if (!data.available || at < 0) notFound();
+    return { row: ordered[at], ordered, minSample: data.minSample, before: at > 0 ? ordered[at - 1] : null, after: at < ordered.length - 1 ? ordered[at + 1] : null };
+  });
 
   return (
     <ReportsPage
       view="producers"
-      title={row.name}
+      title={<Suspense fallback={<TitleShape />}><Await read={record}>{({ row }) => row.name}</Await></Suspense>}
+      label="Producer scorecard"
       show="chart"
       info="One producer's scorecard: what they placed, what came back, and the figures the team table leaves out (what they submitted through Insurvas, month 13 and lead cost per issued and per persisting policy), set against the team."
-      facts={`Producer · ${dayMonth(period.from)} – ${dayMonth(period.to)} · ${row.submitted} submitted through Insurvas · ${row.issued} issued in the carriers' files`}
+      facts={<Suspense fallback={<FactsShape />}><Await read={record}>{({ row }) => `Producer · ${dayMonth(period.from)} – ${dayMonth(period.to)} · ${row.submitted} submitted through Insurvas · ${row.issued} issued in the carriers' files`}</Await></Suspense>}
     >
-      <ScorecardRecord
-        row={row}
-        team={teamFigures(ordered, data.minSample)}
-        period={period}
-        show={showOf(query, "chart")}
-        previous={before ? { href: recordHref(before.producerUserId, period), label: before.name } : null}
-        next={after ? { href: recordHref(after.producerUserId, period), label: after.name } : null}
-        mine={false}
-      />
+      <StreamSection shape="strip+table">
+        <Await read={record}>
+          {({ row, ordered, minSample, before, after }) => (
+            <ScorecardRecord
+              row={row}
+              team={teamFigures(ordered, minSample)}
+              period={period}
+              show={showOf(query, "chart")}
+              previous={before ? { href: recordHref(before.producerUserId, period), label: before.name } : null}
+              next={after ? { href: recordHref(after.producerUserId, period), label: after.name } : null}
+              mine={false}
+            />
+          )}
+        </Await>
+      </StreamSection>
     </ReportsPage>
   );
 }

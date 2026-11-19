@@ -272,12 +272,14 @@ export function SettingsForm({
               );
             })}
           </div>
+          {/* The lockout list and Unlock moved to Monitoring › Lockouts (admin round 1, monitoring.html screen 3). */}
+          <div className="mt-4 border-t border-[var(--border)] pt-3">
+            <LoginProtectionPanel />
+          </div>
         </section>
       ) : (
         <Callout tone="info" title="Login protection is managed by a super admin." />
       )}
-
-      {canManageLoginProtection && <LoginProtectionPanel />}
     </div>
   );
 }

@@ -26,9 +26,10 @@ import { ChoiceList, type Choice } from "./choice-list";
 /**
  * Where a decision goes once saved. On the item page: the next item's page (or the list). In place (round 4,
  * owner 2026-11-02: a row of a file's page or the Needs you list opens under itself): the caller's `onDone`,
- * which closes the row and opens the next waiting one, and the page refreshes behind it.
+ * which closes the row and opens the next waiting one, and the page refreshes behind it. Tier 1 motion (2026-11-17):
+ * the caller runs `refresh` once the answered row has left its queue (useRowExit), never before.
  */
-export type InlineNav = { hasNext: boolean; onDone: (how: "save" | "next") => void; onSkip?: () => void };
+export type InlineNav = { hasNext: boolean; onDone: (how: "save" | "next", refresh: () => void) => void; onSkip?: () => void };
 type Nav = { nextHref: string | null; listHref: string; readOnly: boolean; inline?: InlineNav };
 
 /** In place the parts drop their cards: the row it opens under is the container (fewer containers). */
@@ -51,8 +52,7 @@ function useDecision({ nextHref, listHref, inline }: Nav) {
         notify.done(done);
         refreshStepCounts();
         setBusy(null);
-        inline.onDone(how);
-        router.refresh();
+        inline.onDone(how, () => router.refresh());
         return;
       }
       notify.done(how === "next" && nextHref ? `${done} Opening the next.` : done);

@@ -34,8 +34,11 @@ type Run = { state: "ask" } | { state: "running"; done: number } | { state: "sto
  * hundreds of records), then batches of 50 through POST /api/app/exceptions `resolve_many` with a progress bar;
  * Stop ends after the batch in flight, and what saved stays saved. An item that fails is named, and the rest can
  * be tried again.
+ *
+ * `exitRows` (Tier 1 motion, 2026-11-17): the list's `useRowExit().exit`, given the saved items' ids; the dialog
+ * closes, the saved rows leave together (30ms apart), and only then does the refresh land.
  */
-export function BulkResolve({ ids, resolution, noun, label, size = "sm", variant = "default" }: { ids: string[]; resolution: BulkResolution; noun: string; label?: string; size?: "sm" | "default"; variant?: "default" | "outline" }) {
+export function BulkResolve({ ids, resolution, noun, label, size = "sm", variant = "default", exitRows }: { ids: string[]; resolution: BulkResolution; noun: string; label?: string; size?: "sm" | "default"; variant?: "default" | "outline"; exitRows?: (ids: string[], then: () => void) => unknown }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [run, setRun] = useState<Run>({ state: "ask" });
@@ -67,7 +70,9 @@ export function BulkResolve({ ids, resolution, noun, label, size = "sm", variant
       setRun({ state: "running", done });
     }
     const unsaved = left.filter((id) => !saved.has(id));
-    router.refresh();
+    const refresh = () => router.refresh();
+    if (exitRows && saved.size) void exitRows([...saved], refresh);
+    else refresh();
     if (saved.size) refreshStepCounts();
     if (!unsaved.length) {
       notify.done(`${n(done)} ${noun} ${words.done}.`);

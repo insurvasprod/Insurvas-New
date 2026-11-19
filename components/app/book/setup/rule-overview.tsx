@@ -11,6 +11,7 @@ import type { BoardPipeline, EvaluationRow, RuleVersionRow } from "@/lib/pipelin
 import { cn } from "@/lib/utils";
 
 import { stageNames } from "./card-moves-shared";
+import { buttonVariants } from "@/components/ui/button";
 
 const LINK = "whitespace-nowrap hover:underline";
 
@@ -90,7 +91,7 @@ export function RuleOverview({ mode, enabled, createdAt, liveSince, version, for
       done: checked === forecast.length && wrong === 0,
       text: `Check its ${forecast.length.toLocaleString("en-US")} would-${forecast.length === 1 ? "move" : "moves"}`,
       detail: `${checked} checked${wrong ? `, ${wrong} wrong` : ""}`,
-      action: <Link href={checkHref} className={LINK}>Check ›</Link>,
+      action: <Link href={checkHref} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Check</Link>,
     }] : []),
     // "Carrier terms ›" opens the one carrier with no grace, or the terms list when there are more (mockup r7 2·1).
     ...(graceMissing?.length ? [{ done: false, text: "Every carrier it covers has a grace set", detail: `${graceMissing.length} ${graceMissing.length === 1 ? "doesn't" : "don't"}, so no missed payment is counted for them`, action: <Link href={graceMissing.length === 1 ? `/app/book-setup/carrier-rules/${graceMissing[0]}` : "/app/book-setup/carrier-rules"} className={LINK} title="Set the grace in Carrier terms">Set grace ›</Link> }] : []),

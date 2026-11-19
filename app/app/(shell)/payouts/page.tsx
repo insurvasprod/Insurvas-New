@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
@@ -14,6 +15,8 @@ import { tabFromParams, tabOf, type PayoutsTab } from "@/components/app/commissi
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs } from "@/components/ui/view-tabs";
+import { StreamSection } from "@/components/ui/stream-section";
+import { Part, startParts } from "@/components/app/commissions/frame-parts";
 
 /**
  * LA-7.4 · Commissions › Partner payouts (round 7, owner pick 9·A, 2026-11-10; docs/la4/mockups-r7/commissions.html).
@@ -42,51 +45,61 @@ export default async function PayoutsPage({ searchParams }: { searchParams: Prom
   const asked = tabFromParams(view, status);
   const tenantId = guard.context.tenantId;
   const readOnly = guard.entitlement.access === "read_only";
-  const live = await ledgerLive().catch(() => false);
   const partnerId = partner && UUID.test(partner) ? partner : null;
+  // The tabs on the title line; their counts once the lists are read. Landing with no tab asked, the tab is picked
+  // from the lists, so until then the bar shows To review (the first job).
+  const tabsOf = (tab: PayoutsTab, counts: { review: number | null; pay: number | null; paid: number | null; ledger: number | null; unset: number } | null) => (
+    <ViewTabs label="Partner payouts" value={tab} tabs={[
+      { key: "review", label: "To review", count: counts?.review ?? null, href: "/app/payouts?status=review" },
+      { key: "pay", label: "To pay", count: counts?.pay ?? null, href: "/app/payouts?status=pay" },
+      { key: "paid", label: "Paid", count: counts?.paid ?? null, href: "/app/payouts?status=paid" },
+      { key: "ledger", label: "Ledger", count: counts?.ledger ?? null, href: "/app/payouts?view=ledger" },
+      { key: "rulebooks", label: "Rulebooks", count: counts?.unset || null, tone: "danger", href: "/app/payouts?view=rulebooks" },
+    ]} />
+  );
 
-  const quiet = <T,>(p: Promise<T>) => p.catch((error: unknown) => { if (!(error instanceof PayoutError)) throw error; return null; });
-  // Every tab's count is on the bar, so the three lists are read together; the ledger is synced only when it is the tab.
-  const [runs, ledger, rulebooks] = await Promise.all([
-    quiet(listRuns(tenantId)),
-    live ? quiet(listLedger(tenantId, asked === "ledger" ? { partnerId } : { sync: false })) : Promise.resolve(null),
-    live ? quiet(listRulebooks(tenantId)) : Promise.resolve(null),
-  ]);
-  const of = (t: "review" | "pay" | "paid") => (runs?.runs ?? []).filter((r) => tabOf(r) === t);
-  // Landing with no tab asked: the first job waiting (review, then pay), else Paid.
-  const tab: PayoutsTab = asked ?? (of("review").length ? "review" : of("pay").length ? "pay" : "paid");
-  const unset = rulebooks?.filter((r) => !r.model).length ?? 0;
+  // Frame first (§7a): the title and the tabs draw at once; the lists, the buttons and the board stream in.
+  const read = startParts((async () => {
+    const live = await ledgerLive().catch(() => false);
+    const quiet = <T,>(p: Promise<T>) => p.catch((error: unknown) => { if (!(error instanceof PayoutError)) throw error; return null; });
+    // Every tab's count is on the bar, so the three lists are read together; the ledger is synced only when it is the tab.
+    const [runs, ledger, rulebooks] = await Promise.all([
+      quiet(listRuns(tenantId)),
+      live ? quiet(listLedger(tenantId, asked === "ledger" ? { partnerId } : { sync: false })) : Promise.resolve(null),
+      live ? quiet(listRulebooks(tenantId)) : Promise.resolve(null),
+    ]);
+    const of = (t: "review" | "pay" | "paid") => (runs?.runs ?? []).filter((r) => tabOf(r) === t);
+    // Landing with no tab asked: the first job waiting (review, then pay), else Paid.
+    const tab: PayoutsTab = asked ?? (of("review").length ? "review" : of("pay").length ? "pay" : "paid");
+    const unset = rulebooks?.filter((r) => !r.model).length ?? 0;
+    const waiting = <TableCard><EmptyState title="Partner payouts aren't switched on for this agency yet." hint="Invoices, the ledger and rulebooks appear here once they are." /></TableCard>;
 
-  const tabs = <ViewTabs label="Partner payouts" value={tab} tabs={[
-    { key: "review", label: "To review", count: runs ? of("review").length : null, href: "/app/payouts?status=review" },
-    { key: "pay", label: "To pay", count: runs ? of("pay").length : null, href: "/app/payouts?status=pay" },
-    { key: "paid", label: "Paid", count: runs ? of("paid").length : null, href: "/app/payouts?status=paid" },
-    { key: "ledger", label: "Ledger", count: ledger?.rows.length ?? null, href: "/app/payouts?view=ledger" },
-    { key: "rulebooks", label: "Rulebooks", count: unset || null, tone: "danger", href: "/app/payouts?view=rulebooks" },
-  ]} />;
-  const waiting = <TableCard><EmptyState title="Partner payouts aren't switched on for this agency yet." hint="Invoices, the ledger and rulebooks appear here once they are." /></TableCard>;
+    // The rulebook, in words, beside each invoice.
+    const models: Record<string, string> = {};
+    for (const r of rulebooks ?? []) {
+      const rate = rulebookRateLabel(r.model, r.rateCents, r.ratePctBp, money);
+      models[r.partnerId] = r.model === "per_submitted_application" ? `Model A · ${rate}` : r.model === "revenue_share" ? `Model B · ${r.ratePctBp != null ? pctLabel(r.ratePctBp) : rate}` : rate ? `Older terms · ${rate}` : "No rulebook yet";
+    }
+    const items: Record<string, number> = {};
+    for (const row of ledger?.rows ?? []) if (row.runId) items[row.runId] = (items[row.runId] ?? 0) + 1;
 
-  // The rulebook, in words, beside each invoice.
-  const models: Record<string, string> = {};
-  for (const r of rulebooks ?? []) {
-    const rate = rulebookRateLabel(r.model, r.rateCents, r.ratePctBp, money);
-    models[r.partnerId] = r.model === "per_submitted_application" ? `Model A · ${rate}` : r.model === "revenue_share" ? `Model B · ${r.ratePctBp != null ? pctLabel(r.ratePctBp) : rate}` : rate ? `Older terms · ${rate}` : "No rulebook yet";
-  }
-  const items: Record<string, number> = {};
-  for (const row of ledger?.rows ?? []) if (row.runId) items[row.runId] = (items[row.runId] ?? 0) + 1;
-
-  const actions = runs ? <>{live ? <PayoutActions partners={runs.partners} readOnly={readOnly} secondary /> : <PayoutActions partners={runs.partners} readOnly={readOnly} />}{live ? <RunPayouts readOnly={readOnly} /> : null}</> : undefined;
+    return {
+      tabs: tabsOf(tab, runs ? { review: of("review").length, pay: of("pay").length, paid: of("paid").length, ledger: ledger?.rows.length ?? null, unset } : { review: null, pay: null, paid: null, ledger: ledger?.rows.length ?? null, unset }),
+      actions: runs ? <>{live ? <PayoutActions partners={runs.partners} readOnly={readOnly} secondary /> : <PayoutActions partners={runs.partners} readOnly={readOnly} />}{live ? <RunPayouts readOnly={readOnly} /> : null}</> : null,
+      body: tab === "ledger" ? (ledger ? <LedgerBoard rows={ledger.rows} partners={ledger.partners} initialState={state} initialPartner={partner} /> : waiting)
+        : tab === "rulebooks" ? (rulebooks ? <RulebooksBoard rows={rulebooks} /> : waiting)
+        : runs ? <InvoicesBoard key={tab} tab={tab} runs={of(tab)} items={items} models={models} recordLinks={records.entitled} /> : waiting,
+    };
+  })());
 
   return (
     <CommissionsPage
       step="partnerPayouts"
       info="Each partner is paid by its rulebook. Run payouts drafts an invoice for each partner whose pay period has ended; publish shares it, mark paid stamps its items. Nothing here moves money."
-      tabs={tabs}
-      actions={actions}
+      tabs={<Suspense fallback={tabsOf(asked ?? "review", null)}><Part read={read} part="tabs" /></Suspense>}
+      actions={<Suspense fallback={null}><Part read={read} part="actions" /></Suspense>}
     >
-      {tab === "ledger" ? (ledger ? <LedgerBoard rows={ledger.rows} partners={ledger.partners} initialState={state} initialPartner={partner} /> : waiting)
-        : tab === "rulebooks" ? (rulebooks ? <RulebooksBoard rows={rulebooks} /> : waiting)
-        : runs ? <InvoicesBoard key={tab} tab={tab} runs={of(tab)} items={items} models={models} recordLinks={records.entitled} /> : waiting}
+      <StreamSection shape="table"><Part read={read} part="body" /></StreamSection>
     </CommissionsPage>
   );
 }

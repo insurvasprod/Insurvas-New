@@ -1,25 +1,37 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useSearchParams } from "next/navigation";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { AuditEntrySheet } from "@/components/admin/monitoring/audit-entry-sheet";
 import { Button } from "@/components/ui/button";
-import { DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
-import { TableCard } from "@/components/ui/table-card";
+import {
+  ActiveFilters,
+  ClearFiltersButton,
+  DataToolbar,
+  FilterField,
+  FilterPopover,
+  RefreshButton,
+  ToolbarSearch,
+  toolbarControl,
+  type ActiveFilter,
+} from "@/components/ui/data-toolbar";
+import { setParamsInPlace } from "@/components/ui/nav-pending";
 import { EmptyState, ErrorState, NoMatches } from "@/components/ui/page-states";
-import { st } from "@/components/app/settings/primitives";
 import { Pager } from "@/components/ui/pager";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
+import { ToggleChip } from "@/components/ui/toggle-chip";
+import type { AdminRole } from "@/lib/adminAuth/roles";
 import { AUDIT_ACTIONS, AUDIT_ACTION_LABELS } from "@/lib/audit/actions";
+import { auditTargetText, shortWhenUtc } from "@/lib/audit/entryView";
+import { AUDIT_LENSES, type AuditLens } from "@/lib/audit/lenses";
 import {
   activeFilterCount,
+  auditQueryString,
   decodeActorChoice,
+  encodeActorChoice,
+  parseAuditLogFilters,
   relativeTime,
   type AuditLogEntry,
 } from "@/lib/audit/logView";
@@ -27,47 +39,7 @@ import { cn } from "@/lib/utils";
 
 type Actor = { id: string; name: string; email: string };
 
-type Query = {
-  action: string;
-  actor: string;
-  from: string;
-  to: string;
-  target: string;
-  q: string;
-  page: number;
-};
-
 const DEBOUNCE_MS = 300;
-
-// Break inside long codes, emails and ids rather than widening the column.
-const WRAP = "[overflow-wrap:anywhere]";
-
-function toQueryString(query: Query, isSuperAdmin: boolean): string {
-  const params = new URLSearchParams();
-  if (query.action !== "all") params.set("action", query.action);
-  if (isSuperAdmin) {
-    const choice = decodeActorChoice(query.actor);
-    if (choice.actorId) params.set("actorId", choice.actorId);
-    else if (choice.actorType) params.set("actorType", choice.actorType);
-  }
-  if (query.from) params.set("from", query.from);
-  if (query.to) params.set("to", query.to);
-  if (query.target) params.set("target", query.target);
-  if (query.q) params.set("q", query.q);
-  params.set("page", String(query.page));
-  return params.toString();
-}
-
-/** A value that follows `value` once it has stopped changing for `ms`. */
-function useDebounced(value: string, ms = DEBOUNCE_MS): string {
-  const [settled, setSettled] = useState(value);
-  useEffect(() => {
-    if (settled === value) return;
-    const timer = setTimeout(() => setSettled(value), ms);
-    return () => clearTimeout(timer);
-  }, [value, settled, ms]);
-  return settled;
-}
 
 const noopSubscribe = () => () => {};
 /** False during the server render and hydration, true after: local times exist only in the browser. */
@@ -75,69 +47,76 @@ function useHydrated(): boolean {
   return useSyncExternalStore(noopSubscribe, () => true, () => false);
 }
 
-function localTime(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : `${d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "medium" })} (your time)`;
-}
-
-function targetText(entry: AuditLogEntry): string {
-  if (entry.targetLabel) return entry.targetLabel;
-  if (entry.target_type) return `${entry.target_type}:${entry.target_id ?? ""}`;
-  return entry.target_id ?? "—";
-}
-
 function targetRaw(entry: AuditLogEntry): string | undefined {
   return entry.target_type || entry.target_id ? `${entry.target_type ?? "record"}:${entry.target_id ?? ""}` : undefined;
 }
 
+function dayLabel(day: string): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? day : d.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+}
+
+/**
+ * The Audit log list (admin round 1, docs/design/admin-r1/monitoring.html screen 5): one TableCard, one line a row,
+ * newest first, paged on the server. Every filter lives in the address — lens (All · Money · Staff & access ·
+ * Catalog), search, actor (super admin), action, dates, target and the page — so a filtered view can be linked, and
+ * `?target=` from a record's page still lands on that record's history. An entry opens as a right sheet (`?entry=`).
+ *
+ * The server rendered the first page for the address it was given; after that the table asks
+ * GET /api/admin/audit-log for whatever the address says. The per-actor rule is the server's: anyone but a super admin
+ * gets their own rows whatever they send.
+ */
 export function AuditLogTable({
   initialEntries,
   initialTotal,
   initialApproximate,
-  initialTarget,
+  initialQuery,
+  initialEntry,
   renderedAt,
   pageSize,
   isSuperAdmin,
   allAdmins,
+  role,
 }: {
   initialEntries: AuditLogEntry[];
   initialTotal: number;
   initialApproximate: boolean;
-  /** From `?target=`; the server already applied it to initialEntries. */
-  initialTarget: string;
+  /** The query the server's rows answer (auditQueryString), so they are not fetched again. */
+  initialQuery: string;
+  /** The entry `?entry=` named, read on its own when it is not on the first page. */
+  initialEntry: AuditLogEntry | null;
   /** The server's clock when it rendered, so "4 minutes ago" is the same on both sides of hydration. */
   renderedAt: number;
   pageSize: number;
   isSuperAdmin: boolean;
   allAdmins: Actor[];
+  role: AdminRole;
 }) {
   const hydrated = useHydrated();
+  const params = useSearchParams();
+  const filters = useMemo(() => parseAuditLogFilters(params, AUDIT_ACTIONS), [params]);
+  const actor = encodeActorChoice({ actorType: filters.actorType, actorId: filters.actorId });
+  const openId = params.get("entry");
 
-  const [action, setAction] = useState<string>("all");
-  const [actor, setActor] = useState("all");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  // The two typed filters wait until typing stops: every keystroke used to be a request.
-  const [targetInput, setTargetInput] = useState(initialTarget);
-  const [qInput, setQInput] = useState("");
-  const target = useDebounced(targetInput.trim());
-  const q = useDebounced(qInput.trim());
-  const [page, setPage] = useState(1);
+  // The two typed filters follow the address once typing stops: every keystroke used to be a request.
+  const [qInput, setQInput] = useState(filters.q ?? "");
+  const [targetInput, setTargetInput] = useState(filters.target ?? "");
+  const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  useEffect(() => {
+    const pending = timers.current;
+    return () => Object.values(pending).forEach(clearTimeout);
+  }, []);
+
   const [reloadNonce, setReloadNonce] = useState(0);
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [selected, setSelected] = useState<AuditLogEntry | null>(null);
-
   const [entries, setEntries] = useState(initialEntries);
   const [total, setTotal] = useState(initialTotal);
   const [approximate, setApproximate] = useState(initialApproximate);
   const [now, setNow] = useState(renderedAt);
 
-  const queryString = toQueryString({ action, actor, from, to, target, q, page }, isSuperAdmin);
+  const queryString = auditQueryString(filters, isSuperAdmin);
   const requestKey = `${queryString}#${reloadNonce}`;
   // What the rows on screen answer. The server's rows answer the initial query, so it is not refetched.
-  const [loadedKey, setLoadedKey] = useState(
-    () => `${toQueryString({ action: "all", actor: "all", from: "", to: "", target: initialTarget.trim(), q: "", page: 1 }, isSuperAdmin)}#0`,
-  );
+  const [loadedKey, setLoadedKey] = useState(`${initialQuery}#0`);
   const [failedKey, setFailedKey] = useState<string | null>(null);
 
   const failed = failedKey === requestKey;
@@ -172,123 +151,137 @@ export function AuditLogTable({
     return () => clearInterval(timer);
   }, []);
 
-  function onFilter<T>(setter: (value: T) => void) {
-    return (value: T) => {
-      setter(value);
-      setPage(1);
-    };
+  /** Any filter change goes back to page 1. */
+  const filter = (patch: Record<string, string | null>) => setParamsInPlace({ ...patch, page: null });
+
+  function typed(key: "q" | "target", value: string) {
+    if (key === "q") setQInput(value);
+    else setTargetInput(value);
+    clearTimeout(timers.current[key]);
+    timers.current[key] = setTimeout(() => filter({ [key]: value.trim() || null }), DEBOUNCE_MS);
   }
 
   function clearAll() {
-    setAction("all");
-    setActor("all");
-    setFrom("");
-    setTo("");
-    // `target` must be cleared here too. A "clear filters" control that leaves one filter applied
-    // is the same class of lying control as the rest of this audit.
-    setTargetInput("");
+    Object.values(timers.current).forEach(clearTimeout);
+    // `target` is cleared here too: a "clear filters" control that leaves one filter applied lies.
     setQInput("");
-    setPage(1);
+    setTargetInput("");
+    filter({ lens: null, action: null, actorId: null, actorType: null, from: null, to: null, target: null, q: null });
   }
 
-  const filterCount = activeFilterCount({ action: action === "all" ? null : action, from, to, target: target || null });
-  const anyFilter = filterCount > 0 || actor !== "all" || q !== "";
+  function showHistory(targetId: string) {
+    Object.values(timers.current).forEach(clearTimeout);
+    setQInput("");
+    setTargetInput(targetId);
+    setParamsInPlace({ lens: null, action: null, actorId: null, actorType: null, from: null, to: null, q: null, page: null, target: targetId, entry: null });
+  }
+
+  function chooseActor(value: string) {
+    const choice = decodeActorChoice(value);
+    filter({ actorId: choice.actorId, actorType: choice.actorType });
+  }
+
+  const filterCount = activeFilterCount({ action: filters.action, from: filters.from, to: filters.to, target: filters.target });
+  const anyFilter = filterCount > 0 || actor !== "all" || Boolean(filters.q) || filters.lens !== "all";
   const actionOptions = useMemo(
-    () => AUDIT_ACTIONS.map((a) => ({ value: a, label: AUDIT_ACTION_LABELS[a] })),
+    () => AUDIT_ACTIONS.map((a) => ({ value: a, label: AUDIT_ACTION_LABELS[a] })).sort((a, b) => a.label.localeCompare(b.label)),
     [],
   );
 
+  const chips: ActiveFilter[] = [
+    ...(filters.action ? [{ key: "action", label: "Action", value: AUDIT_ACTION_LABELS[filters.action as keyof typeof AUDIT_ACTION_LABELS] ?? filters.action, onRemove: () => filter({ action: null }) }] : []),
+    ...(filters.from || filters.to
+      ? [{ key: "dates", label: "Dates (UTC)", value: `${filters.from ? dayLabel(filters.from) : "Any"} – ${filters.to ? dayLabel(filters.to) : "today"}`, onRemove: () => filter({ from: null, to: null }) }]
+      : []),
+    ...(filters.target
+      ? [{
+          key: "target",
+          label: "Target",
+          value: `${filters.target}${busy || failed ? "" : ` · ${approximate ? "about " : ""}${total.toLocaleString("en-US")} found`}`,
+          onRemove: () => { setTargetInput(""); filter({ target: null }); },
+        }]
+      : []),
+  ];
+
+  const selected = openId ? entries.find((entry) => entry.id === openId) ?? (initialEntry?.id === openId ? initialEntry : null) : null;
+  const open = (entry: AuditLogEntry) => setParamsInPlace({ entry: entry.id });
+
   return (
-    <div className="flex min-w-0 flex-col gap-6">
+    <>
       <TableCard
-        footer={failed ? undefined : <Pager page={page} pageSize={pageSize} total={total} noun="entries" suffix="newest first · server-side paging" approximate={approximate} onPage={setPage} disabled={busy} />}
+        className="min-w-0"
+        footer={failed ? undefined : <Pager page={filters.page} pageSize={pageSize} total={total} noun="entries" suffix="newest first" approximate={approximate} onPage={(next) => setParamsInPlace({ page: next > 1 ? String(next) : null })} disabled={busy} />}
         toolbar={
-          <>
-            <DataToolbar actions={<RefreshButton onClick={() => setReloadNonce((n) => n + 1)} refreshing={busy} />}>
-              <ToolbarSearch
-                value={qInput}
-                onChange={onFilter(setQInput)}
-                placeholder="Search action, target"
-                label="Search by action code or name, or an exact target id"
-              />
-              {isSuperAdmin && (
-                <select aria-label="Actor" className={cn(toolbarControl, "w-[220px]")} value={actor} onChange={(e) => onFilter(setActor)(e.target.value)}>
-                  <option value="all">All actors</option>
-                  <option value="type:admin">Staff</option>
-                  <option value="type:tenant">Agency users</option>
-                  <option value="type:system">System</option>
-                  {allAdmins.length > 0 && (
-                    <optgroup label="Staff members">
-                      {allAdmins.map((a) => (
-                        <option key={a.id} value={`id:${a.id}`}>
-                          {a.name} ({a.email})
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
-              )}
-              <FilterButton open={filtersOpen} controls="audit-log-filters" onClick={() => setFiltersOpen((open) => !open)} count={filterCount} />
-              {target && (
-                <span className="inline-flex h-9 max-w-full items-center gap-2 rounded-md border border-border bg-background pr-1.5 pl-3 text-xs text-muted-foreground">
-                  <span className="truncate">
-                    Target <code className="font-mono text-foreground">{target}</code>
-                    {busy || failed ? "" : ` · ${approximate ? "about " : ""}${total.toLocaleString()} found`}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => onFilter(setTargetInput)("")}
-                    aria-label="Clear target"
-                    className="inline-flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-                  >
-                    <X className="size-3.5" aria-hidden="true" />
-                  </button>
-                </span>
-              )}
-            </DataToolbar>
-            <FilterPanel id="audit-log-filters" open={filtersOpen} className="flex w-full flex-wrap items-center gap-2 border-t border-b-0 px-0 pb-0 pt-3">
-                <select
-                  aria-label="Action"
-                  className={cn(toolbarControl, "w-[260px]")}
-                  value={action}
-                  onChange={(e) => onFilter(setAction)(e.target.value)}
-                >
+          <DataToolbar
+            actions={<>
+              {anyFilter && <ClearFiltersButton onClick={clearAll} />}
+              <RefreshButton onClick={() => setReloadNonce((n) => n + 1)} refreshing={busy} />
+            </>}
+          >
+            <span role="radiogroup" aria-label="Audit log views" className="flex flex-wrap items-center gap-1.5">
+              {AUDIT_LENSES.map((lens) => (
+                <ToggleChip key={lens.key} role="radio" selected={filters.lens === lens.key} onClick={() => filter({ lens: lens.key === "all" ? null : (lens.key as AuditLens) })}>
+                  {lens.label}
+                </ToggleChip>
+              ))}
+            </span>
+            <ToolbarSearch
+              value={qInput}
+              onChange={(value) => typed("q", value)}
+              placeholder="Search action or target"
+              label="Search by action code or name, or an exact target id"
+            />
+            {isSuperAdmin && (
+              <select aria-label="Actor" className={cn(toolbarControl, "w-[220px]")} value={actor} onChange={(e) => chooseActor(e.target.value)}>
+                <option value="all">All actors</option>
+                <option value="type:admin">Staff</option>
+                <option value="type:tenant">Agency users</option>
+                <option value="type:system">System</option>
+                {allAdmins.length > 0 && (
+                  <optgroup label="Staff members">
+                    {allAdmins.map((a) => (
+                      <option key={a.id} value={`id:${a.id}`}>
+                        {a.name} ({a.email})
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            )}
+            <FilterPopover count={filterCount} onClear={() => { setTargetInput(""); filter({ action: null, from: null, to: null, target: null }); }}>
+              <FilterField label="Action" htmlFor="audit-action">
+                <select id="audit-action" className={toolbarControl} value={filters.action ?? "all"} onChange={(e) => filter({ action: e.target.value === "all" ? null : e.target.value })}>
                   <option value="all">All actions</option>
                   {actionOptions.map((a) => (
-                    <option key={a.value} value={a.value}>
-                      {a.label}
-                    </option>
+                    <option key={a.value} value={a.value}>{a.label}</option>
                   ))}
                 </select>
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                  From (UTC)
-                  <input type="date" value={from} onChange={(e) => onFilter(setFrom)(e.target.value)} className={toolbarControl} />
-                </label>
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                  To (UTC, inclusive)
-                  <input type="date" value={to} onChange={(e) => onFilter(setTo)(e.target.value)} className={toolbarControl} />
-                </label>
+              </FilterField>
+              <FilterField label="From (UTC)" htmlFor="audit-from">
+                <input id="audit-from" type="date" className={toolbarControl} value={filters.from ?? ""} max={filters.to ?? undefined} onChange={(e) => filter({ from: e.target.value || null })} />
+              </FilterField>
+              <FilterField label="To (UTC, inclusive)" htmlFor="audit-to">
+                <input id="audit-to" type="date" className={toolbarControl} value={filters.to ?? ""} min={filters.from ?? undefined} onChange={(e) => filter({ to: e.target.value || null })} />
+              </FilterField>
+              <FilterField label="Target ID" htmlFor="audit-target">
                 <input
+                  id="audit-target"
                   type="text"
-                  aria-label="Target ID"
                   value={targetInput}
-                  onChange={(e) => onFilter(setTargetInput)(e.target.value)}
-                  placeholder="Target ID: user, tenant or invoice"
+                  onChange={(e) => typed("target", e.target.value)}
+                  placeholder="A user, tenant or invoice id"
                   title="Paste a user, tenant or invoice id to see only what happened to that record."
-                  className={cn(toolbarControl, "w-[280px] placeholder:text-muted-foreground")}
+                  className={cn(toolbarControl, "placeholder:text-muted-foreground")}
                 />
-                {anyFilter && (
-                  <Button type="button" variant="ghost" onClick={clearAll}>
-                    Clear all filters
-                  </Button>
-                )}
-              </FilterPanel>
-          </>
+              </FilterField>
+            </FilterPopover>
+            <ActiveFilters inline filters={chips} onClear={clearAll} />
+          </DataToolbar>
         }
       >
         {failed ? (
           <ErrorState
-            title="The audit log did not load"
+            title="Couldn't read the audit log"
             detail="Nothing is shown rather than rows that do not match these filters. Try again; if it keeps failing, the log's database is unreachable."
             action={
               <Button type="button" variant="outline" onClick={() => setReloadNonce((n) => n + 1)}>
@@ -296,141 +289,74 @@ export function AuditLogTable({
               </Button>
             }
           />
+        ) : entries.length === 0 && !busy ? (
+          anyFilter || filters.page > 1 ? (
+            <NoMatches noun="audit entries" onClear={clearAll} />
+          ) : (
+            <EmptyState
+              title="No recorded actions yet"
+              hint={
+                isSuperAdmin
+                  ? "Every staff, agency and system action will appear here as it happens."
+                  : "Actions you take in the staff console will appear here as you take them."
+              }
+            />
+          )
         ) : (
-          <div className="min-w-0 overflow-x-auto">
-            <table className={cn(st.table, "min-w-[960px] transition-opacity", busy && "opacity-60")} aria-busy={busy}>
-              <thead>
-                <tr className={st.headRow}>
-                  <th scope="col" className={cn(st.th, "w-[200px]")}>When</th>
-                  <th scope="col" className={cn(st.th, "w-[190px]")}>Actor</th>
-                  <th scope="col" className={cn(st.th, "w-[210px]")}>Action</th>
-                  <th scope="col" className={cn(st.th, "w-[180px]")}>Target</th>
-                  <th scope="col" className={st.th}>Reason</th>
-                  <th scope="col" className={cn(st.th, "w-[130px]")}>IP</th>
-                </tr>
-              </thead>
-              <tbody className="m-seq">
-                {entries.length === 0 && !busy && (
-                  <tr>
-                    <td colSpan={6} className="border-t border-[var(--border)] p-0">
-                      {anyFilter || page > 1 ? (
-                        <NoMatches noun="audit entries" onClear={clearAll} />
-                      ) : (
-                        <EmptyState
-                          title="No recorded actions yet"
-                          hint={
-                            isSuperAdmin
-                              ? "Every staff, agency and system action will appear here as it happens."
-                              : "Actions you take in the staff console will appear here as you take them."
-                          }
-                        />
-                      )}
-                    </td>
-                  </tr>
-                )}
-                {entries.map((entry) => {
-                  const isSelected = selected?.id === entry.id;
-                  return (
-                    <tr
-                      key={entry.id}
-                      tabIndex={0}
-                      onClick={() => setSelected(entry)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          setSelected(entry);
-                        }
-                      }}
-                      aria-label={`${entry.action} by ${entry.actorLabel}, ${entry.whenUtc}. Open details.`}
-                      className={cn(
-                        "m-row cursor-pointer outline-none focus-visible:bg-[var(--brand-50)]",
-                        isSelected ? "bg-[var(--brand-50)]" : "hover:bg-[var(--canvas)]",
-                      )}
-                    >
-                      <td className={cn(st.td, "align-top tabular-nums")} title={hydrated ? localTime(entry.ts) : undefined}>
-                        {entry.whenUtc}
-                        <br />
-                        <span className="text-xs text-[var(--muted)]">{relativeTime(entry.ts, now)}</span>
-                      </td>
-                      <td className={cn(st.td, "align-top", WRAP)} title={entry.actorDetail ?? undefined}>
-                        {entry.actorLabel}
-                      </td>
-                      <td className={cn(st.td, "align-top", WRAP)} title={entry.actionLabel ?? undefined}>
-                        {entry.action}
-                      </td>
-                      <td className={cn(st.td, "align-top", WRAP)} title={targetRaw(entry)}>
-                        {targetText(entry)}
-                      </td>
-                      <td className={cn(st.td, "align-top", WRAP)}>
-                        {entry.reason ?? <span className="text-[var(--muted)]">—</span>}
-                      </td>
-                      <td className={cn(st.td, "align-top tabular-nums", WRAP)}>
-                        {entry.ip ?? <span className="text-[var(--muted)]">—</span>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <Table className={cn("min-w-[960px] transition-opacity", busy && "opacity-60")} aria-busy={busy}>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="pl-4">When (UTC)</TableHead>
+                <TableHead>Who</TableHead>
+                <TableHead>Action</TableHead>
+                <TableHead>Target</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead>IP</TableHead>
+                <TableHead className="w-10 pr-4"><span className="sr-only">Open</span></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {entries.map((entry) => (
+                <TableRow
+                  key={entry.id}
+                  tabIndex={0}
+                  onClick={() => open(entry)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      open(entry);
+                    }
+                  }}
+                  aria-selected={openId === entry.id}
+                  aria-label={`${entry.actionLabel ?? entry.action} by ${entry.actorLabel}, ${entry.whenUtc}. Open details.`}
+                  className="cursor-pointer outline-none focus-visible:bg-[var(--hover-wash)]"
+                >
+                  <TableCell className="whitespace-nowrap pl-4 tabular-nums" title={`${entry.whenUtc} · ${relativeTime(entry.ts, now)}`}>
+                    {shortWhenUtc(entry.ts, now)}
+                  </TableCell>
+                  <TableCell className="max-w-[220px] truncate" title={entry.actorDetail ?? undefined}>{entry.actorLabel}</TableCell>
+                  <TableCell className="max-w-[260px] truncate font-medium text-foreground" title={entry.action}>{entry.actionLabel ?? entry.action}</TableCell>
+                  <TableCell className="max-w-[220px] truncate" title={targetRaw(entry)}>{auditTargetText(entry)}</TableCell>
+                  <TableCell className="max-w-[280px] truncate" title={entry.reason ?? undefined}>{entry.reason ?? "—"}</TableCell>
+                  <TableCell className="whitespace-nowrap font-mono text-xs tabular-nums">{entry.ip ?? "—"}</TableCell>
+                  <TableCell className="pr-4 text-right text-muted-foreground" aria-hidden="true">›</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </TableCard>
 
-      <Dialog open={selected !== null} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{selected && (selected.actionLabel ?? selected.action)}</DialogTitle>
-            <DialogDescription>{selected?.whenUtc}</DialogDescription>
-          </DialogHeader>
-          {selected && (
-            <div className="space-y-3 text-sm">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-muted-foreground">Action</p>
-                  <p className="font-mono text-sm font-medium break-all">{selected.action}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Your local time</p>
-                  <p className="font-medium">{hydrated ? localTime(selected.ts) : "—"}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Actor</p>
-                  <p className="font-medium break-words">{selected.actorDetail ?? selected.actorLabel}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Target</p>
-                  <p className="font-medium break-all">
-                    {selected.targetLabel && <span className="block break-words">{selected.targetLabel}</span>}
-                    {targetRaw(selected) ?? "—"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">IP</p>
-                  <p className="font-medium">{selected.ip ?? "—"}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">User agent</p>
-                  <p className="truncate font-medium" title={selected.user_agent ?? undefined}>
-                    {selected.user_agent ?? "—"}
-                  </p>
-                </div>
-              </div>
-              {selected.reason && (
-                <div>
-                  <p className="text-muted-foreground">Reason</p>
-                  <p className="font-medium">{selected.reason}</p>
-                </div>
-              )}
-              <div>
-                <p className="mb-1 text-muted-foreground">Metadata</p>
-                <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">
-                  {JSON.stringify(selected.metadata, null, 2)}
-                </pre>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
+      {selected && (
+        <AuditEntrySheet
+          key={selected.id}
+          entry={selected}
+          role={role}
+          hydrated={hydrated}
+          onClose={() => setParamsInPlace({ entry: null })}
+          onHistory={showHistory}
+        />
+      )}
+    </>
   );
 }

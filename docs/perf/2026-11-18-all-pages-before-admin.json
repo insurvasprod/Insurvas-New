@@ -1,0 +1,710 @@
+{
+  "base": "http://localhost:3100",
+  "at": "2026-11-18T15:20:53.658Z",
+  "budget": 1000,
+  "results": [
+    {
+      "plane": "admin",
+      "pattern": "/admin",
+      "url": "/admin",
+      "open": 6.268100000001141,
+      "cold": 2705.7337000000007,
+      "status": 200,
+      "finalPath": "/admin",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/activity",
+      "url": "/admin/activity",
+      "open": 18697.427,
+      "cold": 10077.402600000001,
+      "status": 200,
+      "finalPath": "/admin/activity",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/admin/monitoring/steps",
+          "q": "",
+          "at": 2975,
+          "ms": 15699
+        }
+      ]
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/addons",
+      "url": "/admin/addons",
+      "open": 7461.723300000005,
+      "cold": 2195.4507999999987,
+      "status": 200,
+      "finalPath": "/admin/addons",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/admin/catalog/steps",
+          "q": "",
+          "at": 5408,
+          "ms": 2036
+        }
+      ]
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/admins",
+      "url": "/admin/admins",
+      "open": 1724.8006999999998,
+      "cold": 1054.2978000000003,
+      "status": 200,
+      "finalPath": "/admin/admins",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/advanced",
+      "url": "/admin/advanced",
+      "open": 1178.0070000000123,
+      "cold": 769.1710999999923,
+      "status": 200,
+      "finalPath": "/admin/advanced",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/admin/security/rate-limits",
+          "q": "",
+          "at": 749,
+          "ms": 427
+        }
+      ]
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/audit-log",
+      "url": "/admin/audit-log",
+      "open": 2061.8436999999976,
+      "cold": 3446.944000000003,
+      "status": 200,
+      "finalPath": "/admin/audit-log",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/admin/monitoring/steps",
+          "q": "",
+          "at": 73,
+          "ms": 1809
+        }
+      ]
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/billing",
+      "url": "/admin/billing",
+      "open": 1952.2883000000002,
+      "cold": 1682.6373000000021,
+      "status": 200,
+      "finalPath": "/admin/billing",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/admin/billing/steps",
+          "q": "",
+          "at": 712,
+          "ms": 917
+        }
+      ]
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/billing/failed-payments",
+      "url": "/admin/billing/failed-payments",
+      "open": 51.70759999999427,
+      "cold": 1837.8051000000123,
+      "status": 200,
+      "finalPath": "/admin/billing/failed-payments",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/billing/reconciliation",
+      "url": "/admin/billing/reconciliation",
+      "open": 489.277700000006,
+      "cold": 1433.456600000005,
+      "status": 200,
+      "finalPath": "/admin/billing/reconciliation",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/calling-rules",
+      "url": "/admin/calling-rules",
+      "open": 625.3126000000047,
+      "cold": 653.0905999999959,
+      "status": 200,
+      "finalPath": "/admin/calling-rules",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/carrier-guidance",
+      "url": "/admin/carrier-guidance",
+      "open": 1013.6977999999945,
+      "cold": 1390.8200999999972,
+      "status": 200,
+      "finalPath": "/admin/carrier-guidance",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/admin/catalog/steps",
+          "q": "",
+          "at": 413,
+          "ms": 589
+        }
+      ]
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/carrier-reports",
+      "url": "/admin/carrier-reports",
+      "open": 629.9346000000078,
+      "cold": 1398.7926000000007,
+      "status": 200,
+      "finalPath": "/admin/carrier-reports",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/carrier-rules",
+      "url": "/admin/carrier-rules",
+      "open": 79.67329999999492,
+      "cold": 1438.5071000000025,
+      "status": 200,
+      "finalPath": "/admin/carrier-rules",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/carriers",
+      "url": "/admin/carriers",
+      "open": 99.19869999999355,
+      "cold": 1428.8973000000115,
+      "status": 200,
+      "finalPath": "/admin/carriers",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/carriers/[code]",
+      "url": "/admin/carriers/la14_1790707977690",
+      "open": 975.5477000000101,
+      "cold": 1828.9507999999914,
+      "status": 200,
+      "finalPath": "/admin/carriers/la14_1790707977690",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/catalog",
+      "url": "/admin/catalog",
+      "open": 41.22070000000531,
+      "cold": 1533.9193000000087,
+      "status": 200,
+      "finalPath": "/admin/catalog",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/compliance-sources",
+      "url": "/admin/compliance-sources",
+      "open": 950.4079000000056,
+      "cold": 1116.1549999999988,
+      "status": 200,
+      "finalPath": "/admin/compliance-sources",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/coupons",
+      "url": "/admin/coupons",
+      "open": 852.004700000005,
+      "cold": 2356.897399999987,
+      "status": 200,
+      "finalPath": "/admin/coupons",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/admin/billing/steps",
+          "q": "",
+          "at": 73,
+          "ms": 755
+        }
+      ]
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/credit-notes",
+      "url": "/admin/credit-notes",
+      "open": 71.16250000000582,
+      "cold": 1339.7245999999868,
+      "status": 200,
+      "finalPath": "/admin/credit-notes",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/credits-limits",
+      "url": "/admin/credits-limits",
+      "open": 77.07810000001336,
+      "cold": 2208.57699999999,
+      "status": 200,
+      "finalPath": "/admin/credits-limits",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/email",
+      "url": "/admin/email",
+      "open": 331.58340000000317,
+      "cold": 417.7546999999904,
+      "status": 200,
+      "finalPath": "/admin/email",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/features",
+      "url": "/admin/features",
+      "open": 705.1222999999882,
+      "cold": 1851.6181999999972,
+      "status": 200,
+      "finalPath": "/admin/features",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/admin/catalog/steps",
+          "q": "",
+          "at": 49,
+          "ms": 655
+        }
+      ]
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/field-maps",
+      "url": "/admin/field-maps",
+      "open": 53.74749999999767,
+      "cold": 1556.149400000024,
+      "status": 200,
+      "finalPath": "/admin/field-maps",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/invoices",
+      "url": "/admin/invoices",
+      "open": 152.0399000000034,
+      "cold": 1375.7070999999996,
+      "status": 200,
+      "finalPath": "/admin/invoices",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/invoices/[id]",
+      "url": null,
+      "open": null,
+      "cold": null,
+      "status": null,
+      "finalPath": null,
+      "note": "no sample"
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/invoices/[id]/print",
+      "url": null,
+      "open": null,
+      "cold": null,
+      "status": null,
+      "finalPath": null,
+      "note": "no sample"
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/layout-maps",
+      "url": "/admin/layout-maps",
+      "open": 714.6450000000186,
+      "cold": 1357.593200000003,
+      "status": 200,
+      "finalPath": "/admin/layout-maps",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/admin/catalog/steps",
+          "q": "",
+          "at": 62,
+          "ms": 622
+        }
+      ]
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/layout-maps/[key]",
+      "url": "/admin/layout-maps/new",
+      "open": 349.42519999999786,
+      "cold": 1577.8462,
+      "status": 200,
+      "finalPath": "/admin/layout-maps/new",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/layout-maps/new",
+      "url": "/admin/layout-maps/new",
+      "open": 4.173799999989569,
+      "cold": 1150.8579000000027,
+      "status": 200,
+      "finalPath": "/admin/layout-maps/new",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/legal",
+      "url": "/admin/legal",
+      "open": 621.5480999999854,
+      "cold": 675.6842999999935,
+      "status": 200,
+      "finalPath": "/admin/legal",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/login",
+      "url": "/admin/login",
+      "open": 104.51300000000629,
+      "cold": 141.8984000000055,
+      "status": 200,
+      "finalPath": "/admin/login",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/monitoring",
+      "url": "/admin/monitoring",
+      "open": 1570.913099999976,
+      "cold": 1704.629099999991,
+      "status": 200,
+      "finalPath": "/admin/monitoring",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/admin/monitoring/steps",
+          "q": "",
+          "at": 277,
+          "ms": 1259
+        }
+      ]
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/monitoring/jobs",
+      "url": "/admin/monitoring/jobs",
+      "open": 59.48089999999502,
+      "cold": 1659.0660999999964,
+      "status": 200,
+      "finalPath": "/admin/monitoring/jobs",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/monitoring/lockouts",
+      "url": "/admin/monitoring/lockouts",
+      "open": 44.4429999999993,
+      "cold": 1677.0093000000052,
+      "status": 200,
+      "finalPath": "/admin/monitoring/lockouts",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/monitoring/sessions",
+      "url": "/admin/monitoring/sessions",
+      "open": 26.11669999998412,
+      "cold": 1649.5411000000022,
+      "status": 200,
+      "finalPath": "/admin/monitoring/sessions",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/offers",
+      "url": "/admin/offers",
+      "open": 726.350299999991,
+      "cold": 1772.3801000000094,
+      "status": 200,
+      "finalPath": "/admin/offers",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/admin/billing/steps",
+          "q": "",
+          "at": 45,
+          "ms": 660
+        }
+      ]
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/payments",
+      "url": "/admin/payments",
+      "open": 63.26290000000154,
+      "cold": 1604.0793999999878,
+      "status": 200,
+      "finalPath": "/admin/payments",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/plans",
+      "url": "/admin/plans",
+      "open": 690.4658000000054,
+      "cold": 1452.8473999999987,
+      "status": 200,
+      "finalPath": "/admin/plans",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/admin/catalog/steps",
+          "q": "",
+          "at": 56,
+          "ms": 617
+        }
+      ]
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/plans/[id]/edit",
+      "url": null,
+      "open": null,
+      "cold": null,
+      "status": null,
+      "finalPath": null,
+      "note": "no sample"
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/platform",
+      "url": "/admin/platform",
+      "open": 65.15780000001541,
+      "cold": 533.4251999999979,
+      "status": 200,
+      "finalPath": "/admin/platform",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/products",
+      "url": "/admin/products",
+      "open": 62.10120000000461,
+      "cold": 1550.9578999999794,
+      "status": 200,
+      "finalPath": "/admin/products",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/revenue",
+      "url": "/admin/revenue",
+      "open": 693.2237000000023,
+      "cold": 1619.6024000000034,
+      "status": 200,
+      "finalPath": "/admin/revenue",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/admin/billing/steps",
+          "q": "",
+          "at": 41,
+          "ms": 639
+        }
+      ]
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/servicing-guides",
+      "url": "/admin/servicing-guides",
+      "open": 758.5489999999991,
+      "cold": 1327.970100000006,
+      "status": 200,
+      "finalPath": "/admin/servicing-guides",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/admin/catalog/steps",
+          "q": "",
+          "at": 56,
+          "ms": 667
+        }
+      ]
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/settings",
+      "url": "/admin/settings",
+      "open": 2001.4435999999987,
+      "cold": 1142.1955000000016,
+      "status": 200,
+      "finalPath": "/admin/advanced",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/admin/security/rate-limits",
+          "q": "",
+          "at": 51,
+          "ms": 366
+        }
+      ]
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/state-disclosures",
+      "url": "/admin/state-disclosures",
+      "open": 795.5501999999979,
+      "cold": 666.05799999999,
+      "status": 200,
+      "finalPath": "/admin/state-disclosures",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/status-maps",
+      "url": "/admin/status-maps",
+      "open": 73.31899999998859,
+      "cold": 1686.1722000000009,
+      "status": 200,
+      "finalPath": "/admin/status-maps",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/subscriptions",
+      "url": "/admin/subscriptions",
+      "open": 84.85089999999036,
+      "cold": 1381.8078000000096,
+      "status": 200,
+      "finalPath": "/admin/subscriptions",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/system",
+      "url": "/admin/system",
+      "open": 626.0255000000179,
+      "cold": 757.0683999999892,
+      "status": 200,
+      "finalPath": "/admin/system",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/templates",
+      "url": "/admin/templates",
+      "open": 73.1424999999872,
+      "cold": 1493.1328999999969,
+      "status": 200,
+      "finalPath": "/admin/templates",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/tenants",
+      "url": "/admin/tenants",
+      "open": 609.8336000000127,
+      "cold": 656.2184000000125,
+      "status": 200,
+      "finalPath": "/admin/tenants",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/tenants/[id]",
+      "url": "/admin/tenants/4846ea64-cfd4-4c2e-9243-c83fe0476307",
+      "open": 1366.7968999999866,
+      "cold": 2355.804999999993,
+      "status": 200,
+      "finalPath": "/admin/tenants/4846ea64-cfd4-4c2e-9243-c83fe0476307",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/trials",
+      "url": "/admin/trials",
+      "open": null,
+      "cold": 11597.659900000028,
+      "status": 200,
+      "finalPath": "/admin/trials",
+      "note": "open: waiting /api/admin/billing/steps",
+      "apis": [
+        {
+          "url": "/api/admin/billing/steps",
+          "q": "",
+          "at": 97,
+          "ms": null
+        }
+      ]
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/users",
+      "url": "/admin/users",
+      "open": 629.6553999999887,
+      "cold": 660.0333999999566,
+      "status": 200,
+      "finalPath": "/admin/users",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "admin",
+      "pattern": "/admin/users/[id]",
+      "url": "/admin/users/6543cae2-f1ef-405d-9b98-8b42e075fe69",
+      "open": 893.9407000000356,
+      "cold": 890.6146999999764,
+      "status": 200,
+      "finalPath": "/admin/users/6543cae2-f1ef-405d-9b98-8b42e075fe69",
+      "note": "",
+      "apis": []
+    }
+  ]
+}

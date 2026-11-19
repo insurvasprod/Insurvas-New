@@ -1,0 +1,92 @@
+[
+  {
+    "src": "/docs/shots/settings/application-forms/1.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Look over your forms",
+    "focus": {
+      "x": 264,
+      "y": 0,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/application-forms/2.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Find a form",
+    "focus": {
+      "x": 720,
+      "y": 26,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/application-forms/3.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open a form",
+    "focus": {
+      "x": 264,
+      "y": 0,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/application-forms/4.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Read the status line",
+    "focus": {
+      "x": 262,
+      "y": 0,
+      "w": 1178,
+      "h": 736
+    }
+  },
+  {
+    "src": "/docs/shots/settings/application-forms/5.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Look at the form's pages",
+    "focus": {
+      "x": 445,
+      "y": 73,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/application-forms/6.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Preview",
+    "focus": {
+      "x": 715,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/application-forms/7.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Settings tab",
+    "focus": {
+      "x": 177,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/application-forms/8.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set the youngest and oldest age"
+  }
+]

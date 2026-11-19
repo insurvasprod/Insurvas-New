@@ -26,19 +26,7 @@ export function PageLoading({ strip = true, rows = 8, header = true }: { strip?:
           </div>
         </div>
       </div>}
-      {strip && (
-        <div aria-hidden="true" className="overflow-hidden rounded-lg border border-border">
-          <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="space-y-2.5 bg-card px-4 py-3.5">
-                <div className="h-3 w-20 m-skel rounded-full" />
-                <div className="h-6 w-14 m-skel rounded-md" />
-                <div className="h-3 w-32 max-w-full m-skel rounded-full" />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {strip && <StripShape />}
       <div aria-hidden="true" className="overflow-hidden rounded-lg border border-border bg-card">
         <div className="flex items-center gap-2 border-b border-border bg-[var(--surface-alt)] px-4 py-3">
           <div className="h-9 w-64 max-w-[45%] m-skel rounded-md" />
@@ -47,6 +35,33 @@ export function PageLoading({ strip = true, rows = 8, header = true }: { strip?:
         </div>
         <LoadingRows rows={rows} columns={5} />
       </div>
+    </div>
+  );
+}
+
+/** The stat strip's shape: four tiles, as StatStrip draws them. */
+function StripShape() {
+  return (
+    <div aria-hidden="true" className="overflow-hidden rounded-lg border border-border">
+      <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div key={index} className="space-y-2.5 bg-card px-4 py-3.5">
+            <div className="h-3 w-20 m-skel rounded-full" />
+            <div className="h-6 w-14 m-skel rounded-md" />
+            <div className="h-3 w-32 max-w-full m-skel rounded-full" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** A stat strip on its way, on its own (StreamSection shape="strip"): the strip's shape and a live "Loading". */
+export function StripLoading() {
+  return (
+    <div role="status" aria-live="polite">
+      <span className="sr-only">Loading</span>
+      <StripShape />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { Callout } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
@@ -18,11 +19,7 @@ export function LapseRiskEmpty({ notice, tabs, framed = false }: { notice?: stri
     <div className={framed ? "m-stagger flex flex-col gap-6" : "m-stagger flex min-h-0 flex-grow flex-col gap-6"}>
       {!framed && <PageHeader title="Lapse risk" />}
       {!framed && tabs}
-      {notice && (
-        <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">
-          {notice}
-        </div>
-      )}
+      {notice && <Callout tone="warning" title={notice} />}
       <TableCard>
         <EmptyState
           title="Nothing at risk right now"

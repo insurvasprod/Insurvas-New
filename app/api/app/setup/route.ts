@@ -6,8 +6,8 @@ import { loadFeatureSwitches } from "@/lib/features/killSwitch";
 import { applyKillSwitches } from "@/lib/features/killSwitchRules";
 import { currentSetupStepKey, guideHref, isManualStep, isSetupStepKey, nextSetupStep } from "@/lib/dashboard/checklist";
 import { loadSetupGuideState, loadSetupPause, saveSetupGuideState, saveSetupPause } from "@/lib/dashboard/setupProgress";
-import { loadViewerSetup } from "@/lib/dashboard/setupViewer";
-import { requireTenant } from "@/lib/tenantAuth/requireTenant";
+import { loadViewerSetup, startViewerSetupReads } from "@/lib/dashboard/setupViewer";
+import { getTenantSession, requireTenant } from "@/lib/tenantAuth/requireTenant";
 
 /**
  * The caller's own setup walkthrough (2026-10-21). No feature gate: the steps are already filtered
@@ -15,15 +15,28 @@ import { requireTenant } from "@/lib/tenantAuth/requireTenant";
  * polls this after a save on the step's screen to learn the step is done.
  */
 export async function GET() {
-  const auth = await requireTenant();
+  // One round trip (speed pass 2026-11-18; it was four in a row, 0.8 s): every read is keyed by the signed
+  // session's ids and starts beside the membership read. Nothing is answered until the membership holds.
+  const session = await getTenantSession();
+  if (!session) return requireTenant().then((auth) => (auth instanceof NextResponse ? auth : NextResponse.json({ error: "Not authenticated" }, { status: 401 })));
+  const reads = startViewerSetupReads(session.tenantId, session.sub);
+  const settle = <T,>(promise: Promise<T>) => promise.then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error }));
+  const [auth, entitlementRead, switchesRead, pausedRead] = await Promise.all([
+    requireTenant(),
+    settle(getEntitlement(session.tenantId)),
+    settle(loadFeatureSwitches()),
+    settle(loadSetupPause(session.tenantId, session.sub)),
+  ]);
   if (auth instanceof NextResponse) return auth;
   const { context } = auth;
-  const [entitlement, switches] = await Promise.all([getEntitlement(context.tenantId), loadFeatureSwitches()]);
-  const available = applyKillSwitches(entitlement.features, switches, context.tenantId);
-  const [viewer, paused] = await Promise.all([
-    loadViewerSetup(context, available, entitlement.limits.max_seats),
-    loadSetupPause(context.tenantId, context.userId),
-  ]);
+  if (!entitlementRead.ok) throw entitlementRead.error;
+  if (!switchesRead.ok) throw switchesRead.error;
+  if (!pausedRead.ok) throw pausedRead.error;
+  const entitlement = entitlementRead.value;
+  const available = applyKillSwitches(entitlement.features, switchesRead.value, context.tenantId);
+  const paused = pausedRead.value;
+  // The session's ids are the membership's: requireTenant read this very (tenant, user) pair.
+  const viewer = await loadViewerSetup(context, available, entitlement.limits.max_seats, reads);
   if (viewer.needsStamp) afterResponse(viewer.stamp);
   const next = nextSetupStep(viewer.checklist);
   return NextResponse.json({

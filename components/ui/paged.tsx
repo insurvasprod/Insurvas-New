@@ -45,13 +45,13 @@ export function PagedProvider({ pageSize = PAGE, children }: { pageSize?: number
  * Turning the page (§ Motion, "rows-page"): the new page's rows come in 8px from the side the pager moved toward,
  * eight at most one after another; the first page drawn does not move.
  */
-export function PagedBody({ as: Tag = "tbody", className, label, children }: { as?: "tbody" | "ul" | "ol" | "div"; className?: string; label?: string; children: ReactNode }) {
+export function PagedBody({ as: Tag = "tbody", className, label, guide, children }: { as?: "tbody" | "ul" | "ol" | "div"; className?: string; label?: string; /** A Get set up guide target (`data-guide`). */ guide?: string; children: ReactNode }) {
   const paged = useContext(PagedContext);
   const rows = Children.toArray(children);
   const shown = paged ? paginate(rows, paged.page, paged.pageSize).rows : rows;
   // data-paged-body: what useCardPageSize measures when the rows are not a <tbody> (it looked for it, and nothing
   // set it, so a list stayed at 10 rows; Compliance foundation pass 2026-11-03).
-  return <Tag key={paged?.page ?? 1} className={className} aria-label={label} data-paged-body={Tag === "tbody" ? undefined : ""} data-page-turn={paged?.turn ?? undefined}>{shown}</Tag>;
+  return <Tag key={paged?.page ?? 1} className={className} aria-label={label} data-paged-body={Tag === "tbody" ? undefined : ""} data-page-turn={paged?.turn ?? undefined} data-guide={guide}>{shown}</Tag>;
 }
 
 /** The Pager for the surrounding PagedProvider; draws nothing when every row fits one page. */

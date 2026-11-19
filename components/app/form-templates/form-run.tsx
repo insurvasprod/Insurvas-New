@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ToggleChip } from "@/components/ui/toggle-chip";
-import { checkboxControl, control, textareaControl } from "@/components/app/settings/primitives";
+import { control, textareaControl } from "@/components/app/settings/primitives";
 import type { TemplateField, TemplateFormDefinition, TemplateFormField } from "@/lib/templates/constants";
 import { effectiveTemplateForm } from "@/lib/templates/sectionAvailability";
 import { pruneHiddenTemplateValues, templateFormFieldVisible } from "@/lib/templates/visibility";
@@ -13,6 +13,7 @@ import { logicHolds, logicSentence, placementLogic } from "@/lib/templates/logic
 import { checkFieldValue } from "@/lib/templates/fieldRules";
 import { placementWidth } from "@/lib/templates/placementWidth";
 
+import { CheckBox } from "@/components/ui/check-box";
 /** The pages a person walks through for these answers: skipped pages left out. */
 export function walkedPages(form: TemplateFormDefinition, values: Record<string, unknown>) {
   return form.sections.filter((section) => !(section.skip_when && section.skip_when.rules.length && logicHolds(section.skip_when, values)));
@@ -52,7 +53,7 @@ function Answer({ id, field, value, onChange, invalid }: { id: string; field: Te
         <div role="group" aria-labelledby={`${id}-label`} className="mt-1.5 flex flex-wrap gap-x-4 gap-y-2">
           {field.options.map((option) => (
             <label key={option} className="flex items-center gap-2 text-sm text-[var(--body)]">
-              <input type="checkbox" className={checkboxControl} checked={picked.includes(option)} onChange={(event) => onChange(event.target.checked ? [...picked, option] : picked.filter((item) => item !== option))} />
+              <CheckBox checked={picked.includes(option)} onChange={(event) => onChange(event.target.checked ? [...picked, option] : picked.filter((item) => item !== option))} />
               {option}
             </label>
           ))}

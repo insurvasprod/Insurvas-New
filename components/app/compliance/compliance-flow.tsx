@@ -6,6 +6,7 @@ import { scopeFor } from "@/lib/agency/visibility";
 import { mayGenerateReports } from "@/lib/compliance/evidenceReport";
 import { StepFrame } from "@/components/app/step-frame/step-frame";
 import { InfoTip } from "@/components/ui/info-tip";
+import { DocsGuideLink } from "@/components/app/docs/docs-guide-link";
 import { COMPLIANCE_RAIL_COOKIE, COMPLIANCE_STEPS, COMPLIANCE_WAITING, complianceStepLabel, type ComplianceStep } from "@/lib/compliance/steps";
 
 /**
@@ -66,7 +67,7 @@ export async function ComplianceFlowPage({ step, title, info, chip, facts, tabs,
   return (
     <StepFrame
       title={heading}
-      titleInfo={info || chip ? <>{info ? <InfoTip label={`About ${heading}`} side="right">{info}</InfoTip> : null}{chip}</> : undefined}
+      titleInfo={info || chip ? <>{info ? <InfoTip label={`About ${heading}`} side="right">{info}<DocsGuideLink /></InfoTip> : null}{chip}</> : undefined}
       // The facts never widen the title's column: they wrap in it, at least 360px wide (Accounting, 2026-11-03).
       meta={facts ? <p className="mt-1 text-sm text-muted-foreground lg:min-w-[360px] lg:[contain:inline-size]">{facts}</p> : undefined}
       tabs={<>{tabs}<div id="compliance-lead" className="flex min-w-0 flex-1 flex-wrap items-end gap-2 empty:hidden" /></>}

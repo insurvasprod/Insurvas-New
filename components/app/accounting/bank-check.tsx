@@ -34,7 +34,8 @@ function Zone({ title, children, disabled, onFile, onClick }: { title: string; c
         onDragOver={(e) => { e.preventDefault(); if (!disabled) setOver(true); }}
         onDragLeave={() => setOver(false)}
         onDrop={drop}
-        className={cn("flex min-h-28 flex-col items-center justify-center gap-1 rounded-lg border border-dashed px-4 py-6 text-center text-sm transition-colors", over ? "border-[var(--primary)] bg-[var(--surface-alt)]" : "border-border", disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-[var(--surface-alt)]")}
+        data-drag-over={over ? "" : undefined}
+        className={cn("m-dropzone flex min-h-28 flex-col items-center justify-center gap-1 rounded-lg border border-dashed px-4 py-6 text-center text-sm", over ? "border-[var(--primary)] bg-[var(--surface-alt)]" : "border-border", disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-[var(--surface-alt)]")}
       >
         {children}
       </button>

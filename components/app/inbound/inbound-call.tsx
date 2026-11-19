@@ -13,6 +13,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 import { PageHeader } from "@/components/ui/page-header";
+import { useStepDirection } from "@/components/ui/use-step-direction";
 import { Callout } from "@/components/app/settings/primitives";
 import { InboundStepBar } from "@/components/app/inbound/inbound-step-bar";
 import { CALL_PHASES, phaseIndex, type CallPhase } from "@/lib/inbound/callPhase";
@@ -79,14 +80,13 @@ export function InboundCall({ workItemId, phase, readOnly, canHandoff, canFinish
   // no page scroll, the step's own content scrolls, the caller card / step rail stand the full height.
   const fill = phase === "verify" || (phase === "underwriting" && underwriting?.kind === "case");
   // The step slides in from the side the call moved toward (§ Motion, Wave 2): onward from the right, back to an
-  // earlier step from the left. Tracked as state derived from the phase, so the first step drawn just rises.
-  const [shown, setShown] = useState<{ phase: CallPhase; enter: "forward" | "back" | "area" }>({ phase, enter: "area" });
-  if (shown.phase !== phase) setShown({ phase, enter: phaseIndex(phase) < phaseIndex(shown.phase) ? "back" : "forward" });
+  // earlier step from the left. The kit's useStepDirection (Wave C, 2026-11-18), so the first step drawn just rises.
+  const enter = useStepDirection(phase, CALL_PHASES);
   return (
     <div className={cn("flex w-full min-w-0 flex-col gap-4", fill && "lg:h-[calc(100dvh-var(--top-bar-h)-56px)]")}>
       {/* The step bar on the trail's line, as on Incoming calls (owner 2026-11-09), so it never moves. */}
       <PageHeader title="Call" hideTitle lead={<InboundStepBar current={phaseIndex(phase) as 1 | 2 | 3 | 4} onPick={(index) => go(CALL_PHASES[index - 1])} />} />
-      <div key={phase} data-enter={shown.phase === phase ? shown.enter : "forward"} className={cn("flex min-w-0 flex-col", fill && "lg:min-h-0 lg:flex-1")}>
+      <div key={phase} data-enter={enter} className={cn("flex min-w-0 flex-col", fill && "lg:min-h-0 lg:flex-1")}>
         {body}
       </div>
     </div>

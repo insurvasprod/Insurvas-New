@@ -18,7 +18,8 @@ export default async function ActivityAgentPage({ params, searchParams }: { para
   const guard = await guardPage("outbound_dialing");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Team activity" description="Per-agent dialing activity, setter outcomes, and fresh-versus-recycled performance." />;
   if (!actAsPage(guard, ["owner", "producer", "setter"])) return <RoleGateNotice featureLabel="Team activity" detail="Only owners, producers, and setters have a dialing scorecard." />;
-  const [{ agentId }, query] = await Promise.all([params, searchParams]);
+  const { agentId } = await params;
+  const query = await searchParams;
   if (!UUID.test(agentId)) notFound();
   return (
     <ReportsPage view="activity" title="Agent" show="table">

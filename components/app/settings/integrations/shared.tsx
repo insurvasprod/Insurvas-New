@@ -9,6 +9,7 @@ import { requestSample, type SampleLanguage } from "@/lib/apiKeys/hub";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * Settings › Integrations, round 8 option A: the small parts the hub's tables, sheets and steps share.
  * Tokens only; text 12 / 14 / 16.
@@ -198,7 +199,7 @@ export function Steps({ steps, at }: { steps: string[]; at: number }) {
 export function TickCard({ checked, disabled, onChange, title, sub, end }: { checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void; title: ReactNode; sub?: ReactNode; end?: ReactNode }) {
   return (
     <label className={cn("flex min-w-0 items-center gap-3 rounded-[10px] border px-3 py-2.5", checked ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)]", disabled ? "cursor-not-allowed opacity-70" : "cursor-pointer hover:bg-[var(--surface-alt)]")}>
-      <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} className="size-4 shrink-0 accent-[var(--primary)]" />
+      <CheckBox checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-semibold text-[var(--ink)]">{title}</span>
         {sub && <span className="block text-xs text-[var(--muted)]">{sub}</span>}

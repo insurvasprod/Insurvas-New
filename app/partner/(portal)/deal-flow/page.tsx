@@ -1,7 +1,5 @@
-import { redirect } from "next/navigation";
-
 import { PartnerDealFlow } from "@/components/partner/partner-deal-flow";
-import { resolvePartnerContext } from "@/lib/partnerAuth/requirePartner";
+import { partnerPageContext } from "../page-gate";
 import { resolveDay, todayIn } from "@/lib/partnerDealFlow/localDay";
 
 /**
@@ -18,8 +16,8 @@ export default async function PartnerDealFlowPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const context = await resolvePartnerContext();
-  if (!context) redirect("/partner/login");
+  // Publishers, and affiliates with more than one person (lib/partnerAuth/portalAccess.ts).
+  const context = await partnerPageContext("deal-flow");
   const query = await searchParams;
   const one = (key: string) => (Array.isArray(query[key]) ? query[key][0] : query[key]);
   const today = todayIn(context.partnerTimezone);

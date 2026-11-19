@@ -6,14 +6,16 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DoneStamp } from "@/components/ui/done-stamp";
 import { StatusChip } from "@/components/ui/status-chip";
 import { currentSetupStepKey, guideHref, isManualStep, type SetupChecklist, type SetupChecklistStep } from "@/lib/dashboard/checklist";
-import { guideMovesFor, isRequiredStep, resolveMove, type GuideMove } from "@/lib/dashboard/guideMoves";
+import { guideMovesFor, guidePages, isRequiredStep, pageMatches, resolveMove, type GuideMove } from "@/lib/dashboard/guideMoves";
 import { cn } from "@/lib/utils";
 import { notify } from "@/lib/notify";
 
 import { markSetupStep } from "./setup-step-list";
 
+import { titleCaseNode } from "@/components/ui/title-case";
 type SetupResponse = { checklist: SetupChecklist; paused?: { key: string; move: number } | null };
 
 /**
@@ -51,13 +53,35 @@ function writePausedGuide(value: PausedGuide | null) {
  * The guide running in this tab, so leaving its page by another link (the guide follows one page) can offer
  * "Take me back" (R3·3: "You left the Carriers page · Take me back"). Per tab; Pause, Stop and Done clear it.
  */
-type ActiveGuide = PausedGuide & { path: string };
+/**
+ * A run (owner 2026-11-16: "click one, then two, then on to the next Get set up step"): "ready" walks every
+ * Ready to sell step in a row, opening the next one itself; "single" is one step (Guide me, Docs). `pages` are
+ * every page the step's guide follows, so a move on another page (the import review) keeps guiding without
+ * `?guide=` in its address; `at` is the exact address left, for "Take me back".
+ */
+type ActiveGuide = PausedGuide & { path: string; run: "ready" | "single"; pages: string[]; at: string };
 const ACTIVE_KEY = "setup-guide-active";
 function readActiveGuide(): ActiveGuide | null {
-  try { const raw = window.sessionStorage.getItem(ACTIVE_KEY); return raw ? (JSON.parse(raw) as ActiveGuide) : null; } catch { return null; }
+  try {
+    const raw = window.sessionStorage.getItem(ACTIVE_KEY);
+    const value = raw ? (JSON.parse(raw) as ActiveGuide) : null;
+    return value && typeof value.key === "string" ? { ...value, run: value.run === "ready" ? "ready" : "single", pages: Array.isArray(value.pages) ? value.pages : [], at: value.at ?? value.href } : null;
+  } catch { return null; }
 }
 function writeActiveGuide(value: ActiveGuide | null) {
   try { if (value) window.sessionStorage.setItem(ACTIVE_KEY, JSON.stringify(value)); else window.sessionStorage.removeItem(ACTIVE_KEY); } catch { /* storage blocked */ }
+}
+
+/** Whether this tab is walking all of Ready to sell (pages quieten their own "go next" offers). */
+export function inReadySetupRun(): boolean {
+  return typeof window !== "undefined" && readActiveGuide()?.run === "ready";
+}
+
+/** Whether this tab's guide is running on this page (one of the pages its step follows). */
+export function activeSetupGuide(pathname: string): boolean {
+  if (typeof window === "undefined") return false;
+  const active = readActiveGuide();
+  return active !== null && active.pages.some((page) => pageMatches(page, pathname));
 }
 
 /** A guide link that starts at a given move: `&move=` goes before any `#tab`. */
@@ -67,16 +91,45 @@ export function withMove(href: string, move: number): string {
   return `${before}${before.includes("?") ? "&" : "?"}move=${move}${hash ? `#${hash}` : ""}`;
 }
 
-/** A move's control: `data-guide="x"`, or `#id` for an id the page already has; an empty anchor stands for its row. */
+/** A guide link that walks all of Ready to sell from this step on: `&run=ready` goes before any `#tab`. */
+export function withRun(href: string): string {
+  const [before, hash] = href.split("#", 2);
+  return `${before}${before.includes("?") ? "&" : "?"}run=ready${hash ? `#${hash}` : ""}`;
+}
+
+/** A move's control: the first visible `data-guide="x"`, or `#id` for an id the page already has; an empty anchor stands for its row. */
 const findTarget = (target: string): HTMLElement | null => {
-  let element = target.startsWith("#")
-    ? document.getElementById(target.slice(1))
-    : document.querySelector<HTMLElement>(`[data-guide="${CSS.escape(target)}"]`);
-  if (element && target.startsWith("#") && element.getBoundingClientRect().width < 4) element = element.closest<HTMLElement>("tr, li, section") ?? element;
-  return element && element.getClientRects().length > 0 ? element : null;
+  const visible = (element: HTMLElement | null) => (element && element.getClientRects().length > 0 && element.getBoundingClientRect().width > 0 ? element : null);
+  if (target.startsWith("#")) {
+    let element = document.getElementById(target.slice(1));
+    if (element && element.getBoundingClientRect().width < 4) element = element.closest<HTMLElement>("tr, li, section") ?? element;
+    return visible(element);
+  }
+  for (const element of document.querySelectorAll<HTMLElement>(`[data-guide="${CSS.escape(target)}"]`)) if (visible(element)) return element;
+  return null;
 };
 
-type Box = { top: number; left: number; width: number; height: number };
+/** The dialog or side panel open over the page (not the guide's own confirms), if any. */
+const openDialog = (): HTMLElement | null =>
+  document.querySelector<HTMLElement>('[role="dialog"][data-state="open"]:not([data-setup-own]), [role="alertdialog"][data-state="open"], aside[data-slot="detail-panel"][data-state="open"]');
+
+const isDisabled = (element: HTMLElement) => element.matches(":disabled, [aria-disabled='true'], [data-disabled]") || element.closest("fieldset:disabled") !== null;
+
+/** A clip-path that covers the window except the given boxes (evenodd: each box is a hole). */
+function holesPath(boxes: Box[], pad: number): string {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const holes = boxes.map((box) => {
+    const x = Math.max(0, box.left - pad);
+    const y = Math.max(0, box.top - pad);
+    const right = Math.min(w, box.left + box.width + pad);
+    const bottom = Math.min(h, box.top + box.height + pad);
+    return `M${x} ${y}H${right}V${bottom}H${x}Z`;
+  });
+  return `path(evenodd, "M0 0H${w}V${h}H0Z${holes.join("")}")`;
+}
+
+type Box = { top: number; left: number; width: number; height: number; /** A dialog kept clear around its lit control: no ring of its own. */ plain?: boolean };
 const sameBox = (a: Box | null, b: Box | null) =>
   a === b || (a !== null && b !== null && Math.abs(a.top - b.top) < 1 && Math.abs(a.left - b.left) < 1 && Math.abs(a.width - b.width) < 1 && Math.abs(a.height - b.height) < 1);
 
@@ -98,7 +151,16 @@ export function SetupGuideBar() {
   const pathname = usePathname();
   const router = useRouter();
   const guide = params.get("guide");
-  const stepKey = guide ? currentSetupStepKey(guide) : null;
+  // The run this tab is on, read again on every page: a move on another page of the same step (the import
+  // review, the statement it opened) carries on without `?guide=` in the address.
+  const [stored, setStored] = useState<ActiveGuide | null>(null);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- this tab's storage, read once per page
+    setStored(readActiveGuide());
+  }, [pathname, guide]);
+  const carried = !guide && stored && stored.pages.some((page) => pageMatches(page, pathname)) ? stored : null;
+  const stepKey = guide ? currentSetupStepKey(guide) : carried ? carried.key : null;
+  const run: "ready" | "single" = params.get("run") === "ready" || (stored?.run === "ready" && stored.key === stepKey) ? "ready" : "single";
   const askedMove = Number.parseInt(params.get("move") ?? "", 10);
 
   const [data, setData] = useState<SetupResponse | null>(null);
@@ -151,6 +213,17 @@ export function SetupGuideBar() {
     };
   }, [stepKey, load]);
 
+  // A dialog closed just before the guide opened the next step's page can leave its page lock behind (Radix sets
+  // body pointer-events: none and the route change unmounts it mid-close): the new page then takes no click at all.
+  // Once the new page has settled with no dialog open, the lock goes.
+  useEffect(() => {
+    if (!stepKey) return;
+    const timer = window.setTimeout(() => {
+      if (!openDialog() && document.body.style.pointerEvents === "none") document.body.style.pointerEvents = "";
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [stepKey, pathname]);
+
   // Set while Pause or Stop takes the guide off the page, so a late answer does not re-record it as running.
   const leaving = useRef(false);
   // Starting the step a pause was kept for (on any device) clears it, judged on the first answer for this step
@@ -193,20 +266,27 @@ export function SetupGuideBar() {
   useEffect(() => {
     if (!step || firstAnswer.current === step.key) return;
     firstAnswer.current = step.key;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- opened on a step that is already done: say so at once
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- opened on a step that is already done: a replay
     if (step.complete) setOpenedDone(true);
   }, [step]);
 
   const current = move < moves.length ? moves[move] : null;
   const last = moves.length - 1;
-  const done = step !== null && step.complete && (openedDone || move >= last);
+  // Done is the step's own fact AND its last move passed (or reached, when that move only waits for the save):
+  // a fact that turns true early (the first carrier ticked) never ends the step before its last click (owner
+  // 2026-11-16). A step done before the guide opened ("Guide me again", 2026-11-13) walks every click too.
+  const replay = openedDone;
+  const done = step !== null && step.complete && (move > last || (move >= last && moves[last]?.advance === "done"));
 
   // Follow the page: where the lit control is, whether a later move's control already shows (arrived
   // mid-way), whether a dialog is open. Polled lightly while guiding, and on scroll and resize.
   const [box, setBox] = useState<Box | null>(null);
+  const [useBoxes, setUseBoxes] = useState<Box[]>([]);
   const [missing, setMissing] = useState(false);
+  const [blocked, setBlocked] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const missingSince = useRef<number | null>(null);
+  const disabledSince = useRef<number | null>(null);
   const scrolledFor = useRef<string | null>(null);
   useEffect(() => {
     if (!step || done || moves.length === 0) {
@@ -215,15 +295,28 @@ export function SetupGuideBar() {
       return;
     }
     const tick = () => {
-      const resolved = resolveMove(moves, move, (target) => findTarget(target) !== null);
+      // With a dialog or side panel open, only what is in it counts as on screen: a control behind it cannot be
+      // used, and a later move inside it (the statement dialog that opens by itself) is where the person is.
+      const over = openDialog();
+      const present = (target: string) => {
+        const element = findTarget(target);
+        return element !== null && (!over || over.contains(element));
+      };
+      // On a later move's own page (the statement the import opened), that move is where the person is.
+      const onPage = moves.findIndex((item, at) => at > move && item.page !== undefined && pageMatches(item.page, window.location.pathname));
+      if (onPage > move) { setMove(onPage); return; }
+      const resolved = resolveMove(moves, move, present);
       if (resolved !== move) { setMove(resolved); return; }
       const until = moves[move]?.advance === "appear" ? moves[move]?.until : undefined;
       if (until && findTarget(until)) { setMove(move + 1); return; }
       const target = moves[move]?.target;
       const element = target ? findTarget(target) : null;
-      setDialogOpen(document.querySelector('[role="dialog"][data-state="open"]') !== null);
+      setDialogOpen(over !== null);
       if (!element) {
         setBox((previous) => (previous === null ? previous : null));
+        setUseBoxes((previous) => (previous.length === 0 ? previous : []));
+        disabledSince.current = null;
+        setBlocked(false);
         if (target) {
           missingSince.current ??= Date.now();
           setMissing(Date.now() - missingSince.current > 1500);
@@ -232,9 +325,29 @@ export function SetupGuideBar() {
       }
       missingSince.current = null;
       setMissing(false);
+      // A lit control that stays disabled is never a dead end: after a moment the coach says what comes first.
+      if (isDisabled(element)) {
+        disabledSince.current ??= Date.now();
+        setBlocked(Date.now() - disabledSince.current > 1500);
+      } else {
+        disabledSince.current = null;
+        setBlocked(false);
+      }
       const rect = element.getBoundingClientRect();
       const next = { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
       setBox((previous) => (sameBox(previous, next) ? previous : next));
+      const others: Box[] = (moves[move]?.use ?? []).flatMap((name): Box[] => {
+        const other = findTarget(name);
+        if (!other) return [];
+        const r = other.getBoundingClientRect();
+        return [{ top: r.top, left: r.left, width: r.width, height: r.height }];
+      });
+      // A control inside a dialog: the whole dialog stays clear, since its fields come before its button.
+      if (over && over.contains(element)) {
+        const r = over.getBoundingClientRect();
+        others.push({ top: r.top, left: r.left, width: r.width, height: r.height, plain: true });
+      }
+      setUseBoxes((previous) => (previous.length === others.length && previous.every((item, at) => sameBox(item, others[at])) ? previous : others));
       const scrollKey = `${step.key}:${move}`;
       if (scrolledFor.current !== scrollKey) {
         scrolledFor.current = scrollKey;
@@ -262,17 +375,26 @@ export function SetupGuideBar() {
       const element = findTarget(target);
       return element !== null && node instanceof Node && element.contains(node);
     };
-    const onClick = (event: MouseEvent) => {
+    // Pointer-down too: a menu trigger (Radix) opens on press and locks the page at once, so its click never lands.
+    const onClick = (event: Event) => {
       if (current.advance === "click" && inside(event.target)) window.setTimeout(() => advanceFrom(from), 350);
     };
-    const onLeave = (event: FocusEvent) => {
+    // Leaving the box, or (a select) choosing an option: picking the campaign moves on at once, not only on Tab.
+    const onLeave = (event: Event) => {
       if (current.advance === "leave" && inside(event.target)) window.setTimeout(() => advanceFrom(from), 150);
     };
+    const onChange = (event: Event) => {
+      if (event.target instanceof HTMLSelectElement) onLeave(event);
+    };
     document.addEventListener("click", onClick, true);
+    document.addEventListener("pointerdown", onClick, true);
     document.addEventListener("focusout", onLeave, true);
+    document.addEventListener("change", onChange, true);
     return () => {
       document.removeEventListener("click", onClick, true);
+      document.removeEventListener("pointerdown", onClick, true);
       document.removeEventListener("focusout", onLeave, true);
+      document.removeEventListener("change", onChange, true);
     };
   }, [current, move, done, advanceFrom]);
 
@@ -289,9 +411,12 @@ export function SetupGuideBar() {
   const fromDocs = params.get("from") === "docs";
   useEffect(() => {
     if (!step || leaving.current) return;
-    if (done) { writeActiveGuide(null); return; }
-    writeActiveGuide({ key: step.key, label: step.label, move: Math.min(move, Math.max(moves.length - 1, 0)), moves: moves.length, href: guideHref(step), path: pathname });
-  }, [step, done, move, moves.length, pathname]);
+    if (done && run !== "ready") { writeActiveGuide(null); return; }
+    writeActiveGuide({
+      key: step.key, label: step.label, move: Math.min(move, Math.max(moves.length - 1, 0)), moves: moves.length, href: guideHref(step), path: pathname,
+      run, pages: guidePages(step), at: `${window.location.pathname}${window.location.search}${window.location.hash}`,
+    });
+  }, [step, done, move, moves.length, pathname, run]);
 
   const [confirmPause, setConfirmPause] = useState(false);
   const [confirmSkip, setConfirmSkip] = useState(false);
@@ -306,13 +431,39 @@ export function SetupGuideBar() {
     router.replace(`${pathname}${rest ? `?${rest}` : ""}${window.location.hash}`);
   };
 
+  // Ready to sell as one run (owner 2026-11-16): a finished step opens the next open one by itself, its guide
+  // already running, after a short beat the person can stop with "Stay here". The last one ends on Get set up.
+  const [stayed, setStayed] = useState<string | null>(null);
+  const following = useMemo(() => {
+    if (!step) return null;
+    const pool = steps.filter((item) => (isRequiredStep(step) ? !item.optional : item.optional));
+    const at = pool.findIndex((item) => item.key === step.key);
+    return [...pool.slice(at + 1), ...pool.slice(0, Math.max(at, 0))].find((item) => !item.complete && !item.skipped) ?? null;
+  }, [step, steps]);
+  const autoHref = done && run === "ready" && step && stayed !== step.key ? (following ? withRun(guideHref(following)) : "/app/setup?celebrate=1") : null;
+  const [countdown, setCountdown] = useState<number | null>(null);
+  useEffect(() => {
+    if (!autoHref) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- no next step to count down to
+      setCountdown(null);
+      return;
+    }
+    setCountdown(2);
+    const tick = window.setInterval(() => setCountdown((left) => (left === null ? null : Math.max(0, left - 1))), 1000);
+    const go = window.setTimeout(() => {
+      if (autoHref.startsWith("/app/setup")) writeActiveGuide(null);
+      router.push(autoHref);
+    }, 2000);
+    return () => { window.clearInterval(tick); window.clearTimeout(go); };
+  }, [autoHref, router]);
+
   if (!stepKey) {
     if (left) {
       return (
         <div data-setup-guide="" className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
           <StatusChip tone="warning">Setup</StatusChip>
           <span className="text-muted-foreground">You left {left.label} at move {Math.min(left.move + 1, left.moves)} of {left.moves}.</span>
-          <Link href={withMove(left.href, left.move)} className={buttonVariants({ size: "sm" })}>Take me back</Link>
+          <Link href={left.at || withMove(left.href, left.move)} className={buttonVariants({ size: "sm" })}>Take Me Back</Link>
           <Button type="button" variant="ghost" size="sm" onClick={() => { writeActiveGuide(null); setLeft(null); }}>Stop</Button>
         </div>
       );
@@ -338,10 +489,7 @@ export function SetupGuideBar() {
   const required = isRequiredStep(step);
   const counted = steps.filter((item) => !item.optional);
   const position = required ? `Step ${counted.findIndex((item) => item.key === step.key) + 1} of ${counted.length}` : "Optional setting";
-  const pool = steps.filter((item) => (required ? !item.optional : item.optional));
-  const at = pool.findIndex((item) => item.key === step.key);
-  const following = [...pool.slice(at + 1), ...pool.slice(0, Math.max(at, 0))].find((item) => !item.complete && !item.skipped);
-  const nextHref = following ? guideHref(following) : data.checklist.complete ? "/app/setup?celebrate=1" : "/app/setup";
+  const nextHref = following ? (run === "ready" ? withRun(guideHref(following)) : guideHref(following)) : data.checklist.complete ? "/app/setup?celebrate=1" : "/app/setup";
 
   const pause = () => {
     leaving.current = true;
@@ -364,7 +512,8 @@ export function SetupGuideBar() {
 
   const coachBody = (item: GuideMove, floating: boolean) => (
     <>
-      <div className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
+      {/* data-guide-step/-move: which move this coach shows, read by the Docs screenshot script (scripts/docs-shots.mjs). */}
+      <div data-guide-step={step.key} data-guide-move={move} className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
         <span className="whitespace-nowrap">{move + 1} of {moves.length}</span>
         <span className="flex-1" />
         <span className="truncate">{step.label}</span>
@@ -374,7 +523,12 @@ export function SetupGuideBar() {
       <div className="flex flex-wrap items-center gap-2 pt-1">
         {item.optional ? <Button type="button" variant="ghost" size="sm" onClick={() => advanceFrom(move)}>Skip this</Button> : null}
         {item.advance === "check" ? (
-          <Button type="button" size="sm" onClick={lookedRight}>Looks right</Button>
+          <Button type="button" size="sm" onClick={lookedRight}>{item.confirm ?? "Looks right"}</Button>
+        ) : blocked && item.advance !== "done" ? (
+          <>
+            <span className="text-xs text-[var(--warning-ink)]">{item.blocked ?? "This is greyed out until what comes before it is filled in."}</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => advanceFrom(move)}>I&apos;ve done this</Button>
+          </>
         ) : (floating ? false : missing) && item.advance !== "done" ? (
           <Button type="button" variant="outline" size="sm" onClick={() => advanceFrom(move)}>I&apos;ve done this</Button>
         ) : item.advance === "done" && isManualStep(step.key) && !step.complete ? (
@@ -391,7 +545,7 @@ export function SetupGuideBar() {
   const narrow = typeof window !== "undefined" && window.innerWidth < 768;
   const floatingCoach = !done && current && box && narrow ? (
     // Below 768px the coach is a bottom sheet (R3·3), so it never covers the control on a small screen.
-    <div role="dialog" aria-label={`Get set up: ${step.label}`} className="pointer-events-auto fixed inset-x-0 bottom-0 z-[70] flex flex-col gap-1.5 rounded-t-[20px] border-t border-primary bg-[var(--color-card)] px-4 pt-3 pb-5 shadow-[0_-18px_40px_rgba(0,0,0,.45)]">
+    <div role="dialog" data-setup-coach="" aria-label={`Get set up: ${step.label}`} className="pointer-events-auto fixed inset-x-0 bottom-0 z-[70] flex flex-col gap-1.5 rounded-t-[20px] border-t border-primary bg-[var(--color-card)] px-4 pt-3 pb-5 shadow-[0_-18px_40px_rgba(0,0,0,.45)]">
       <span aria-hidden="true" className="mx-auto mb-1 block h-1 w-10 rounded-full bg-[var(--border)]" />
       {coachBody(current, true)}
     </div>
@@ -406,24 +560,29 @@ export function SetupGuideBar() {
     const top = docked ? window.innerHeight - 200 : roomBelow > 190 ? below : Math.max(12, box.top - 12 - 170);
     const left = docked ? maxLeft : Math.max(12, Math.min(box.left, maxLeft));
     return (
-      <div role="dialog" aria-label={`Get set up: ${step.label}`} className="pointer-events-auto fixed z-[70] flex flex-col gap-1.5 rounded-[12px] border border-primary bg-[var(--color-card)] p-3.5 shadow-[var(--shadow-overlay,0_12px_30px_rgba(0,0,0,.35))]" style={{ top, left, width: coachWidth }}>
+      <div role="dialog" data-setup-coach="" aria-label={`Get set up: ${step.label}`} className="pointer-events-auto fixed z-[70] flex flex-col gap-1.5 rounded-[12px] border border-primary bg-[var(--color-card)] p-3.5 shadow-[var(--shadow-overlay,0_12px_30px_rgba(0,0,0,.35))]" style={{ top, left, width: coachWidth }}>
         {coachBody(current, true)}
       </div>
     );
   })() : null;
 
-  // Only the lit control (and the setup bar, the coach and any dialog) takes a click: four clear shields
-  // cover the rest of the page while a control is lit (owner R3·1: "clicking the dimmed page does nothing").
+  // Only the lit control, the controls its move keeps usable (`use`: a search, a pager, the card a tick lands in),
+  // the setup bar, the coach and any dialog take a click (owner R3·1: "clicking the dimmed page does nothing").
+  // One shield and one dim layer, each the whole window with a hole per usable control (evenodd clip-path).
   const pad = 4;
-  const shields = !done && box && !dialogOpen ? [
-    { top: 0, left: 0, width: "100vw", height: Math.max(0, box.top - pad) },
-    { top: box.top + box.height + pad, left: 0, width: "100vw", height: `calc(100vh - ${box.top + box.height + pad}px)` },
-    { top: box.top - pad, left: 0, width: Math.max(0, box.left - pad), height: box.height + pad * 2 },
-    { top: box.top - pad, left: box.left + box.width + pad, width: `calc(100vw - ${box.left + box.width + pad}px)`, height: box.height + pad * 2 },
-  ].map((style, at) => <div key={at} aria-hidden="true" data-guide-shield="" className="fixed z-[46]" style={style} />) : null;
+  const holes = box ? [box, ...useBoxes] : [];
+  const shields = !done && box && !dialogOpen ? (
+    <div aria-hidden="true" data-guide-shield="" className="fixed inset-0 z-[46]" style={{ clipPath: holesPath(holes, pad) }} />
+  ) : null;
 
   const spotlight = !done && box ? (
-    <div aria-hidden="true" className="pointer-events-none fixed z-[55] rounded-[10px] ring-2 ring-[var(--primary)] transition-[top,left,width,height] duration-200" style={{ top: box.top - 4, left: box.left - 4, width: box.width + 8, height: box.height + 8, boxShadow: "0 0 0 9999px rgba(3,7,6,.55)" }} />
+    <>
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-[55] bg-[rgba(3,7,6,.55)]" style={{ clipPath: holesPath(holes, pad) }} />
+      {useBoxes.filter((other) => !other.plain).map((other, at) => (
+        <div key={at} aria-hidden="true" className="pointer-events-none fixed z-[55] rounded-[10px] ring-1 ring-[var(--border-strong)]" style={{ top: other.top - pad, left: other.left - pad, width: other.width + pad * 2, height: other.height + pad * 2 }} />
+      ))}
+      <div aria-hidden="true" data-guide-lit="" className="pointer-events-none fixed z-[55] rounded-[10px] ring-2 ring-[var(--primary)] transition-[top,left,width,height] duration-200" style={{ top: box.top - pad, left: box.left - pad, width: box.width + pad * 2, height: box.height + pad * 2 }} />
+    </>
   ) : null;
 
   // No control lit (a move without one, or its control not on screen): the coach sits in the bar,
@@ -434,10 +593,10 @@ export function SetupGuideBar() {
   return (
     <>
       <span role="status" aria-live="polite" className="sr-only">{announcement}</span>
-      <div data-setup-guide="" role="region" aria-label="Get set up" className="relative z-[56] mb-4 flex flex-col gap-2 rounded-[12px] border border-border bg-[var(--color-card)] px-4 py-2.5">
+      <div data-setup-guide="" data-setup-coach="" role="region" aria-label="Get set up" className="pointer-events-auto relative z-[56] mb-4 flex flex-col gap-2 rounded-[12px] border border-border bg-[var(--color-card)] px-4 py-2.5">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <span className="text-sm font-semibold text-foreground">{required ? "Setting up" : "Optional setting"}</span>
-          <StatusChip tone={required ? "warning" : "neutral"}>{required ? "Required" : "Optional"}</StatusChip>
+          <span className="text-sm font-semibold text-foreground">{replay && !done ? "Showing you again" : required ? "Setting up" : "Optional setting"}</span>
+          {replay && !done ? <StatusChip tone="good">Already done</StatusChip> : <StatusChip tone={required ? "warning" : "neutral"}>{required ? "Required" : "Optional"}</StatusChip>}
           <span className="min-w-0 text-sm text-muted-foreground"><span className="tabular-nums">{position}</span> · {step.label}</span>
           {!done && moves.length > 1 ? (
             <span aria-hidden="true" className="flex items-center gap-1">
@@ -445,13 +604,23 @@ export function SetupGuideBar() {
             </span>
           ) : null}
           <span className="flex-1" />
-          {done ? (
+          {/* The step turned done: its stamp plays once (check draws, label pops) and stays put while the bar's
+              buttons change around it (Tier 2 motion, 2026-11-18). */}
+          {done ? <DoneStamp label="Done" /> : null}
+          {done && countdown !== null && autoHref ? (
             <>
-              <StatusChip tone="good">Done</StatusChip>
-              {fromDocs ? <Link href={`/app/docs/${step.key}`} className={buttonVariants({ variant: "ghost", size: "sm" })}>Back to Docs</Link> : null}
-              <Link href="/app/setup" className={buttonVariants({ variant: "ghost", size: "sm" })}>Back to Get set up</Link>
-              <Link href={nextHref} className={buttonVariants({ size: "sm" })}>{following ? `Next: ${following.label}` : "Finish"}</Link>
+              <span role="status" className="text-sm text-muted-foreground tabular-nums">{following ? `Opening ${following.label} in ${countdown}s` : `Ready to sell is done · back to Get set up in ${countdown}s`}</span>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setStayed(step.key)}>Stay here</Button>
+              <Link href={autoHref} className={buttonVariants({ size: "sm" })}>{titleCaseNode(<>{following ? "Go now" : "Finish"}</>)}</Link>
             </>
+          ) : done ? (
+            <>
+              {fromDocs ? <Link href={`/app/docs/${step.key}`} className={buttonVariants({ variant: "ghost", size: "sm" })}>Back to Docs</Link> : null}
+              <Link href="/app/setup" className={buttonVariants({ variant: "ghost", size: "sm" })}>Back to Get Set Up</Link>
+              <Link href={nextHref} className={buttonVariants({ size: "sm" })}>{titleCaseNode(<>{following ? `Next: ${following.label}` : "Finish"}</>)}</Link>
+            </>
+          ) : replay ? (
+            <Button type="button" variant="ghost" size="sm" onClick={leaveGuide}>Stop guide</Button>
           ) : required ? (
             <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmPause(true)}>Pause</Button>
           ) : (
@@ -466,7 +635,7 @@ export function SetupGuideBar() {
         {retryLine}
       </div>
       {inlineCoach && dialogOpen ? (
-        <div role="dialog" aria-label={`Get set up: ${step.label}`} className="pointer-events-auto fixed bottom-6 left-1/2 z-[70] flex w-[min(360px,calc(100vw-2rem))] -translate-x-1/2 flex-col gap-1.5 rounded-[12px] border border-primary bg-[var(--color-card)] p-3.5 shadow-[var(--shadow-overlay,0_12px_30px_rgba(0,0,0,.35))]">
+        <div role="dialog" data-setup-coach="" aria-label={`Get set up: ${step.label}`} className="pointer-events-auto fixed bottom-6 left-1/2 z-[70] flex w-[min(360px,calc(100vw-2rem))] -translate-x-1/2 flex-col gap-1.5 rounded-[12px] border border-primary bg-[var(--color-card)] p-3.5 shadow-[var(--shadow-overlay,0_12px_30px_rgba(0,0,0,.35))]">
           {inlineCoach}
         </div>
       ) : null}
@@ -474,7 +643,7 @@ export function SetupGuideBar() {
       {spotlight}
       {floatingCoach}
       <Dialog open={confirmPause} onOpenChange={setConfirmPause}>
-        <DialogContent className="sm:max-w-[420px]">
+        <DialogContent data-setup-own="" className="sm:max-w-[420px]">
           <DialogHeader>
             <DialogTitle>Pause here?</DialogTitle>
             <DialogDescription>What you&apos;ve saved stays, and Get set up keeps your place: {step.label}, move {Math.min(move + 1, moves.length)} of {moves.length}. Ready to sell needs this step before you can work.</DialogDescription>
@@ -486,7 +655,7 @@ export function SetupGuideBar() {
         </DialogContent>
       </Dialog>
       <Dialog open={confirmSkip} onOpenChange={setConfirmSkip}>
-        <DialogContent className="sm:max-w-[420px]">
+        <DialogContent data-setup-own="" className="sm:max-w-[420px]">
           <DialogHeader>
             <DialogTitle>Skip &ldquo;{step.label}&rdquo;?</DialogTitle>
             <DialogDescription>It stays on Insurvas&apos;s defaults, which work as they are. You can open it any time from Get set up.</DialogDescription>

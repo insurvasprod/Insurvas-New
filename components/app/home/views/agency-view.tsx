@@ -186,7 +186,7 @@ export async function AgencyView({ props, period }: { props: DashViewProps; peri
   for (const row of rows ?? []) {
     // Issued this month up to today (a carrier file can carry an issue date still to come).
     if (!row.issueDate || row.issueDate.slice(0, 7) !== month || row.issueDate > today) continue;
-    events.push({ key: `p-${row.carrierId}-${row.policyNumber}`, mark: "✓", tone: "good", title: "Policy issued", detail: `${row.agentName ?? row.clientName ?? "Policy"} · ${row.carrierName}`, value: row.annualCents ? `+${dollars(row.annualCents)}/yr` : undefined, when: row.issueDate.slice(5).replace("-", "/"), href: row.href ?? `${policiesHref ?? "/app/policies"}?q=${encodeURIComponent(row.policyNumber)}`, on: row.issueDate });
+    events.push({ key: `p-${row.carrierId}-${row.policyNumber}`, mark: "✓", tone: "good", title: "Policy issued", detail: `${row.agentName ?? row.clientName ?? "Policy"} · ${row.carrierName}`, value: money && row.annualCents ? `+${dollars(row.annualCents)}/yr` : undefined, when: row.issueDate.slice(5).replace("-", "/"), href: row.href ?? `${policiesHref ?? "/app/policies"}?q=${encodeURIComponent(row.policyNumber)}`, on: row.issueDate });
   }
   events.sort((a, b) => (a.on < b.on ? 1 : a.on > b.on ? -1 : 0));
   const activity = events.length || book?.changes || accounting?.recent ? (
@@ -197,14 +197,16 @@ export async function AgencyView({ props, period }: { props: DashViewProps; peri
   const fill = "lg:[&>*]:h-full lg:[&>*]:min-h-0 lg:[&>*]:overflow-hidden";
   const row1 = [premium, funnel].filter(Boolean);
   const row2 = [goalsCard, carriers, statesCard].filter(Boolean);
+  const rowCount = (row1.length > 0 ? 1 : 0) + (row2.length > 0 ? 1 : 0);
   return (
-    // m-dash-ov (§ Motion, 2026-11-09): the cards rise in one after another.
-    <div className="m-dash-ov flex w-full min-w-0 flex-col gap-4 pb-4">
+    // m-dash-ov (§ Motion, 2026-11-09): the cards rise in one after another. Roles r1 (owner 2026-11-18): from lg up the
+    // page is exactly the screen's height, like the dashboard's views; the two rows share what the strip leaves.
+    <div className="m-dash-ov flex w-full min-w-0 flex-col gap-4 pb-4 lg:min-h-0 lg:flex-1 lg:pb-0">
       {strip}
-      <div className="grid min-w-0 grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="flex min-w-0 flex-col gap-4">
-          {row1.length > 0 && <div className={cn("grid min-w-0 grid-cols-1 gap-4 lg:h-[380px]", fill, row1.length === 2 && "lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]")}>{premium}{funnel}</div>}
-          {row2.length > 0 && <div className={cn("grid min-w-0 grid-cols-1 gap-4 lg:h-[360px]", fill, row2.length === 3 ? "lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)]" : row2.length === 2 && "lg:grid-cols-2")}>{goalsCard}{carriers}{statesCard}</div>}
+      <div className="grid min-w-0 grid-cols-1 items-stretch gap-4 lg:min-h-0 lg:flex-1 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className={cn("grid min-w-0 grid-cols-1 gap-4 lg:min-h-0", rowCount === 2 ? "lg:grid-rows-[minmax(0,1.05fr)_minmax(0,1fr)]" : "lg:grid-rows-[minmax(0,1fr)]")}>
+          {row1.length > 0 && <div className={cn("grid min-w-0 grid-cols-1 gap-4 lg:min-h-0", fill, row1.length === 2 && "lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]")}>{premium}{funnel}</div>}
+          {row2.length > 0 && <div className={cn("grid min-w-0 grid-cols-1 gap-4 lg:min-h-0", fill, row2.length === 3 ? "lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)]" : row2.length === 2 && "lg:grid-cols-2")}>{goalsCard}{carriers}{statesCard}</div>}
         </div>
         {/* The right column ends where the main column ends (owner: "in the same line"): it takes the row's height, never sets it. */}
         <div className="relative min-w-0">

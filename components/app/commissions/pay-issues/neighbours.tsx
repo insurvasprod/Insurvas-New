@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
+import { IntentLink } from "@/components/ui/nav-pending";
 
 type Side = { name: string; href: string } | null;
 
@@ -13,10 +13,10 @@ export function PayIssueNeighbours({ previous, next, noun }: { previous: Side; n
   return (
     <>
       {previous
-        ? <Link href={previous.href} className={buttonVariants({ variant: "outline" })} title={`Previous ${noun}: ${previous.name}`}><ChevronLeft aria-hidden="true" /><span className="max-w-[220px] truncate">{previous.name}</span></Link>
+        ? <IntentLink transitionTypes={["nav-back"]} href={previous.href} className={buttonVariants({ variant: "outline" })} title={`Previous ${noun}: ${previous.name}`}><ChevronLeft aria-hidden="true" /><span className="max-w-[220px] truncate">{previous.name}</span></IntentLink>
         : <Button type="button" variant="outline" disabled title={`No ${noun} before this one`}><ChevronLeft aria-hidden="true" />None before</Button>}
       {next
-        ? <Link href={next.href} className={buttonVariants({ variant: "outline" })} title={`Next ${noun}: ${next.name}`}><span className="max-w-[220px] truncate">{next.name}</span><ChevronRight aria-hidden="true" /></Link>
+        ? <IntentLink transitionTypes={["nav-forward"]} href={next.href} className={buttonVariants({ variant: "outline" })} title={`Next ${noun}: ${next.name}`}><span className="max-w-[220px] truncate">{next.name}</span><ChevronRight aria-hidden="true" /></IntentLink>
         : <Button type="button" variant="outline" disabled title={`No ${noun} after this one`}>None after<ChevronRight aria-hidden="true" /></Button>}
     </>
   );

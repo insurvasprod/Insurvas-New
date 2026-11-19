@@ -9,7 +9,7 @@ import {
   canAccessConfigurationSection,
   type ConfigurationSectionSlug,
 } from "../configuration/sections.ts";
-import { group, isLinkActive, link, type SidebarIconKey, type SidebarNode } from "./types.ts";
+import { group, isLinkActive, link, type SidebarIconKey, type SidebarLink, type SidebarNode } from "./types.ts";
 
 /**
  * The admin sidebar, grouped.
@@ -34,6 +34,16 @@ import { group, isLinkActive, link, type SidebarIconKey, type SidebarNode } from
  * payment Setup, Offers and Credits & limits under Billing. Platform keeps what is genuinely
  * platform plumbing.
  */
+/** The Billing group as an area: its home is the workspace when the role may open it, else its first page. */
+function asArea(nodes: SidebarNode[]): SidebarNode[] {
+  const only = nodes[0];
+  if (!only || only.kind !== "group") return nodes;
+  return [{ ...only, area: only.links[0].href }];
+}
+function billingArea(links: (SidebarLink | null)[]): SidebarNode[] {
+  return asArea(group("billing", "Billing", "billing", links));
+}
+
 export function buildAdminNav(role: AdminRole): SidebarNode[] {
   const tenants = canViewTenants(role);
   const users = canViewUsers(role);
@@ -59,31 +69,36 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
       users ? link("/admin/users", "Users", "users") : null,
     ]),
 
-    ...group("billing", "Billing", "billing", [
-      invoices ? link("/admin/billing", "Billing workspace", "billing-workspace") : null,
+    // Billing is one area (admin round 1, owner 2026-11-17): its row opens the Billing workspace and hovering it lists
+    // every page; inside, the pages are steps down a rail (components/admin/billing/billing-page.tsx). Each link keeps
+    // its own route and its own permission, so the rail, this menu and the routes can never disagree.
+    ...billingArea([
+      invoices ? link("/admin/billing", "Workspace", "billing-workspace") : null,
       subscriptions ? link("/admin/subscriptions", "Subscriptions", "subscriptions") : null,
       subscriptions ? link("/admin/trials", "Trials", "trials") : null,
+      subscriptions ? link("/admin/billing/failed-payments", "Failed payments", "failed-payments") : null,
       // SA-3.3: a support_agent cannot open invoice screens at all, so no link is rendered for
       // them — a visible link to a 403 is worse than no link.
       invoices ? link("/admin/invoices", "Invoices", "invoices") : null,
       invoices ? link("/admin/credit-notes", "Refunds & credits", "credit-notes") : null,
+      invoices ? link("/admin/billing/reconciliation", "Reconciliation", "reconciliation") : null,
       coupons ? link("/admin/coupons", "Coupons", "coupons") : null,
-      // Beside Coupons on purpose: SA-4.4 is the campaign layer over the SA-3.6 coupon, so the
-      // two belong to one subject even though different permissions gate them.
+      // Beside Coupons on purpose: SA-4.4 is the campaign layer over the SA-3.6 coupon.
       section("offers", "/admin/offers", "Offers & discounts", "offers"),
       // Credit packs are priced and sold, and the usage monitor is who is about to owe more —
       // both billing questions, even though the meters behind them are platform config.
       section("credits-limits", "/admin/credits-limits", "Credits & limits", "limits"),
       invoices ? link("/admin/revenue", "Revenue", "revenue") : null,
-      // Payment provider, mode and keys. Filed with Billing because that is who reaches for it,
-      // and named "Setup" because everything else in this group is a record while this is the
-      // configuration behind them. It keeps the section registry's permission, which is stricter
-      // than the rest of Billing: live provider credentials stay super_admin only, so a billing
-      // admin sees Invoices and Coupons here but not this.
-      section("payments", "/admin/payments", "Setup", "payments-setup"),
+      // Payment provider: live provider credentials stay super_admin only (the section registry's rule), so a
+      // billing admin sees Invoices and Coupons here but not this. At the rail's foot inside the area.
+      section("payments", "/admin/payments", "Payment provider", "payments-setup"),
     ]),
 
-    ...group("catalog", "Catalog", "catalog", [
+    // Catalog is one area too (admin round 1, owner 2026-11-17; docs/design/admin-r1/catalog.html): its row opens the
+    // Catalog workspace and hovering it lists every page; inside, the pages are steps down a rail
+    // (components/admin/catalog/catalog-page.tsx). The workspace is for whoever may open any Catalog page.
+    ...asArea(group("catalog", "Catalog", "catalog", [
+      plans || canAccessConfigurationSection(role, "carriers") || canAccessConfigurationSection(role, "products") ? link("/admin/catalog", "Workspace", "catalog-workspace") : null,
       plans ? link("/admin/plans", "Plans", "plans") : null,
       plans ? link("/admin/addons", "Add-ons", "addons") : null,
       // Feature catalog AND kill switches. Sits with Plans and Add-ons because that is what it is
@@ -94,42 +109,54 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
       // with. Catalog already means "the things we offer", so they belong here rather than with
       // the platform plumbing.
       section("products", "/admin/products", "Products", "products"),
+      section("templates", "/admin/templates", "Templates", "templates"),
       section("carriers", "/admin/carriers", "Carriers", "carriers"),
-      // LA-3.13 · the platform's carrier field maps. Same permission as the carrier library it
-      // belongs to: whoever may change a carrier may review where its application fields go.
-      section("carriers", "/admin/field-maps", "Field maps", "field-maps"),
+      // LA-4.17 · the platform's default carrier rules and settings.
+      section("carriers", "/admin/carrier-rules", "Carrier rules", "carrier-rules"),
       // LA-4.3 · how each carrier's spreadsheets are read. Same rule: it belongs to the carrier library.
       section("carriers", "/admin/layout-maps", "Layout maps", "layout-maps"),
       // LA-4.5 · carrier status words waiting to be mapped, and the status map.
       section("carriers", "/admin/status-maps", "Status maps", "status-maps"),
-      // LA-4.17 · the platform's default carrier rules and settings.
-      section("carriers", "/admin/carrier-rules", "Carrier rules", "carrier-rules"),
-      // Carrier fact reports (20261027200000): wrong carrier facts agencies reported from Settings ›
-      // Carriers. Fixing one changes the carrier for everyone, so it keeps the carrier library's permission.
-      section("carriers", "/admin/carrier-reports", "Fact reports", "fact-reports"),
+      // LA-3.13 · the platform's carrier field maps. Same permission as the carrier library it
+      // belongs to: whoever may change a carrier may review where its application fields go.
+      section("carriers", "/admin/field-maps", "Field maps", "field-maps"),
       // LA-4.10 · where each carrier's policy file lives in its portal, for the book import.
       section("carriers", "/admin/carrier-guidance", "Portal guidance", "portal-guidance"),
       // LA-5.4 · how each carrier takes a servicing change (part of the carrier record, as its rules).
       section("carriers", "/admin/servicing-guides", "Servicing instructions", "carrier-rules"),
-      section("templates", "/admin/templates", "Templates", "templates"),
-    ]),
+      // Carrier fact reports (20261027200000): wrong carrier facts agencies reported from Settings ›
+      // Carriers. Fixing one changes the carrier for everyone, so it keeps the carrier library's permission.
+      section("carriers", "/admin/carrier-reports", "Fact reports", "fact-reports"),
+    ])),
 
-    ...group("monitoring", "Monitoring", "monitoring", [
+    // Monitoring is one area too (admin round 1, owner 2026-11-17; docs/design/admin-r1/monitoring.html): its row opens
+    // the Monitoring workspace and hovering it lists every page (components/admin/monitoring/monitoring-page.tsx).
+    // Lockouts and Staff sessions are security state: super_admin only, as the lockout panel and the sessions route are.
+    ...asArea(group("monitoring", "Monitoring", "monitoring", [
+      link("/admin/monitoring", "Workspace", "monitoring-workspace"),
       users ? link("/admin/activity", "Login activity", "activity") : null,
+      isSuperAdmin ? link("/admin/monitoring/lockouts", "Lockouts", "lockouts") : null,
+      isSuperAdmin ? link("/admin/monitoring/sessions", "Staff sessions", "staff-sessions") : null,
       link("/admin/audit-log", "Audit log", "audit-log"),
-    ]),
+      link("/admin/monitoring/jobs", "Jobs & services", "jobs"),
+    ])),
 
-    ...group("platform", "Platform", "platform", [
+    // Platform is one area too (admin round 1, owner 2026-11-18): its row opens the Platform workspace and hovering it
+    // lists every page; inside, the pages are steps down a rail (components/admin/platform/platform-page.tsx). Legal is
+    // every admin's, so the workspace is too; it shows each role only what its own Platform pages hold.
+    ...asArea(group("platform", "Platform", "platform", [
+      // The workspace borrows the shared workspace picture (LayoutGrid) the Catalog and Monitoring workspaces draw.
+      link("/admin/platform", "Workspace", "monitoring-workspace"),
       section("compliance-sources", "/admin/compliance-sources", "Compliance", "compliance"),
       section("state-disclosures", "/admin/state-disclosures", "Disclosures", "disclosures"),
       isSuperAdmin ? link("/admin/calling-rules", "Calling rules", "calling-rules") : null,
-      section("email", "/admin/email", "Mail Setup", "email"),
+      section("email", "/admin/email", "Mail setup", "email"),
       section("system", "/admin/system", "Maintenance", "system"),
       section("advanced", "/admin/advanced", "Advanced", "advanced"),
       isSuperAdmin ? link("/admin/admins", "Admin users", "admins") : null,
       // Readable by every admin: an acceptance record is what a support agent needs in a dispute.
       link("/admin/legal", "Legal", "legal"),
-    ]),
+    ])),
   ];
 }
 

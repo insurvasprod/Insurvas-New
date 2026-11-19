@@ -264,7 +264,7 @@ export async function loadLeadsView(props: DashViewProps): Promise<LeadsViewData
   const tenantId = context.tenantId;
   const roles: TenantRole[] = context.roles?.length ? context.roles : [context.role];
   const hidden = context.hiddenPages ?? [];
-  const opener = (keys: readonly string[]) => firstOpenable(keys.filter((key) => !hidden.includes(key)), available, context.role, solo);
+  const opener = (keys: readonly string[]) => firstOpenable(keys.filter((key) => !hidden.includes(key)), available, context.role, solo, props.gate);
   const agencyWide = scope === null;
   const money = seesLeadMoney({ roles, noMoney, scope });
   const month = monthSoFar(now, zone);

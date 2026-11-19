@@ -20,6 +20,8 @@ import { SectionLoading } from "@/components/ui/page-states";
 import { formatSupportPhone, SUPPORT_EMAIL_MAX, SUPPORT_PHONE_MAX, supportContactInputSchema, type SupportContact } from "@/lib/partnerSupport/contact";
 import type { TeamSnapshot } from "@/lib/tenantTeam/service";
 import type { WorkspaceSnapshot } from "@/lib/settings/workspaceSnapshot";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export type PartnerSupportDraft = {
   support: SupportContact | null;
@@ -144,7 +146,7 @@ export function OwnershipCard({ team, workspace }: { team: TeamSnapshot | null; 
               <span className="min-w-0 truncate">{owner.name} <span className="text-xs text-[var(--muted)]">{owner.email}</span></span>
             </span>
           )) : "—"}
-          <Link href="/app/settings#team-access" className="text-xs font-medium text-[var(--accent-ink)] underline-offset-2 hover:underline">Team &amp; access ›</Link>
+          <Link href="/app/settings#team-access" className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Team &amp; Access</Link>
         </span>
       </div>
       <div className={row}>
@@ -155,7 +157,7 @@ export function OwnershipCard({ team, workspace }: { team: TeamSnapshot | null; 
         <span className="text-xs text-[var(--muted)]">Plan</span>
         <span className="flex items-center gap-2 text-[var(--ink)]">
           {workspace?.planName ?? "—"}
-          <Link href="/app/settings#billing" className="text-xs font-medium text-[var(--accent-ink)] underline-offset-2 hover:underline">Plan &amp; billing ›</Link>
+          <Link href="/app/settings#billing" className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Plan &amp; Billing</Link>
         </span>
       </div>
       {workspace?.tenantId ? <TechnicalDetails label="Workspace" value={workspace.tenantId} /> : null}

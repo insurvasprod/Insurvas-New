@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { releaseDialog } from "@/lib/transferInbox/constants";
 import { notify } from "@/lib/notify";
+import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 
 export type Availability = "ready" | "on_break" | "off";
@@ -134,14 +135,17 @@ export function shortDuration(seconds: number) {
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
+/** The floor's read, as the app's cache keys it (lib/client/resource-cache.ts): a repeat visit draws the last floor at once. */
+const FLOOR_KEY = "/api/app/agent-floor";
+
 export function useFloor({ readOnly, heartbeat = true }: { readOnly: boolean; heartbeat?: boolean }) {
   const router = useRouter();
-  const [floor, setFloor] = useState<FloorData | null>(null);
-  const floorRef = useRef<FloorData | null>(null);
+  const [floor, setFloor] = useState<FloorData | null>(() => seed<FloorData>(FLOOR_KEY)?.data ?? null);
+  const floorRef = useRef<FloorData | null>(floor);
   const refreshInFlightRef = useRef(false);
   const refreshPendingRef = useRef(false);
   const loadRef = useRef<(() => Promise<void>) | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => floorRef.current === null);
   const [error, setError] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -157,12 +161,11 @@ export function useFloor({ readOnly, heartbeat = true }: { readOnly: boolean; he
     if (refreshInFlightRef.current) { refreshPendingRef.current = true; return; }
     refreshInFlightRef.current = true;
     refreshPendingRef.current = false;
-    if (initial || !floorRef.current) setLoading(true);
+    if (!floorRef.current) setLoading(true);
     try {
-      const response = await fetch("/api/app/agent-floor", { cache: "no-store" });
-      const body = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(body?.error ?? "Could not load Inbound.");
-      const next = body as FloorData;
+      // Through the app's cache: the first read may use an answer a hover just fetched; every later one (a broadcast,
+      // the safety re-read) asks again, so the floor is never older than the last change.
+      const next = await (initial ? readResource<FloorData>(FLOOR_KEY) : loadResource<FloorData>(FLOOR_KEY));
       floorRef.current = next;
       setFloor(next);
       setAvailability((current) => current ?? next.ownStatus ?? "off");
@@ -181,6 +184,15 @@ export function useFloor({ readOnly, heartbeat = true }: { readOnly: boolean; he
   const refresh = useCallback(async () => { setRefreshing(true); try { await load(); } finally { setRefreshing(false); } }, [load]);
 
   useEffect(() => {
+    // A fresh document starts from the kept floor once it has hydrated, then asks again. Your own status is never
+    // taken from it (`availability` waits for the network's answer), so a kept copy can never re-send an old one.
+    const kept = peek<FloorData>(FLOOR_KEY);
+    if (kept?.data && !floorRef.current) {
+      floorRef.current = kept.data;
+      // The kept answer, drawn before the network's.
+      setFloor(kept.data);
+      setLoading(false);
+    }
     // The initial server-backed snapshot intentionally synchronizes React state from the API.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load({ initial: true });

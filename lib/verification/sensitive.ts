@@ -22,6 +22,11 @@ export function isSensitiveFieldKey(fieldKey: string) {
 /** "•••• 4021" for a value, "" for nothing. Four characters or fewer show no characters at all. */
 export function maskLastFour(value: unknown): string {
   if (value === null || value === undefined || value === "") return "";
+  // A value sealed at rest (lib/leadValues/seal.ts) carries its own last four; never mask the ciphertext.
+  if (typeof value === "string" && value.startsWith("sealed1:")) {
+    const lastFour = value.split(":")[1] ?? "";
+    return lastFour ? `•••• ${lastFour}` : "••••";
+  }
   const text = Array.isArray(value) ? value.join(", ") : String(value);
   const compact = text.replace(/\s+/g, "");
   if (compact.length <= 4) return "••••";

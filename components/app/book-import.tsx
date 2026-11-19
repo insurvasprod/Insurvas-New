@@ -13,6 +13,7 @@ import { ToggleChip } from "@/components/ui/toggle-chip";
 import type { CarrierImport } from "@/lib/ingestion/bookImport";
 import { fileDay } from "@/lib/ingestion/constants";
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
 
 type Show = "all" | "not-imported" | "needs-look";
 const notImported = (c: CarrierImport) => !c.file && c.status !== "skipped";
@@ -62,7 +63,9 @@ export function BookImport({ carriers, processing, readOnly }: { carriers: Carri
   const chosen = open ? carriers.find((c) => c.carrierId === open.carrierId) ?? null : null;
   const clear = () => { setQuery(""); setShow("all"); };
 
+  // A row is a drop zone: it lifts and glows while a file is held over it (.m-dropzone, Tier 2 motion 2026-11-18).
   const dropProps = (c: CarrierImport) => ({
+    "data-drag-over": over === c.carrierId ? "" : undefined,
     onDragOver: (e: React.DragEvent) => { if (!readOnly) { e.preventDefault(); setOver(c.carrierId); } },
     onDragLeave: () => setOver((cur) => (cur === c.carrierId ? null : cur)),
     onDrop: (e: React.DragEvent) => { e.preventDefault(); setOver(null); const file = e.dataTransfer.files?.[0]; if (file && !readOnly) setOpen({ carrierId: c.carrierId, file }); },
@@ -77,7 +80,7 @@ export function BookImport({ carriers, processing, readOnly }: { carriers: Carri
         suffix={readOnly ? undefined : "drop a carrier's file on its row to bring it in"}
         toolbar={
           <DataToolbar actions={<>
-            <Link href="/app/settings#carriers" className="text-sm hover:underline">Add a carrier in Settings ›</Link>
+            <Link href="/app/settings#carriers" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "no-underline")}>Add a Carrier in Settings</Link>
             <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} labelClassName="sr-only" />
           </>}>
             <ToolbarSearch value={query} onChange={setQuery} placeholder="Search carriers" />
@@ -110,7 +113,7 @@ export function BookImport({ carriers, processing, readOnly }: { carriers: Carri
                   return (
                     <tr
                       key={c.carrierId}
-                      className={cn("cursor-pointer", over === c.carrierId && "outline outline-2 outline-[var(--primary)]")}
+                      className={cn("cursor-pointer", !readOnly && "m-dropzone")}
                       onClick={() => setOpen({ carrierId: c.carrierId, file: null })}
                       {...dropProps(c)}
                     >
@@ -129,11 +132,11 @@ export function BookImport({ carriers, processing, readOnly }: { carriers: Carri
               </PagedBody>
             </table>
             {/* Phone (r7 4·5): a carrier is a card. After the table, so the page size is measured from the table's rows. */}
-            <PagedBody as="ul" label="Carriers" className="m-0 grid list-none gap-2 p-3 md:hidden">
+            <PagedBody as="ul" label="Carriers" guide="book-carriers" className="m-0 grid list-none gap-2 p-3 md:hidden">
               {rows.map((c) => {
                 const step = nextStep(c);
                 return (
-                  <li key={c.carrierId} className="grid gap-1.5 rounded-lg border border-border bg-card p-3" {...dropProps(c)}>
+                  <li key={c.carrierId} className={cn("grid gap-1.5 rounded-lg border border-border bg-card p-3", !readOnly && "m-dropzone")} {...dropProps(c)}>
                     <div className="flex items-start justify-between gap-2">
                       <button type="button" className="text-left text-sm font-medium text-foreground" onClick={() => setOpen({ carrierId: c.carrierId, file: null })}>{c.carrierName}</button>
                       <span className="shrink-0 text-xs text-muted-foreground">{c.file?.fileDate ? fileDay(c.file.fileDate) : ""}</span>

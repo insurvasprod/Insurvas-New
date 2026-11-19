@@ -34,7 +34,7 @@ export function CounterofferPanel({ offer, carrierName, now, readOnly, busy, onA
   ];
   const disabledWhy = readOnly ? "Read-only — nothing on this attempt can change" : busy ? "Saving…" : undefined;
   return (
-    <section aria-label="Counteroffer" className="rounded-[12px] border border-[var(--border)] border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] p-5">
+    <section aria-label="Counteroffer" className="m-glass rounded-lg border border-border p-5">
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2.5">
           <h2 className="text-lg font-semibold text-[var(--ink)]">{carrierName ?? "The carrier"} came back with a counteroffer</h2>

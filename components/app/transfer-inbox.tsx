@@ -26,6 +26,7 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { productLineLabel } from "@/lib/format/productLine";
 import { notify } from "@/lib/notify";
+import { load as loadResource, peek, seed } from "@/lib/client/resource-cache";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { claimedMessage, isWithAgent, releaseDialog, SCREENING_FILTER_OPTIONS, screeningSignal, type InboxSummary, type ScreeningSignal } from "@/lib/transferInbox/constants";
 import { cn } from "@/lib/utils";
@@ -110,6 +111,16 @@ type Realtime = "connecting" | "connected" | "offline";
 const DEFAULT_FILTERS: Filters = { status: "all", partnerId: "", productLine: "", state: "", screeningOutcome: "", claimedBy: "" };
 /** "Clear filters" removes every chip: that is All transfers. */
 const CLEARED_FILTERS: Filters = DEFAULT_FILTERS;
+/** The inbox's read for these filters, as the app's cache keys it (lib/client/resource-cache.ts). */
+function inboxKey(filters: Filters) {
+  const params = new URLSearchParams({ status: filters.status });
+  if (filters.partnerId) params.set("partner_id", filters.partnerId);
+  if (filters.productLine) params.set("product_line", filters.productLine);
+  if (filters.state) params.set("state", filters.state);
+  if (filters.screeningOutcome) params.set("screening_outcome", filters.screeningOutcome);
+  if (filters.claimedBy) params.set("claimed_by", filters.claimedBy);
+  return `/api/app/inbound?${params}`;
+}
 const STATUS_LABEL: Record<Status, string> = { unclaimed: "waiting", claimed: "claimed", all: "all" };
 
 /**
@@ -199,7 +210,8 @@ function groupOf(item: Item): Group {
 function groupRank(item: Item) { return { waiting: 0, with_agent: 1, done: 2 }[groupOf(item)]; }
 
 export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: string }) {
-  const [data, setData] = useState<Data | null>(null);
+  // A repeat visit draws the last inbox at once (the default filters' answer), then asks again.
+  const [data, setData] = useState<Data | null>(() => seed<Data>(inboxKey(DEFAULT_FILTERS))?.data ?? null);
   const [error, setError] = useState("");
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [search, setSearch] = useState("");
@@ -263,18 +275,17 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
     const requestId = ++latest.current;
     inFlight.current += 1;
     try {
-      const params = new URLSearchParams({ status: filters.status });
-      if (filters.partnerId) params.set("partner_id", filters.partnerId);
-      if (filters.productLine) params.set("product_line", filters.productLine);
-      if (filters.state) params.set("state", filters.state);
-      if (filters.screeningOutcome) params.set("screening_outcome", filters.screeningOutcome);
-      if (filters.claimedBy) params.set("claimed_by", filters.claimedBy);
-      const response = await fetch(`/api/app/inbound?${params}`, { cache: "no-store" });
-      const body = await response.json().catch(() => null);
+      // Through the app's cache, always asking again (realtime): the kept answer only draws a repeat visit at once.
+      let nextData: Data;
+      try {
+        nextData = await loadResource<Data>(inboxKey(filters));
+      } catch (cause) {
+        // A refusal is said; a dropped connection is retried by the next tick.
+        if (requestId === latest.current && cause && typeof cause === "object" && "status" in cause) setError(cause instanceof Error && cause.message ? cause.message : "Could not load transfer inbox");
+        return;
+      }
       if (requestId !== latest.current) return;
-      if (!response.ok) { setError(body?.error ?? "Could not load transfer inbox"); return; }
       setError("");
-      const nextData = body as Data;
       setData(nextData);
       setOptions((current) => {
         const partners = new Map(current.partners);
@@ -299,12 +310,16 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
   // call and handoff, and the inbox re-reads on it (below). The only timer is a slow safety re-read
   // in case a broadcast is missed: every 30 seconds while connected, every 10 while not.
   useEffect(() => {
+    // A fresh document starts from the kept inbox once it has hydrated (a filter change keeps what is drawn).
+    const kept = peek<Data>(inboxKey(filters));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the kept answer, drawn before the network's
+    if (kept?.data) setData((current) => current ?? kept.data ?? null);
     void load();
     const timer = window.setInterval(() => { if (inFlight.current === 0 && document.visibilityState === "visible") void load(); }, realtime === "connected" ? 30_000 : 10_000);
     const onVisible = () => { if (document.visibilityState === "visible") void load(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
-  }, [load, realtime]);
+  }, [load, realtime, filters]);
 
   // "Realtime · Connected" is the channel's own status, not a promise: it says Connected only once
   // the subscription is confirmed, and says so when it drops (the safety re-read then runs every 10 seconds).
@@ -404,7 +419,15 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
   );
 
   if (!data) {
-    if (!error) return <PageLoading />;
+    // Frame first (UI-CONSISTENCY §7a): the title, the views and the button draw at once; the inbox loads under them.
+    if (!error) {
+      return (
+        <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+          {header}
+          <PageLoading header={false} />
+        </div>
+      );
+    }
     return (
       <div className="flex w-full min-w-0 flex-col gap-6">
         {header}
@@ -587,6 +610,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
           count={selection.count}
           noun={["transfer", "transfers"]}
           onClear={selection.clear}
+          selectAll={<SelectAllCheckbox selection={selection} ids={pageRows.map((item) => item.id)} label="Select every transfer on this page" />}
           actions={<Button type="button" variant="outline" onClick={exportSelected}><Download aria-hidden="true" />Export selected</Button>}
         />
         {pageRows.length === 0 ? (

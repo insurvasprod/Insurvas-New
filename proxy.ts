@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from "@/lib/adminAuth/session";
-import { refuseAdminOnThisHost } from "@/lib/adminAuth/adminHost";
+import { adminPageRedirect, refuseAdminOnThisHost, requestHostname } from "@/lib/adminAuth/adminHost";
 import { configuredHosts, CROSS_SITE_REFUSED, refuseCrossSite } from "@/lib/security/originCheck";
 import { siteHostMove } from "@/lib/security/siteHosts";
 import { TENANT_SESSION_COOKIE, verifyTenantSessionToken } from "@/lib/tenantAuth/session";
@@ -13,17 +13,18 @@ import { maintenanceGateResponse } from "@/lib/system/maintenanceGate";
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const hostname = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? request.nextUrl.hostname)
-    .split(",")[0]
-    .trim()
-    .split(":")[0]
-    .toLowerCase();
+  // The Host header, never a client-sent X-Forwarded-Host (security review 2026-11, H-2 / L-14).
+  const hostname = requestHostname(request.headers.get("host"), request.nextUrl.hostname);
 
   // The admin plane on its own host. With ADMIN_HOST set (production: `admin.insurvas.com`), /admin
-  // and /api/admin answer 404 on every other host — the agent app's above all — so the staff console
-  // and its cookies never sit on the customer-facing origin. Unset, nothing changes (local dev).
-  // Production must also set ADMIN_COOKIE_DOMAIN / AGENT_COOKIE_DOMAIN; see .env.example.
+  // and /api/admin are never answered on any other host — the agent app's above all — so the staff
+  // console and its cookies never sit on the customer-facing origin. A page read moves to the same page
+  // on the admin host (old links and bookmarks); everything else is a 404. Unset, nothing changes
+  // (local dev). Production must also set ADMIN_COOKIE_DOMAIN / AGENT_COOKIE_DOMAIN; see .env.example.
+  // Until it does, the staff console shows a critical alert (lib/adminAlerts, adminHostSetupGaps).
   if (refuseAdminOnThisHost(hostname, pathname, process.env.ADMIN_HOST)) {
+    const moved = adminPageRedirect(request.method, pathname, request.nextUrl.search, process.env.ADMIN_HOST);
+    if (moved) return NextResponse.redirect(moved, 308);
     return new NextResponse("Not found", { status: 404 });
   }
   // Cross-site writes (LA-1 audit): a POST/PUT/PATCH/DELETE to /api/app, /api/partner or /api/admin
@@ -58,17 +59,16 @@ export async function proxy(request: NextRequest) {
   }
   // --- end maintenance gate ---
 
-  // `/` is the landing page on every host, app.insurvas.com included (owner, 2026-11-04). It used to
-  // be sent to /app/login there; sign-in is one click away from the landing page's header.
-  //
-  // The product itself lives on app.insurvas.com: with SITE_HOST and APP_HOST set, an /app, /partner or /signup
-  // address on insurvas.com or www.insurvas.com moves there (path and query kept), because the session
-  // cookies are pinned to the app host and a sign-in or sign-up made on www would never stick (owner, 2026-11-08).
+  // Separate sites per plane (owner, 2026-11-18): insurvas.com / www is the landing site; app., partner. and
+  // admin. each serve their own product, and `/` there opens it. With SITE_HOST and APP_HOST set (PARTNER_HOST
+  // optional), a product address on the wrong host moves to its own (path and query kept), because each plane's
+  // session cookie is pinned to its host and a sign-in made elsewhere would never stick.
   // Unset, every host serves everything. Rules: lib/security/siteHosts.ts.
   const move = siteHostMove(hostname, pathname, process.env);
   if (move?.kind === "to_app_host") {
     const url = request.nextUrl.clone();
     url.host = move.host;
+    if (move.pathname) url.pathname = move.pathname;
     url.protocol = "https:";
     url.port = "";
     return NextResponse.redirect(url, 308);

@@ -8,7 +8,7 @@ import { notify } from "@/lib/notify";
 import { guideHref, type SetupChecklistStep } from "@/lib/dashboard/checklist";
 import { guideMovesFor } from "@/lib/dashboard/guideMoves";
 
-import { readPausedGuide, withMove } from "./setup-guide-bar";
+import { activeSetupGuide, readPausedGuide, withMove, withRun } from "./setup-guide-bar";
 import { requiredLeft, useSetupStatus } from "./setup-status";
 
 /** Whether a step's page is the one open: same path, and the same Settings tab when the step names one. */
@@ -48,7 +48,8 @@ function GuideMeHere({ pathname }: { pathname: string }) {
     return () => window.removeEventListener("hashchange", read);
   }, [pathname]);
 
-  const guiding = params.get("guide") !== null;
+  // A run in this tab counts too: the import review and other carried pages have no ?guide= in their address.
+  const guiding = params.get("guide") !== null || activeSetupGuide(pathname);
   const here = useMemo(() => {
     if (!status || guiding) return null;
     const matches = status.checklist.steps.filter((step) => stepIsHere(step, pathname, hash));
@@ -85,7 +86,7 @@ function GuideMeHere({ pathname }: { pathname: string }) {
     const word = status.audience === "owner" ? "Ready to sell" : "Ready to work";
     notify.warn(`${word} · ${required.length - left} of ${required.length}`, {
       detail: `Next: ${next.label}${next.minutes ? ` · ${next.minutes} min` : ""}`,
-      action: { label: pausedStep ? "Resume" : "Start", onClick: () => router.push(pausedStep && paused ? withMove(paused.href, paused.move) : guideHref(next)) },
+      action: { label: pausedStep ? "Resume" : "Start", onClick: () => router.push(withRun(pausedStep && paused ? withMove(paused.href, paused.move) : guideHref(next))) },
     });
   }, [status, guiding, pathname, router]);
 

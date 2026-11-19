@@ -1,20 +1,33 @@
 "use client";
 
 import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
+import { IntentLink } from "@/components/ui/nav-pending";
+
+/**
+ * A rail move is an area move (Wave D, 2026-11-18): the page that arrives rises in the calm cascade, as it does from
+ * the agent rail (portal-page-transition.tsx). Every rail link is an IntentLink carrying it, so the staff and partner
+ * rails fetch on rest and mark the move like the app's.
+ */
+const RAIL_MOVE = ["nav-area"];
 
 type Icon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
 export type RailLink = { key: string; label: string; href: string; icon: Icon };
-export type RailGroup = { key: string; label: string; icon: Icon; items: RailLink[] };
+/**
+ * A group of pages. With `href` it is an area (admin Billing, owner 2026-11-17: "click Billing, it goes to the
+ * workspace; hover it and it shows all of the pages"): the row is a link to the area's home and hovering or
+ * focusing it opens a flyout listing every page, as the agent menu's areas do. Without `href` it is a disclosure.
+ */
+export type RailGroup = { key: string; label: string; icon: Icon; items: RailLink[]; href?: string };
 export type RailNode = RailLink | RailGroup;
 
 type Fly =
   | { kind: "card"; key: string; label: string; top: number }
-  | { kind: "tip"; key: string; label: string; top: number };
+  | { kind: "tip"; key: string; label: string; top: number }
+  | { kind: "area"; key: string; label: string; top: number; left: number; items: RailLink[] };
 
 /**
  * Desktop navigation for staff and partner shells. Each shell keeps its ordered menu data and
@@ -88,6 +101,11 @@ export function NavRail({
     const rect = element.getBoundingClientRect();
     setFly({ kind: "tip", key, label: text, top: rect.top + rect.height / 2 - 16 });
   };
+  const openArea = (entry: RailGroup, element: HTMLElement) => {
+    cancelClose();
+    const rect = element.getBoundingClientRect();
+    setFly({ kind: "area", key: entry.key, label: entry.label, top: place(element, entry.items.length), left: rect.right + 8, items: entry.items });
+  };
   const openCard = (element: HTMLElement) => {
     if (!card) return;
     cancelClose();
@@ -106,7 +124,8 @@ export function NavRail({
     const ItemIcon = item.icon;
     return (
       <li key={item.key}>
-        <Link
+        <IntentLink
+          transitionTypes={RAIL_MOVE}
           href={item.href}
           data-rail-key={item.key}
           aria-label={item.label}
@@ -122,11 +141,44 @@ export function NavRail({
             <ItemIcon className="portal-agent-nav-icon" aria-hidden />
             <span className="portal-agent-nav-label">{item.label}</span>
           </span>
-        </Link>
+        </IntentLink>
       </li>
     );
   };
+  const area = (entry: RailGroup & { href: string }) => {
+    const GroupIcon = entry.icon;
+    const active = isActive(entry.href, pathname) || entry.items.some((item) => isActive(item.href, pathname));
+    return (
+      <section key={entry.key} className={`portal-agent-nav-section ${active ? "is-active" : ""}`}>
+        <ul className="portal-agent-nav-settings">
+          <li>
+            <IntentLink
+          transitionTypes={RAIL_MOVE}
+              href={entry.href}
+              data-rail-key={entry.key}
+              aria-label={entry.label}
+              aria-current={active ? "page" : undefined}
+              aria-haspopup="true"
+              aria-expanded={fly?.kind === "area" && fly.key === entry.key}
+              title={entry.label}
+              className={`portal-agent-nav-link ${active ? "is-active" : ""}`}
+              onPointerEnter={(event) => openArea(entry, event.currentTarget)}
+              onPointerLeave={closeSoon}
+              onFocus={(event) => openArea(entry, event.currentTarget)}
+              onBlur={closeSoon}
+            >
+              <span className="portal-agent-nav-link-copy">
+                <GroupIcon className="portal-agent-nav-icon" aria-hidden />
+                <span className="portal-agent-nav-label">{entry.label}</span>
+              </span>
+            </IntentLink>
+          </li>
+        </ul>
+      </section>
+    );
+  };
   const group = (entry: RailGroup) => {
+    if (entry.href) return area(entry as RailGroup & { href: string });
     const GroupIcon = entry.icon;
     const open = openGroupKey === entry.key;
     const active = entry.items.some((item) => isActive(item.href, pathname));
@@ -163,7 +215,8 @@ export function NavRail({
               const childActive = isActive(child.href, pathname);
               return (
                 <li key={child.key}>
-                  <Link
+                  <IntentLink
+          transitionTypes={RAIL_MOVE}
                     href={child.href}
                     aria-label={child.label}
                     aria-current={childActive ? "page" : undefined}
@@ -174,7 +227,7 @@ export function NavRail({
                       <ChildIcon className="portal-agent-nav-icon" aria-hidden />
                       <span className="portal-agent-nav-label">{child.label}</span>
                     </span>
-                  </Link>
+                  </IntentLink>
                 </li>
               );
             })}
@@ -192,7 +245,8 @@ export function NavRail({
       onKeyDown={onKeyDown}
     >
       <div className={sidebarPresentation ? "portal-agent-sidebar-brand" : "portal-agent-rail-brand"}>
-        <Link
+        <IntentLink
+          transitionTypes={RAIL_MOVE}
           href={homeHref}
           aria-label="Insurvas home"
           className={sidebarPresentation ? "portal-agent-desktop-brand-link" : undefined}
@@ -208,7 +262,7 @@ export function NavRail({
             tone="dark"
             className={sidebarPresentation ? "portal-agent-desktop-brand-compact" : "portal-agent-rail-brand-compact"}
           />
-        </Link>
+        </IntentLink>
         <button
           type="button"
           onClick={() => { setFly(null); setIsCollapsed((collapsed) => !collapsed); }}
@@ -261,7 +315,7 @@ export function NavRail({
           id={panelId}
           className="portal-agent-rail-fly m-swap"
           data-kind={fly.kind === "card" ? "plan" : fly.kind}
-          style={{ top: fly.top }}
+          style={fly.kind === "area" ? { top: fly.top, left: fly.left } : { top: fly.top }}
           role={fly.kind === "tip" ? "tooltip" : "group"}
           aria-label={fly.kind === "tip" ? undefined : fly.label}
           onPointerEnter={cancelClose}
@@ -269,6 +323,24 @@ export function NavRail({
         >
           {fly.kind === "tip" && fly.label}
           {fly.kind === "card" && card?.body}
+          {fly.kind === "area" && (
+            <>
+              <p className="portal-agent-rail-fly-head">{fly.label}</p>
+              <ul>
+                {fly.items.map((item) => {
+                  const ItemIcon = item.icon;
+                  return (
+                    <li key={item.key}>
+                      <IntentLink transitionTypes={RAIL_MOVE} href={item.href} aria-current={isActive(item.href, pathname) ? "page" : undefined} onClick={() => setFly(null)}>
+                        <ItemIcon className="size-4" aria-hidden />
+                        <span>{item.label}</span>
+                      </IntentLink>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
         </div>
       )}
     </aside>

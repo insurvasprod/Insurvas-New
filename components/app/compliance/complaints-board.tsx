@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { cardSurface } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
-import { Field, checkboxControl, control, textareaControl } from "@/components/ui/field";
+import { Field, control, textareaControl } from "@/components/ui/field";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 import { MoreMenu } from "@/components/ui/more-menu";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
@@ -44,6 +44,7 @@ import { dayMonthYear } from "@/lib/format/dates";
 import { ViewTabs } from "@/components/app/view-tabs";
 import { ComplianceSlot } from "@/components/app/compliance/compliance-slot";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * LA-6.4 · complaints: days remaining first, amber at 10, red at 5, overdue loudest. The response is typed
  * by the agent; nothing here drafts it.
@@ -337,7 +338,7 @@ export function ComplaintRecord({ complaint, checklist, respondent, team, tab, i
                 {checklist.map((item) => (
                   <li key={item.key} className="m-row px-4 py-2.5">
                     <label className="flex items-start gap-2 text-sm text-[var(--ink)]">
-                      <input type="checkbox" className={cn(checkboxControl, "mt-0.5")} disabled={readOnly || busy} checked={Boolean(c.checklist[item.key])} onChange={(e) => void patch({ checklist: { ...c.checklist, [item.key]: e.target.checked } }, "Checklist saved")} />
+                      <CheckBox className="mt-0.5" disabled={readOnly || busy} checked={Boolean(c.checklist[item.key])} onChange={(e) => void patch({ checklist: { ...c.checklist, [item.key]: e.target.checked } }, "Checklist saved")} />
                       <span>{item.item}</span>
                     </label>
                   </li>

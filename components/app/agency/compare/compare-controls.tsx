@@ -17,6 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { followingB, PRESETS, type Preset, type Range } from "@/lib/dashboard/comparePeriods";
 import { cn } from "@/lib/utils";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * Compare's controls (owner 2026-11-07, Compare mockups A and B). Every choice lives in the address, so a comparison
  * can be bookmarked or sent, and the server page reads it: ?preset=, ?af ?at ?bf ?bt (custom), ?person= (A), ?people=
@@ -291,10 +292,8 @@ export function PeopleTable({ columns, rows, shown: initialShown, focused, trend
               const on = shown.includes(column.key);
               return (
                 <label key={column.key} className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm hover:bg-[var(--surface-alt)]">
-                  <input
+                  <CheckBox
                     id={`compare-col-${column.key}`}
-                    type="checkbox"
-                    className="size-4 accent-[var(--primary)]"
                     checked={on}
                     disabled={on && shown.length === 1}
                     onChange={() => setColumns(on ? shown.filter((key) => key !== column.key) : columns.map((c) => c.key).filter((key) => key === column.key || shown.includes(key)))}

@@ -163,3 +163,6 @@ export function groupLayouts(maps: LayoutMapView[]): LayoutGroup[] {
 }
 
 export const layoutHref = (key: string) => `/admin/layout-maps/${encodeURIComponent(key)}`;
+
+/** A carrier's own record in the Catalog (admin round 1): every facet of one carrier, in tabs. */
+export const carrierHref = (code: string) => `/admin/carriers/${encodeURIComponent(code)}`;

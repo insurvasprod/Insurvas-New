@@ -469,6 +469,9 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/onboarding/status/route.ts", featureKey: null },
   { sourceFile: "app/api/app/onboarding/verification/route.ts", featureKey: null },
   { sourceFile: "app/api/app/setup/route.ts", featureKey: null },
+  // Roles r1 (2026-11-18): Home goals and targets. Every role reaches it; who may set what is checked in the route
+  // (lib/dashboard/goalRules maySetGoal), and the agency's goal is read only by who may set it.
+  { sourceFile: "app/api/app/goals/route.ts", featureKey: null },
   { sourceFile: "app/api/app/pipelines/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/pipelines/[id]/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/pipelines/[id]/stages/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -15,6 +16,8 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs } from "@/components/ui/view-tabs";
+import { StreamSection, TitleShape } from "@/components/ui/stream-section";
+import { Part, startParts } from "@/components/app/commissions/frame-parts";
 import { dollars } from "@/lib/agency/constants";
 import { readCreditQueue } from "@/lib/agency/moneyStores";
 import { readRoster } from "@/lib/agency/producerStore";
@@ -40,74 +43,95 @@ export default async function AttributionItemPage({ params, searchParams }: { pa
   const tenantId = guard.context.tenantId;
   const scope = { tenantId, userId: guard.context.userId, keeper: true, money: false, credit: true };
 
-  const [queue, page, roster, today] = await Promise.all([
-    readCreditQueue(tenantId).catch(() => null),
-    loadItemPage(scope, "credit", id).catch(() => null),
-    readRoster(guard.context).catch(() => null),
-    agencyToday(tenantId).catch(() => new Date().toISOString().slice(0, 10)),
-  ]);
-  const open = queue?.open ?? [];
-  const at = open.findIndex((r) => r.id === id);
-  const row = at >= 0 ? open[at] : null;
-
-  if (!row || !page || page.detail.kind !== "credit") {
-    return (
-      <CommissionsPage step="attribution" title="This item is closed" breadcrumbs={[{ label: "Commissions" }, { label: "Who gets the credit", href: CREDIT_HREF }, { label: "Closed" }]}>
-        <TableCard>
-          <EmptyState title="This item is closed" hint="Someone decided it, a newer file answered it, or it isn't yours to see." action={<Button asChild><Link href={CREDIT_HREF}>Back to Who gets the credit</Link></Button>} />
-        </TableCard>
-      </CommissionsPage>
-    );
-  }
-
-  const previous = at > 0 ? open[at - 1] : null;
-  const next = open[at + 1] ?? null;
-  const tab: Tab = asked === "row" && page.row ? "row" : "decide";
-  const readOnly = guard.entitlement.access === "read_only";
-  const days = ageDays(row.createdAt.slice(0, 10), today);
-  const name = nameOf(row);
-  const producerIds = Object.fromEntries((roster?.rows ?? []).map((p) => [p.userId, p.id]));
-  const nextHref = next ? itemHref(next.id) : null;
-
-  const actions = (
-    <>
-      <NeighbourLinks previous={previous ? { href: itemHref(previous.id), name: nameOf(previous) } : null} next={next ? { href: itemHref(next.id), name: nameOf(next) } : null} noun="item" />
-      {!readOnly && nextHref && <Button asChild variant="outline"><Link href={nextHref}>Skip</Link></Button>}
-      {!readOnly && tab === "decide" && <Button type="submit" form={CREDIT_FORM_ID}>{next ? "Give the credit and next" : "Give the credit"}</Button>}
-    </>
-  );
-
-  const writer = row.writingNumber;
-  const strip = (
-    <StatStrip label={`${name} at a glance`}>
-      <StatTile label="Amount" value={dollars(row.amountCents)} href={row.fileId && row.rowNumber !== null ? statementRowHref(row.fileId, row.rowNumber) : undefined}
-        footnote={row.rowNumber !== null ? `reported · statement row ${row.rowNumber}` : "reported"} />
-      <StatTile label="Carrier" valueSize="text" value={row.carrierName ?? "Carrier not known"} href={row.carrierId && row.policyNumber ? policyPageHref(row.carrierId, row.policyNumber) : undefined}
-        footnote={row.policyNumber ? `${row.policyNumber} · policy ›` : "no policy number"} />
-      <StatTile label="Writing number" valueSize="text" value={row.agentIdentifier ?? "None on the row"} href={writer?.producerId ? `/app/producers/${writer.producerId}?tab=money` : undefined}
-        footnote={writer ? `→ ${writer.name}` : row.agentIdentifier ? "isn't anyone yet" : "the carrier sent none"} />
-      <StatTile label="Submitted by" valueSize="text" value={row.application?.name ?? "No application"} href={row.application?.producerId ? `/app/producers/${row.application.producerId}?tab=money` : undefined}
-        footnote={row.application ? "application" : "no application names a producer"} />
-      <StatTile label="Waiting" valueSize="text" value={`${days} ${days === 1 ? "day" : "days"}`} footnote={(() => { const tone = ageTone(days); const since = `since ${fileDay(row.createdAt.slice(0, 10))}`; return tone ? <StatusChip tone={tone}>{since.replace(/^./, (c) => c.toUpperCase())}</StatusChip> : since; })()} />
-    </StatStrip>
-  );
-
   const here = (t: Tab) => (t === "row" ? `${itemHref(id)}?tab=row` : itemHref(id));
+  const tabsOf = (tab: Tab, hasRow: boolean) => (
+    <ViewTabs<Tab> label="This item" value={tab} tabs={[
+      { key: "decide", label: "Decide", href: here("decide") },
+      ...(hasRow ? [{ key: "row" as const, label: "The row as sent", href: here("row") }] : []),
+    ]} />
+  );
+
+  // Frame first (§7a): the trail and the tabs draw at once; the client and policy, the ‹ ›, the primary and the
+  // row's facts stream in.
+  const read = startParts((async () => {
+    const [queue, page, roster, today] = await Promise.all([
+      readCreditQueue(tenantId).catch(() => null),
+      loadItemPage(scope, "credit", id).catch(() => null),
+      readRoster(guard.context).catch(() => null),
+      agencyToday(tenantId).catch(() => new Date().toISOString().slice(0, 10)),
+    ]);
+    const open = queue?.open ?? [];
+    const at = open.findIndex((r) => r.id === id);
+    const row = at >= 0 ? open[at] : null;
+
+    if (!row || !page || page.detail.kind !== "credit") {
+      return {
+        title: "This item is closed",
+        tabs: null,
+        actions: null,
+        body: (
+          <TableCard>
+            <EmptyState title="This item is closed" hint="Someone decided it, a newer file answered it, or it isn't yours to see." action={<Button asChild><Link href={CREDIT_HREF}>Back to Who gets the credit</Link></Button>} />
+          </TableCard>
+        ),
+      };
+    }
+
+    const previous = at > 0 ? open[at - 1] : null;
+    const next = open[at + 1] ?? null;
+    const tab: Tab = asked === "row" && page.row ? "row" : "decide";
+    const readOnly = guard.entitlement.access === "read_only";
+    const days = ageDays(row.createdAt.slice(0, 10), today);
+    const name = nameOf(row);
+    const producerIds = Object.fromEntries((roster?.rows ?? []).map((p) => [p.userId, p.id]));
+    const nextHref = next ? itemHref(next.id) : null;
+
+    const actions = (
+      <>
+        <NeighbourLinks previous={previous ? { href: itemHref(previous.id), name: nameOf(previous) } : null} next={next ? { href: itemHref(next.id), name: nameOf(next) } : null} noun="item" />
+        {!readOnly && nextHref && <Button asChild variant="outline"><Link href={nextHref}>Skip</Link></Button>}
+        {!readOnly && tab === "decide" && <Button type="submit" form={CREDIT_FORM_ID}>{next ? "Give the credit and next" : "Give the credit"}</Button>}
+      </>
+    );
+
+    const writer = row.writingNumber;
+    const strip = (
+      <StatStrip label={`${name} at a glance`}>
+        <StatTile label="Amount" value={dollars(row.amountCents)} href={row.fileId && row.rowNumber !== null ? statementRowHref(row.fileId, row.rowNumber) : undefined}
+          footnote={row.rowNumber !== null ? `reported · statement row ${row.rowNumber}` : "reported"} />
+        <StatTile label="Carrier" valueSize="text" value={row.carrierName ?? "Carrier not known"} href={row.carrierId && row.policyNumber ? policyPageHref(row.carrierId, row.policyNumber) : undefined}
+          footnote={row.policyNumber ? `${row.policyNumber} · policy ›` : "no policy number"} />
+        <StatTile label="Writing number" valueSize="text" value={row.agentIdentifier ?? "None on the row"} href={writer?.producerId ? `/app/producers/${writer.producerId}?tab=money` : undefined}
+          footnote={writer ? `→ ${writer.name}` : row.agentIdentifier ? "isn't anyone yet" : "the carrier sent none"} />
+        <StatTile label="Submitted by" valueSize="text" value={row.application?.name ?? "No application"} href={row.application?.producerId ? `/app/producers/${row.application.producerId}?tab=money` : undefined}
+          footnote={row.application ? "application" : "no application names a producer"} />
+        <StatTile label="Waiting" valueSize="text" value={`${days} ${days === 1 ? "day" : "days"}`} footnote={(() => { const tone = ageTone(days); const since = `since ${fileDay(row.createdAt.slice(0, 10))}`; return tone ? <StatusChip tone={tone}>{since.replace(/^./, (c) => c.toUpperCase())}</StatusChip> : since; })()} />
+      </StatStrip>
+    );
+    return {
+      title: titleOf(row),
+      tabs: tabsOf(tab, Boolean(page.row)),
+      actions,
+      body: (
+        <>
+          {strip}
+          {tab === "row" && page.row
+            ? <RowAsSentTable row={page.row} />
+            : <CreditDecide detail={page.detail} producerIds={producerIds} nextHref={nextHref} nextName={next ? nameOf(next) : null} listHref={CREDIT_HREF} readOnly={readOnly} />}
+        </>
+      ),
+    };
+  })());
+
   return (
     <CommissionsPage
       step="attribution"
-      title={titleOf(row)}
-      breadcrumbs={[{ label: "Commissions" }, { label: "Who gets the credit", href: CREDIT_HREF }, { label: "To decide", href: CREDIT_HREF }, { label: name }]}
-      tabs={<ViewTabs<Tab> label={titleOf(row)} value={tab} tabs={[
-        { key: "decide", label: "Decide", href: here("decide") },
-        ...(page.row ? [{ key: "row" as const, label: "The row as sent", href: here("row") }] : []),
-      ]} />}
-      actions={actions}
+      title={<Suspense fallback={<TitleShape />}><Part read={read} part="title" /></Suspense>}
+      breadcrumbs={[{ label: "Commissions" }, { label: "Who gets the credit", href: CREDIT_HREF }, { label: "To decide", href: CREDIT_HREF }, { label: "Item" }]}
+      tabs={<Suspense fallback={tabsOf(asked === "row" ? "row" : "decide", true)}><Part read={read} part="tabs" /></Suspense>}
+      actions={<Suspense fallback={null}><Part read={read} part="actions" /></Suspense>}
     >
-      {strip}
-      {tab === "row" && page.row
-        ? <RowAsSentTable row={page.row} />
-        : <CreditDecide detail={page.detail} producerIds={producerIds} nextHref={nextHref} nextName={next ? nameOf(next) : null} listHref={CREDIT_HREF} readOnly={readOnly} />}
+      <StreamSection shape="strip+table"><Part read={read} part="body" /></StreamSection>
     </CommissionsPage>
   );
 }

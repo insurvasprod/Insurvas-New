@@ -20,6 +20,7 @@ import { MoreMenu } from "@/components/ui/more-menu";
 import { REVIEW_ERROR_LABELS, REVIEW_ERROR_TYPES, REVIEW_STATUS_LABELS, errorTally, type ReviewErrorType } from "@/lib/agency/reviewCore";
 import { sendJson, useAgencyData } from "./use-agency-data";
 
+import { CheckBox } from "@/components/ui/check-box";
 type Review = {
   id: string; applicationId: string; producerUserId: string; sampleBps: number; sampledAt: string; caseId: string | null;
   status: keyof typeof REVIEW_STATUS_LABELS; errorTypes: ReviewErrorType[]; note: string | null; reviewedAt: string | null; carrierName: string | null;
@@ -169,7 +170,7 @@ export function ReviewRecord({ reviewId }: { reviewId: string }) {
               <legend className="mb-1 font-medium">Error types</legend>
               {REVIEW_ERROR_TYPES.map((t) => (
                 <label key={t} className="flex items-center gap-2">
-                  <input type="checkbox" checked={picked.includes(t)} disabled={!canReview} onChange={() => toggle(t)} />
+                  <CheckBox checked={picked.includes(t)} disabled={!canReview} onChange={() => toggle(t)} />
                   {REVIEW_ERROR_LABELS[t]}
                 </label>
               ))}

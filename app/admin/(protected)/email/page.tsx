@@ -5,7 +5,7 @@ import { canAccessConfigurationSection } from "@/lib/configuration/sections";
 // Server component only. The transport pulls in nodemailer and the service client; nothing on this
 // page is a client component, and nothing here may pass the transport's module into one.
 import { emailConfigProblems, emailDeliveryMode } from "@/lib/email/transport";
-import { PageHeader } from "@/components/ui/page-header";
+import { PlatformPage } from "@/components/admin/platform/platform-page";
 import { ConfigurationPlaceholder } from "@/components/admin/configuration-placeholder";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 
@@ -39,19 +39,20 @@ export default async function EmailPage() {
   const missing = emailConfigProblems().filter((name) => !name.startsWith("EMAIL_DELIVERY_MODE"));
   const sending = smtp && missing.length === 0;
   return (
-    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      {/* "Mail Setup" to match the sidebar. Route stays /admin/email. */}
-      <PageHeader title="Mail Setup" />
-      <StatStrip label="Mail at a glance">
-        <StatTile label="Delivery mode" valueSize="text" value={smtp ? "SMTP" : "Off"} footnote={smtp ? "on for this environment" : "off here: set EMAIL_DELIVERY_MODE=smtp (production sends unless it is off)"} />
-        <StatTile label="Settings missing" value={missing.length.toLocaleString("en-US")} valueTone={missing.length > 0 ? "warning" : undefined} footnote={missing.length > 0 ? missing.join(", ") : "all set"} />
-        <StatTile label="Email sent" valueSize="text" value={sending ? "Yes" : "No"} valueTone={sending ? "good" : "warning"} footnote={sending ? "every attempt logged" : "logged as skipped"} />
-      </StatStrip>
-      <ConfigurationPlaceholder
-        title="Mail setup is not editable here"
-        lede={deliveryStatus()}
-        detail="The mail server and sender are set in the server's environment and email wording is in code, so changing either takes a deploy."
-      />
-    </div>
+    // Inside the Platform frame (admin round 1, 2026-11-18), titled "Mail setup" as in the menu. Route stays /admin/email.
+    <PlatformPage step="mail" info="What Insurvas does with email in this environment. The mail server, sender and wording are set in the server's environment and in code.">
+      <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+        <StatStrip label="Mail at a glance">
+          <StatTile label="Delivery mode" valueSize="text" value={smtp ? "SMTP" : "Off"} footnote={smtp ? "on for this environment" : "off here: set EMAIL_DELIVERY_MODE=smtp (production sends unless it is off)"} />
+          <StatTile label="Settings missing" value={missing.length.toLocaleString("en-US")} valueTone={missing.length > 0 ? "warning" : undefined} footnote={missing.length > 0 ? missing.join(", ") : "all set"} />
+          <StatTile label="Email sent" valueSize="text" value={sending ? "Yes" : "No"} valueTone={sending ? "good" : "warning"} footnote={sending ? "every attempt logged" : "logged as skipped"} />
+        </StatStrip>
+        <ConfigurationPlaceholder
+          title="Mail setup is not editable here"
+          lede={deliveryStatus()}
+          detail="The mail server and sender are set in the server's environment and email wording is in code, so changing either takes a deploy."
+        />
+      </div>
+    </PlatformPage>
   );
 }

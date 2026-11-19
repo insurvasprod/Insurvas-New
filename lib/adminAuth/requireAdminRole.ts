@@ -4,6 +4,12 @@ import { NextResponse } from "next/server";
 
 import { isAdminRole, type AdminRole } from "./roles";
 import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken, type AdminSessionPayload } from "./session";
+import {
+  adminSessionIsCurrent,
+  readAdminWithSessionVersion,
+  tokenSessionVersion,
+  type SessionVersionClient,
+} from "./sessionVersion";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 /** The verified cookie only. Prefer resolveAdminContext — the token's role may be stale. */
@@ -30,14 +36,16 @@ export async function resolveAdminContext(): Promise<AdminContext | null> {
   const session = await getAdminSession();
   if (!session) return null;
 
-  const supabase = getSupabaseServiceClient();
-  const { data: admin } = await supabase
-    .from("admin_users")
-    .select("id, role, is_active")
-    .eq("id", session.sub)
-    .maybeSingle<{ id: string; role: string; is_active: boolean }>();
+  const { row: admin, version } = await readAdminWithSessionVersion<{ id: string; role: string; is_active: boolean }>(
+    getSupabaseServiceClient() as unknown as SessionVersionClient,
+    session.sub,
+    "id, role, is_active",
+  );
 
   if (!admin || !admin.is_active || !isAdminRole(admin.role)) return null;
+  // Security review 2026-11, M-2: a session ended from the server (sign-out, "Sign out everywhere",
+  // deactivation) is refused here even though its cookie is still signed and unexpired.
+  if (!adminSessionIsCurrent(tokenSessionVersion(session), version)) return null;
 
   return { sub: admin.id, role: admin.role };
 }

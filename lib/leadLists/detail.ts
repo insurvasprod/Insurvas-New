@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { csvCellMinimal } from "@/lib/csv/cell";
 import { getAgentTemplateForProduct } from "@/lib/agentTemplates/service";
+import { maskLeadValues } from "@/lib/leadValues/sensitive";
 import { DEFAULT_CEILING } from "@/lib/cadence/engine";
 import { getVendorScorecard } from "@/lib/vendorScorecard/service";
 
@@ -463,7 +464,8 @@ export async function leadListDetail(
 
   const savedMapping = mapping && !mapping.error ? ((mapping.data ?? [])[0]?.mapping as Record<string, string | null> | undefined) : undefined;
   const labels = new Map((template?.template.fields ?? []).map((field) => [field.field_key, field.label]));
-  const sampleValues = ((!sample.error && (sample.data ?? [])[0]?.values) || {}) as Record<string, unknown>;
+  // The sample is one real lead's value: a column mapped to an SSN or bank field shows its last four only (H-1).
+  const sampleValues = maskLeadValues((!sample.error && (sample.data ?? [])[0]?.values) || {}, template?.template.fields ?? []);
   const mappingRows = Object.entries(savedMapping ?? {}).map(([header, field]) => {
     const value = field ? sampleValues[field] : undefined;
     return { header, field: field || null, fieldLabel: field ? labels.get(field) ?? field : null, sample: value == null ? "" : String(value) };

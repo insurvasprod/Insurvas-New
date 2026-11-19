@@ -1,10 +1,14 @@
+import { Suspense } from "react";
+
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { scopeFor } from "@/lib/agency/visibility";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { TrueCpaLeads, TrueCpaLeadsDownload } from "@/components/app/true-cpa-leads";
 import { TrueCpaLeadsCharts } from "@/components/app/true-cpa-leads-charts";
+import { Await } from "@/components/app/reports/await";
 import { ReportsPage } from "@/components/app/reports/reports-page";
 import { ErrorState } from "@/components/ui/page-states";
+import { StreamSection } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { readTrueCpaLeads } from "@/lib/reports/trueCpaLeads";
@@ -43,18 +47,25 @@ export default async function TrueCpaLeadsPage({ searchParams }: { searchParams:
   const stage: ScorecardStage = (SCORECARD_STAGES as readonly string[]).includes(params.stage ?? "") ? params.stage as ScorecardStage : "received";
   const tenantId = guard.context.tenantId;
   const scope = { from: params.from, to: params.to, vendorId: params.vendor_id || null, campaignId: params.campaign_id || null, productCode: params.product_code || null, persistDays: params.persist_days ? Number(params.persist_days) : null };
-  const [first, breakdown] = await Promise.all([
-    getVendorScorecardLeads(tenantId, { ...scope, stage, slot: params.slot, attemptNumber: params.attempt_number, offset: 0, limit: 1 }).catch(() => null),
-    getLeadsBreakdown(tenantId, { ...scope, stage, slot: params.slot || null, attemptNumber: params.attempt_number || null }).catch((error: unknown) => (error instanceof Error ? error.message : "Could not read the leads")),
-  ]);
-  const total = first?.total ?? null;
-  const shownTitle = total != null ? `${title} · ${total.toLocaleString()} ${total === 1 ? "lead" : "leads"}` : title;
+  // Frame first (§7a): both reads start here; the title draws at once and gains its count when the first read is in.
+  const first = getVendorScorecardLeads(tenantId, { ...scope, stage, slot: params.slot, attemptNumber: params.attempt_number, offset: 0, limit: 1 }).catch(() => null);
+  const breakdown = getLeadsBreakdown(tenantId, { ...scope, stage, slot: params.slot || null, attemptNumber: params.attempt_number || null }).catch((error: unknown) => (error instanceof Error ? error.message : "Could not read the leads"));
+  const total = first.then((read) => read?.total ?? null);
+  const shownTitle = (
+    <Suspense fallback={title}>
+      <Await read={total}>{(count) => (count != null ? `${title} · ${count.toLocaleString()} ${count === 1 ? "lead" : "leads"}` : title)}</Await>
+    </Suspense>
+  );
   return (
-    <ReportsPage view="cpa" title={shownTitle} info={info} show="table">
+    <ReportsPage view="cpa" title={shownTitle} label={title} info={info} show="table">
       <TrueCpaLeadsDownload params={params} title={title} />
-      {typeof breakdown === "string"
-        ? <TableCard><ErrorState title="The chart did not load" detail={breakdown} /></TableCard>
-        : <TrueCpaLeadsCharts params={params} breakdown={breakdown} total={total} noun={stage === "issued" ? "issued leads" : "leads"} />}
+      <StreamSection shape="strip+table">
+        <Await read={Promise.all([breakdown, total])}>
+          {([chart, count]) => (typeof chart === "string"
+            ? <TableCard><ErrorState title="The chart did not load" detail={chart} /></TableCard>
+            : <TrueCpaLeadsCharts params={params} breakdown={chart} total={count} noun={stage === "issued" ? "issued leads" : "leads"} />)}
+        </Await>
+      </StreamSection>
     </ReportsPage>
   );
 }

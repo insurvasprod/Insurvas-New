@@ -16,6 +16,7 @@ import { ATTESTATION_MAX, ATTESTATION_MIN, type DisclosureProposal } from "@/lib
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
+import { CheckBox } from "@/components/ui/check-box";
 type ProposalState = {
   available: boolean;
   pending: DisclosureProposal[];
@@ -380,7 +381,7 @@ function ReviewDialog({
 
             {canApprove && !datePassed && (
               <label className="flex items-start gap-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
-                <input type="checkbox" className="mt-1" checked={checked} onChange={(event) => setChecked(event.target.checked)} />
+                <CheckBox className="mt-1" checked={checked} onChange={(event) => setChecked(event.target.checked)} />
                 I have checked this wording, word for word, against the approved source, and it is right for every state listed.
               </label>
             )}

@@ -11,6 +11,7 @@ import { AuthAlert, AuthInput, authLabel } from "@/components/portal/auth-contro
 import { LinkArrow } from "@/components/ui/link-arrow";
 import { PartnerAuthFrame } from "@/components/partner/partner-auth-frame";
 
+import { CheckBox } from "@/components/ui/check-box";
 const validEmail = (value: string) => /^\S+@\S+\.\S+$/.test(value.trim());
 
 /** The address that last signed in at this door on this browser. */
@@ -202,7 +203,7 @@ export function PartnerLoginForm() {
         </div>
 
         <label htmlFor="partner-remember" className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
-          <input id="partner-remember" type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="size-5 shrink-0 accent-[var(--accent-ink)]" />
+          <CheckBox id="partner-remember" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
           Keep me signed in on this device
         </label>
 

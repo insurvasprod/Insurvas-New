@@ -82,41 +82,97 @@ function chunks<T>(items: readonly T[]): T[][] {
 export async function fetchDiscountGivenByCoupon(
   coupons: readonly Pick<CouponRow, "id" | "code">[],
 ): Promise<Map<string, number> | null> {
-  const totals = new Map<string, number>();
-  if (coupons.length === 0) return totals;
+  return (await fetchCouponUsage(coupons))?.given ?? null;
+}
+
+/** One time a coupon was put on a subscription here: who, when, and the first invoice it took money off. */
+export type CouponRedemption = {
+  id: string;
+  couponId: string;
+  subscriptionId: string;
+  tenantId: string | null;
+  tenantName: string | null;
+  appliedAt: string;
+  /** Still on the subscription (false once removed or used up). */
+  isActive: boolean;
+  removedAt: string | null;
+  periodsRemaining: number | null;
+  /** The earliest of our invoices carrying this coupon's discount line, if one has been raised yet. */
+  invoice: { id: string; number: string } | null;
+  /** Cents taken off this subscription's invoices by the coupon so far. */
+  givenCents: number;
+};
+
+export type CouponUsage = {
+  /** Cents taken off our invoices per coupon id. */
+  given: Map<string, number>;
+  /** Every application per coupon id, newest first. */
+  redemptions: Map<string, CouponRedemption[]>;
+};
+
+/**
+ * What each coupon has done here: the discount it has given (the tile and the row's hover) and who it was applied
+ * to, when, and on which invoice (the coupon sheet's Redemptions tab, admin round 1).
+ *
+ * Only coupons applied by staff or by an offer reach subscription_coupons; a code redeemed at Whop's checkout never
+ * does (a known billing gap, said on the page). Invoices are matched on the discount line's label (`Coupon <code>`,
+ * lib/invoices/generate.ts): codes are unique and never edited, and an invoice line carries no coupon id.
+ *
+ * Reducing lines are stored negative (20260913220000), older ones positive — abs() reads both. Returns null when any
+ * read fails, so the page says it could not be read instead of showing a smaller number that looks true.
+ */
+export async function fetchCouponUsage(coupons: readonly Pick<CouponRow, "id" | "code">[]): Promise<CouponUsage | null> {
+  const given = new Map<string, number>();
+  const redemptions = new Map<string, CouponRedemption[]>();
+  if (coupons.length === 0) return { given, redemptions };
   const supabase = getSupabaseServiceClient();
 
-  const applications: { coupon_id: string; subscription_id: string }[] = [];
+  type Application = {
+    id: string;
+    coupon_id: string;
+    subscription_id: string;
+    applied_at: string;
+    is_active: boolean;
+    removed_at: string | null;
+    periods_remaining: number | null;
+    subscription: { tenant_id: string; tenant: { name: string } | null } | null;
+  };
+  const applications: Application[] = [];
   for (const ids of chunks(coupons.map((c) => c.id))) {
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await supabase
         .from("subscription_coupons")
-        .select("coupon_id, subscription_id")
+        .select("id, coupon_id, subscription_id, applied_at, is_active, removed_at, periods_remaining, subscription:subscriptions(tenant_id, tenant:tenants(name))")
         .in("coupon_id", ids)
         .order("id")
         .range(from, from + PAGE - 1);
-      if (error) return null;
-      applications.push(...((data ?? []) as typeof applications));
+      if (error) {
+        console.error(`[coupons] applications could not be read: ${error.message}`);
+        return null;
+      }
+      applications.push(...((data ?? []) as unknown as Application[]));
       if ((data ?? []).length < PAGE) break;
     }
   }
-  if (applications.length === 0) return totals;
+  if (applications.length === 0) return { given, redemptions };
 
-  const invoices: { id: string; subscription_id: string }[] = [];
+  const invoices: { id: string; number: string; subscription_id: string; created_at: string }[] = [];
   for (const ids of chunks([...new Set(applications.map((a) => a.subscription_id))])) {
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await supabase
         .from("platform_invoices")
-        .select("id, subscription_id")
+        .select("id, number, subscription_id, created_at")
         .in("subscription_id", ids)
         .order("id")
         .range(from, from + PAGE - 1);
-      if (error) return null;
+      if (error) {
+        console.error(`[coupons] invoices could not be read: ${error.message}`);
+        return null;
+      }
       invoices.push(...((data ?? []) as typeof invoices));
       if ((data ?? []).length < PAGE) break;
     }
   }
-  if (invoices.length === 0) return totals;
 
   const codeById = new Map(coupons.map((c) => [c.id, c.code]));
   const couponByLabel = new Map<string, Map<string, string>>(); // subscription -> label -> coupon id
@@ -127,7 +183,10 @@ export async function fetchDiscountGivenByCoupon(
     labels.set(`Coupon ${code}`, a.coupon_id);
     couponByLabel.set(a.subscription_id, labels);
   }
-  const subscriptionOfInvoice = new Map(invoices.map((i) => [i.id, i.subscription_id]));
+  const invoiceById = new Map(invoices.map((i) => [i.id, i]));
+  // subscription|coupon -> cents, and -> the earliest invoice carrying the line.
+  const givenBySubscription = new Map<string, number>();
+  const firstInvoice = new Map<string, { id: string; number: string; created_at: string }>();
 
   for (const ids of chunks(invoices.map((i) => i.id))) {
     for (let from = 0; ; from += PAGE) {
@@ -138,19 +197,70 @@ export async function fetchDiscountGivenByCoupon(
         .in("invoice_id", ids)
         .order("id")
         .range(from, from + PAGE - 1);
-      if (error) return null;
+      if (error) {
+        console.error(`[coupons] invoice lines could not be read: ${error.message}`);
+        return null;
+      }
       const lines = (data ?? []) as { invoice_id: string; label: string; amount_cents: number }[];
       for (const line of lines) {
-        const subscriptionId = subscriptionOfInvoice.get(line.invoice_id);
-        const couponId = subscriptionId ? couponByLabel.get(subscriptionId)?.get(line.label) : undefined;
-        if (!couponId) continue;
-        totals.set(couponId, (totals.get(couponId) ?? 0) + Math.abs(line.amount_cents));
+        const invoice = invoiceById.get(line.invoice_id);
+        const couponId = invoice ? couponByLabel.get(invoice.subscription_id)?.get(line.label) : undefined;
+        if (!invoice || !couponId) continue;
+        const cents = Math.abs(line.amount_cents);
+        given.set(couponId, (given.get(couponId) ?? 0) + cents);
+        const key = `${invoice.subscription_id}|${couponId}`;
+        givenBySubscription.set(key, (givenBySubscription.get(key) ?? 0) + cents);
+        const first = firstInvoice.get(key);
+        if (!first || invoice.created_at < first.created_at) firstInvoice.set(key, invoice);
       }
       if (lines.length < PAGE) break;
     }
   }
 
-  return totals;
+  for (const a of applications) {
+    const key = `${a.subscription_id}|${a.coupon_id}`;
+    const invoice = firstInvoice.get(key);
+    const list = redemptions.get(a.coupon_id) ?? [];
+    list.push({
+      id: a.id,
+      couponId: a.coupon_id,
+      subscriptionId: a.subscription_id,
+      tenantId: a.subscription?.tenant_id ?? null,
+      tenantName: a.subscription?.tenant?.name ?? null,
+      appliedAt: a.applied_at,
+      isActive: a.is_active,
+      removedAt: a.removed_at,
+      periodsRemaining: a.periods_remaining,
+      invoice: invoice ? { id: invoice.id, number: invoice.number } : null,
+      givenCents: givenBySubscription.get(key) ?? 0,
+    });
+    redemptions.set(a.coupon_id, list);
+  }
+  for (const list of redemptions.values()) list.sort((x, y) => y.appliedAt.localeCompare(x.appliedAt));
+
+  return { given, redemptions };
+}
+
+/** An offer built on a coupon, for the coupons list's "Used by offers" column and the sheet's Offers tab. */
+export type CouponOfferRef = { id: string; name: string; couponId: string; startsAt: string | null; endsAt: string | null; isActive: boolean };
+
+/** Every offer, by the coupon it is built on. Null when the offers could not be read. */
+export async function fetchOffersByCoupon(): Promise<Map<string, CouponOfferRef[]> | null> {
+  const { data, error } = await getSupabaseServiceClient()
+    .from("offers")
+    .select("id, name, coupon_id, starts_at, ends_at, is_active")
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.error(`[coupons] offers could not be read: ${error.message}`);
+    return null;
+  }
+  const byCoupon = new Map<string, CouponOfferRef[]>();
+  for (const row of (data ?? []) as { id: string; name: string; coupon_id: string; starts_at: string | null; ends_at: string | null; is_active: boolean }[]) {
+    const list = byCoupon.get(row.coupon_id) ?? [];
+    list.push({ id: row.id, name: row.name, couponId: row.coupon_id, startsAt: row.starts_at, endsAt: row.ends_at, isActive: row.is_active });
+    byCoupon.set(row.coupon_id, list);
+  }
+  return byCoupon;
 }
 
 export type AppliedCoupon = {

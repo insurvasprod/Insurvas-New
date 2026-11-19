@@ -53,6 +53,7 @@ export function Field({
   info?: ReactNode;
   /** The (i)'s accessible name when the label is not plain text. */
   infoLabel?: string;
+  /** Opens by height and fades in (`m-error-in`, every field since Wave B 2026-11-18) instead of cutting in. */
   error?: ReactNode;
   children: ReactNode;
   className?: string;
@@ -75,7 +76,7 @@ export function Field({
       )}
       {children}
       {error ? (
-        <span role="alert" className="mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">{error}</span>
+        <span role="alert" data-field-error="" className="m-error-in mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">{error}</span>
       ) : (
         hint && <span className="mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{hint}</span>
       )}

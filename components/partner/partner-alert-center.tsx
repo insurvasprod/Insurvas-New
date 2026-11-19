@@ -9,6 +9,7 @@ import { SectionLoading } from "@/components/ui/page-states";
 import { PARTNER_ALERT_EVENTS, type PartnerAlertEvent, type PartnerAlertSettings } from "@/lib/partnerAlerts/presentation";
 import type { PartnerWorkspaceAlert } from "@/lib/partnerAlerts/workspaceAlerts";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * The partner's feed, for the top bar.
  *
@@ -50,17 +51,17 @@ function PartnerAlertPreferences({ settings, save }: { settings: PartnerAlertSet
       {PARTNER_ALERT_EVENTS.map((event) => (
         <label key={event} className="portal-top-settings-row">
           <span>{labels[event]}</span>
-          <input type="checkbox" checked={settings.enabled_events[event]} onChange={(input) => void save({ ...settings, enabled_events: { ...settings.enabled_events, [event]: input.target.checked } })} />
+          <CheckBox checked={settings.enabled_events[event]} onChange={(input) => void save({ ...settings, enabled_events: { ...settings.enabled_events, [event]: input.target.checked } })} />
         </label>
       ))}
       <div className="portal-top-settings-group">
         <label className="portal-top-settings-row">
           <span>Do not disturb</span>
-          <input type="checkbox" checked={settings.do_not_disturb} onChange={(input) => { const next = { ...settings, do_not_disturb: input.target.checked }; savePortalSoundSettings({ ...local, doNotDisturb: next.do_not_disturb }); void save(next); }} />
+          <CheckBox checked={settings.do_not_disturb} onChange={(input) => { const next = { ...settings, do_not_disturb: input.target.checked }; savePortalSoundSettings({ ...local, doNotDisturb: next.do_not_disturb }); void save(next); }} />
         </label>
         <label className="portal-top-settings-row">
           <span>Enable sounds</span>
-          <input type="checkbox" checked={!settings.sound_muted} onChange={(input) => setSound(input.target.checked)} />
+          <CheckBox checked={!settings.sound_muted} onChange={(input) => setSound(input.target.checked)} />
         </label>
         <label className="portal-top-settings-range">
           <span>Volume</span>

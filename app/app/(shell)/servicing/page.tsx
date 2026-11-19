@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -10,9 +11,10 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ServicingBoard } from "@/components/app/servicing-board";
 import { EmptyState } from "@/components/ui/page-states";
+import { StreamSection } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs } from "@/components/ui/view-tabs";
-import { RetentionPage } from "@/components/app/retention/retention-page";
+import { Await, RetentionPage } from "@/components/app/retention/retention-page";
 import { BUCKETS, asServicingView, bucketOf, localDay, servicingViewHref, type ServicingView } from "@/components/app/retention/servicing-shared";
 
 /**
@@ -38,38 +40,34 @@ export default async function ServicingPage({ searchParams }: { searchParams: Pr
   }
   const { view, status } = await searchParams;
   if (view === "campaign") redirect("/app/retention?step=paperwork&reason=mailed_bill");
-  const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope: await scopeFor(guard.context) };
   const readOnly = guard.entitlement.access === "read_only";
-  const list = await loadServicing(viewer);
+  // Frame first (UI-CONSISTENCY §7a): the title, the tabs and New request draw at once; the read (it checks the open
+  // requests against the latest files, as before) starts here, and the tab counts and the board wait on it.
+  const read = scopeFor(guard.context).then((scope) => loadServicing({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope }));
   const info = "Every change asked of a carrier, open until the next carrier file shows it. A row opens its request, where you mark it sent, check it with the carrier or cancel it.";
 
-  if (!list.available) {
-    return (
-      <RetentionPage step="servicing" info={info}>
-        <TableCard><EmptyState title="Not switched on yet" hint={SERVICING_PENDING_MESSAGE} /></TableCard>
-      </RetentionPage>
-    );
-  }
-
   // The tabs are the board's `?status=` address; the board reads it too. A count is red where a person is needed.
-  const today = localDay();
   const current = asServicingView(status);
-  const counts = new Map<ServicingView, number>();
-  for (const r of list.rows) {
-    const b = bucketOf(r, today);
-    counts.set(b, (counts.get(b) ?? 0) + 1);
-  }
-  const open = (counts.get("check") ?? 0) + (counts.get("send") ?? 0) + (counts.get("waiting") ?? 0);
-  const tabs = (
-    <ViewTabs
-      label="Waiting on the carrier"
-      value={current}
-      tabs={[
-        { key: "open" as ServicingView, label: "Open", count: open, href: servicingViewHref("open") },
-        ...BUCKETS.map((b) => ({ key: b.key as ServicingView, label: b.label, count: counts.get(b.key) ?? 0, tone: b.key === "check" || b.key === "send" ? ("danger" as const) : undefined, href: servicingViewHref(b.key) })),
-      ]}
-    />
-  );
+  const tabsOf = (rows: ServicingRows | null) => {
+    const today = localDay();
+    const counts = new Map<ServicingView, number>();
+    for (const r of rows ?? []) {
+      const b = bucketOf(r, today);
+      counts.set(b, (counts.get(b) ?? 0) + 1);
+    }
+    const count = (n: number) => (rows ? { count: n } : {});
+    const open = (counts.get("check") ?? 0) + (counts.get("send") ?? 0) + (counts.get("waiting") ?? 0);
+    return (
+      <ViewTabs
+        label="Waiting on the carrier"
+        value={current}
+        tabs={[
+          { key: "open" as ServicingView, label: "Open", ...count(open), href: servicingViewHref("open") },
+          ...BUCKETS.map((b) => ({ key: b.key as ServicingView, label: b.label, ...count(counts.get(b.key) ?? 0), tone: b.key === "check" || b.key === "send" ? ("danger" as const) : undefined, href: servicingViewHref(b.key) })),
+        ]}
+      />
+    );
+  };
   // Read-only (2·4): New request stays on the line, paused, with the reason on hover.
   const actions = readOnly ? (
     <span title="Paused while the account is read-only." className="inline-flex"><Button type="button" disabled>New request</Button></span>
@@ -77,9 +75,19 @@ export default async function ServicingPage({ searchParams }: { searchParams: Pr
     <Button asChild><Link href="/app/servicing/new">New request</Link></Button>
   );
 
+  const tabs = <Suspense fallback={tabsOf(null)}><Await read={read}>{(list) => (list.available ? tabsOf(list.rows) : null)}</Await></Suspense>;
+
   return (
     <RetentionPage step="servicing" info={info} tabs={tabs} actions={actions}>
-      <ServicingBoard rows={list.rows} readOnly={readOnly} />
+      <StreamSection shape="table">
+        <Await read={read}>
+          {(list) => (list.available
+            ? <ServicingBoard rows={list.rows} readOnly={readOnly} />
+            : <TableCard><EmptyState title="Not switched on yet" hint={SERVICING_PENDING_MESSAGE} /></TableCard>)}
+        </Await>
+      </StreamSection>
     </RetentionPage>
   );
 }
+
+type ServicingRows = Extract<Awaited<ReturnType<typeof loadServicing>>, { available: true }>["rows"];

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { PageHeader } from "@/components/ui/page-header";
 import { InfoTip } from "@/components/ui/info-tip";
+import { DocsGuideLink } from "@/components/app/docs/docs-guide-link";
 import { agencyStepLabel, type AgencyStep } from "@/lib/agency/steps";
 
 /**
@@ -28,7 +29,7 @@ export function AgencyPage({ step, title, info, chip, facts, tabs, actions, chil
     <div data-agency-page className="flex min-h-0 w-full min-w-0 flex-grow flex-col gap-4">
       <PageHeader
         title={shown}
-        titleInfo={info || chip ? <>{info ? <InfoTip label={`About ${shown}`} side="right">{info}</InfoTip> : null}{chip}</> : undefined}
+        titleInfo={info || chip ? <>{info ? <InfoTip label={`About ${shown}`} side="right">{info}<DocsGuideLink /></InfoTip> : null}{chip}</> : undefined}
         // The facts wrap in the title's column, at least 360px wide, so a long line cannot squeeze the tabs at 1280.
         meta={facts ? <p className="mt-1 text-sm text-muted-foreground lg:min-w-[360px] lg:[contain:inline-size]">{facts}</p> : undefined}
         tabs={tabs}

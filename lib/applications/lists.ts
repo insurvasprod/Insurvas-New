@@ -60,8 +60,12 @@ export async function optional<T>(query: PromiseLike<{ data: unknown; error: { c
 export async function inChunks<T>(ids: string[], read: (chunk: string[]) => PromiseLike<{ data: unknown; error: { code?: string; message?: string } | null }>): Promise<T[]> {
   const unique = [...new Set(ids)];
   if (!unique.length) return [];
+  const slices: string[][] = [];
+  for (let i = 0; i < unique.length; i += CHUNK) slices.push(unique.slice(i, i + CHUNK));
+  // Three chunks at a time (speed pass 2026-11-12: one after another, the dashboard's pending card waited for
+  // three submissions reads in a row), the same width as `allRows`, so a long list never fans out further.
   const parts: T[][] = [];
-  for (let i = 0; i < unique.length; i += CHUNK) parts.push(await optional<T>(read(unique.slice(i, i + CHUNK))));
+  for (let i = 0; i < slices.length; i += 3) parts.push(...(await Promise.all(slices.slice(i, i + 3).map((slice) => optional<T>(read(slice))))));
   return parts.flat();
 }
 

@@ -8,6 +8,8 @@ import { notify } from "@/lib/notify";
 import { TableCard } from "@/components/ui/table-card";
 import { ErrorState, SectionLoading } from "@/components/ui/page-states";
 import { Button } from "@/components/ui/button";
+import { DoneStamp } from "@/components/ui/done-stamp";
+import { useDoneStamps } from "@/components/ui/use-done-stamps";
 import { cn } from "@/lib/utils";
 import { useAgencyData } from "./use-agency-data";
 
@@ -23,6 +25,8 @@ type Checklist = { items: Item[]; canSubmit: boolean; reason: string | null; sta
 export function ProducerOnboardingTab({ producerId, isOwner, isSelf }: { producerId: string; isOwner: boolean; isSelf: boolean }) {
   const { data, error, loading, reload } = useAgencyData<Checklist>(`/api/app/agency/producers/${producerId}/onboarding`);
   const [busy, setBusy] = useState<string | null>(null);
+  // Approve (contracting) stamps "Approved" where the button was, then the checklist reloads (Wave D, 2026-11-18).
+  const stamps = useDoneStamps(data);
 
   async function complete(item: "contracting" | "w9", file?: File | null) {
     const form = new FormData();
@@ -34,7 +38,8 @@ export function ProducerOnboardingTab({ producerId, isOwner, isSelf }: { produce
       const body = await res.json().catch(() => null);
       if (!res.ok) { notify.fail(body?.error ?? "That did not save."); return; }
       notify.done(body?.canSubmit ? "Checklist complete. They can submit applications now." : "Saved. The checklist is re-checked.");
-      reload();
+      if (item === "contracting") await stamps.stamp(item, "Approved", reload);
+      else reload();
     } finally {
       setBusy(null);
     }
@@ -63,7 +68,8 @@ export function ProducerOnboardingTab({ producerId, isOwner, isSelf }: { produce
               <span className={cn("inline-flex size-[18px] items-center justify-center rounded", i.done ? "bg-[var(--primary)] text-[var(--on-primary)]" : "border-[1.5px] border-[var(--border-strong)]")} aria-label={i.done ? "Done" : "Not done"}>{i.done && <Check className="size-3 stroke-[3]" />}</span>
               <span className="min-w-0"><span className="font-medium">{i.detail}</span>{i.feeds && <span className="ml-2 text-xs text-[var(--muted)]">{i.feeds}</span>}{i.expiresOn && <span className="ml-2 text-xs text-[var(--muted)]">expires {i.expiresOn}</span>}</span>
               <span className="flex items-center gap-2">
-                {i.item === "contracting" && !i.done && isOwner && <Button size="sm" onClick={() => complete("contracting")} disabled={busy !== null}>Approve</Button>}
+                {stamps.labelOf(i.item) ? <DoneStamp label={stamps.labelOf(i.item)!} /> : null}
+                {i.item === "contracting" && !i.done && isOwner && !stamps.labelOf(i.item) && <Button size="sm" onClick={() => complete("contracting")} disabled={busy !== null}>Approve</Button>}
                 {i.item === "w9" && !i.done && isOwner && <Button size="sm" variant="outline" onClick={() => upload("w9")} disabled={busy !== null}>{busy === "w9" ? "Uploading…" : "Upload W-9"}</Button>}
                 {["licence", "appointments", "numbers", "levels"].includes(i.item) && !i.done && (i.item === "licence" ? <span className="text-xs text-[var(--muted)]">Settings › Team › licensed states</span> : <Link className="text-xs font-medium text-[var(--accent-ink)] hover:underline" href={`/app/producers/${producerId}?tab=carriers`}>Set on the Carriers tab</Link>)}
               </span>

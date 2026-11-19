@@ -1,67 +1,127 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { BookOpen } from "lucide-react";
 
 import { MenuCard, type MenuCardGroup } from "@/components/ui/menu-card";
-import { Meter } from "@/components/ui/stat";
+import { SETTINGS_DOC_GROUPS, SETTINGS_INDEX as SETTINGS_DOCS } from "@/lib/docs/settingsIndex";
 
-import { markRead, useReadPages } from "./docs-reading";
+import { SegmentBar } from "./docs-map";
 
-export type DocsMenuPage = { slug: string; title: string; chapter: string; stepKey?: string; optional?: boolean };
-export type DocsMenuChapter = { key: string; title: string };
+export type DocsMenuModule = { key: string; title: string; done: number; total: number; tasks: { slug: string; title: string; done: boolean | null }[] };
+export type DocsMenuReference = { slug: string; title: string; chapter: string };
 
 /**
- * Docs' menu (R4 rework, owner 2026-11-13: "smushed together and hard to differentiate pages"). Each chapter is a
- * numbered row with its progress; the chapter you are in is open, the rest open on a click. Pages sit under their
- * chapter on a guide line, each with a ring: green once read (or, for a setup step, once your agency has done it).
- * The setup chapter splits into Required and Optional. Reading progress leads the menu.
+ * Docs' menu, R6 (owner 2026-11-16: Docs is for using Insurvas). One group per module: its guide ("How it works")
+ * then its tasks, each ticked once your agency has done it. The header's one bar is split by module and counts only
+ * what Insurvas sees done. The insurance background pages sit at the bottom under Reference.
  */
-export function DocsMenu({ pages, chapters, activeSlug, done }: {
-  pages: DocsMenuPage[];
-  chapters: DocsMenuChapter[];
+const WALKED_KEY = "docs-settings-walked";
+
+/** The Settings pages this browser has walked through in Docs. */
+export function readSettingsWalked(): Set<string> {
+  try { return new Set(JSON.parse(window.localStorage.getItem(WALKED_KEY) ?? "[]") as string[]); } catch { return new Set(); }
+}
+
+/** Marks a Settings page as walked (its last step reached in Docs). */
+export function markSettingsWalked(slug: string) {
+  try {
+    const next = readSettingsWalked();
+    next.add(slug);
+    window.localStorage.setItem(WALKED_KEY, JSON.stringify([...next]));
+    window.dispatchEvent(new Event(WALKED_KEY));
+  } catch { /* storage blocked: the circle just stays open */ }
+}
+
+export function DocsMenu({ modules, reference, chapters, activeSlug, activeModule, activeSettings, settingsDone = [], settingsTracked = [] }: {
+  modules: DocsMenuModule[];
+  reference: DocsMenuReference[];
+  chapters: { key: string; title: string }[];
   activeSlug?: string;
-  done: string[];
-  readyDone?: number;
-  readyTotal?: number;
+  activeModule?: string;
+  /** A Settings page's slug, or "" for the Settings index. */
+  activeSettings?: string;
+  /** Settings pages whose Get set up steps are done, and the pages that have such a step (lib/docs/state.ts). */
+  settingsDone?: string[];
+  settingsTracked?: string[];
 }) {
-  const read = useReadPages();
-  useEffect(() => { if (activeSlug) markRead(activeSlug); }, [activeSlug]);
-  const doneSet = new Set(done);
-  const isDone = (page: DocsMenuPage) => (page.chapter === "setup" && page.stepKey ? doneSet.has(page.stepKey) : read.has(page.slug));
-
-  const groups: MenuCardGroup[] = chapters.map((chapter, index) => {
-    const inChapter = pages.filter((page) => page.chapter === chapter.key);
-    return {
-      key: chapter.key,
-      label: chapter.title,
-      number: index + 1,
-      progress: { done: inChapter.filter(isDone).length, total: inChapter.length },
-      ...(chapter.key === "setup" ? { sections: [{ key: "required", label: "Required to sell" }, { key: "optional", label: "Optional settings" }] } : {}),
-      items: inChapter.map((page) => ({
-        key: page.slug,
-        label: page.title,
-        href: `/app/docs/${page.slug}`,
-        active: page.slug === activeSlug,
-        state: isDone(page) ? "done" as const : page.slug === activeSlug ? "current" as const : "todo" as const,
-        ...(chapter.key === "setup" ? { section: page.optional ? "optional" : "required" } : {}),
+  // Settings pages walked in Docs in this browser (SettingsDoc writes them), for pages Insurvas can't check itself.
+  const [read, setRead] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- this browser's own list, read once after mount
+    setRead(readSettingsWalked());
+    // Ticks the page the moment its walk reaches the last step, without a reload.
+    const refresh = () => setRead(readSettingsWalked());
+    window.addEventListener(WALKED_KEY, refresh);
+    return () => window.removeEventListener(WALKED_KEY, refresh);
+  }, []);
+  const counted = modules.filter((item) => item.total > 0);
+  const done = counted.reduce((sum, item) => sum + item.done, 0);
+  const total = counted.reduce((sum, item) => sum + item.total, 0);
+  // Every group numbered, its pages indented on a guide line, as Get set up's menu draws them (owner 2026-11-17:
+  // "fix the side bar"): one look for the whole menu.
+  const groups: MenuCardGroup[] = modules.map((module, index) => ({
+    key: module.key,
+    label: module.title,
+    number: index + 1,
+    ...(module.total > 0 ? { progress: { done: module.done, total: module.total } } : {}),
+    items: [
+      { key: `${module.key}:guide`, label: "How it works", href: `/app/docs/modules/${module.key}`, active: activeModule === module.key && !activeSlug, icon: <BookOpen className="size-3.5" /> },
+      ...module.tasks.map((task) => ({
+        key: task.slug,
+        label: task.title,
+        href: `/app/docs/${task.slug}`,
+        active: task.slug === activeSlug,
+        state: task.done ? "done" as const : task.slug === activeSlug ? "current" as const : "todo" as const,
       })),
-    };
-  }).filter((group) => group.items.length > 0);
-
-  const readable = pages.filter((page) => page.chapter !== "setup");
-  const readCount = readable.filter((page) => read.has(page.slug)).length;
-
+    ],
+  }));
+  // Settings, page by page (owner 2026-11-17: "at least make it like a drop down or a parent… and add a circle"):
+  // each Settings group is its own folding group, like a module, and each page has its done circle. A page holding a
+  // Get set up step is done when that step is; any other once you've walked it here in Docs (this browser).
+  const isDone = (slug: string) => settingsDone.includes(slug) || (!settingsTracked.includes(slug) && read.has(slug));
+  for (const group of SETTINGS_DOC_GROUPS) {
+    const pages = SETTINGS_DOCS.filter((page) => page.group === group);
+    if (pages.length === 0) continue;
+    groups.push({
+      key: `settings:${group}`,
+      label: `Settings: ${group}`,
+      number: groups.length + 1,
+      progress: { done: pages.filter((page) => isDone(page.slug)).length, total: pages.length },
+      items: pages.map((page) => ({
+        key: `settings:${page.slug}`,
+        label: page.title,
+        href: `/app/docs/settings/${page.slug}`,
+        active: page.slug === activeSettings,
+        state: isDone(page.slug) ? "done" as const : page.slug === activeSettings ? "current" as const : "todo" as const,
+      })),
+    });
+  }
+  const chaptersUsed = chapters.filter((chapter) => reference.some((page) => page.chapter === chapter.key));
+  if (reference.length > 0) {
+    groups.push({
+      key: "reference",
+      label: "Reference",
+      number: groups.length + 1,
+      sections: chaptersUsed.map((chapter) => ({ key: chapter.key, label: chapter.title })),
+      items: reference.map((page) => ({ key: page.slug, label: page.title, href: `/app/docs/${page.slug}`, active: page.slug === activeSlug, section: page.chapter })),
+    });
+  }
   return (
     <MenuCard
       label="Docs"
       header={
         <>
-          <p className="m-0 flex items-baseline gap-2 text-sm font-semibold text-[var(--ink)]">Contents <span className="ml-auto text-xs font-normal tabular-nums text-[var(--muted)]">{readCount} of {readable.length} read</span></p>
-          <Meter value={readCount} max={Math.max(readable.length, 1)} tone="primary" label={`${readCount} of ${readable.length} pages read`} className="mt-2" />
+          <p className="m-0 flex items-baseline gap-2 text-sm font-semibold text-[var(--ink)]">Your Insurvas <span className="ml-auto text-xs font-normal tabular-nums text-[var(--muted)]">{done} of {total} done</span></p>
+          <SegmentBar modules={counted.map((item) => ({ key: item.key, title: item.title, done: item.done, total: item.total }))} className="mt-2" />
+          <p className="m-0 mt-1.5 text-xs text-[var(--muted)]">Tasks done in your agency, by module</p>
         </>
       }
-      filterPlaceholder="Find a page"
-      top={[{ key: "start", label: "Start here", href: "/app/docs", active: !activeSlug }]}
+      filterPlaceholder="Find a task"
+      top={[
+        { key: "home", label: "Docs home", href: "/app/docs", active: !activeSlug && !activeModule && activeSettings === undefined },
+        { key: "settings:all", label: "Every settings page", href: "/app/docs/settings", active: activeSettings === "" },
+      ]}
       groups={groups}
       className="lg:h-full"
     />

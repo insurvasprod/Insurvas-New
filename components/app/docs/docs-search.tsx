@@ -65,7 +65,7 @@ export function DocsSearch({ entries }: { entries: DocsIndexEntry[] }) {
             if (event.key === "Enter" && first) router.push(first.href);
             if (event.key === "Escape") { setQuery(""); input.current?.blur(); }
           }}
-          placeholder="Search Docs: licences, carriers, pipelines…"
+          placeholder="How do I… pay partners, import my book, settle a pay issue"
           aria-label="Search Docs"
           className="min-w-0 flex-1 bg-transparent text-[var(--ink)] outline-none placeholder:text-[var(--muted)]"
         />

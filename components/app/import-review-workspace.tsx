@@ -483,7 +483,7 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
 
   // The Next up line (owner 2026-10-30): what pressing Import will do, in one sentence, with Import as
   // its button, the page's one primary. What stops it, or stops these leads being dialled, is said first.
-  const importButton = <Button type="button" title={willImportTitle} disabled={committing || discarding || willImport === 0} onClick={() => void commit()}>
+  const importButton = <Button type="button" data-guide="import-review-commit" title={willImportTitle} disabled={committing || discarding || willImport === 0} onClick={() => void commit()}>
     {committing ? "Importing…" : `Import ${willImport.toLocaleString()} lead${willImport === 1 ? "" : "s"}`}
   </Button>;
   const discardButton = <Button type="button" variant="outline" className="text-[var(--error-ink)] hover:bg-[var(--error-surface)] hover:text-[var(--error-ink)]" disabled={committing || discarding} onClick={() => void discard()}>

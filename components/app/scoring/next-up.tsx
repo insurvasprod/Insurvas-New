@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { BarList, ChartHeading, ChartLegend } from "@/components/ui/chart";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
@@ -136,7 +136,7 @@ export function QueueNextUp({ show, onCount }: { show: ShowMode; onCount?: (serv
           <ChartHeading
             title="Why these leads are next"
             period={preview ? `Next up for ${agentName} · the first ${n(rows.length)} of ${n(preview.servableCount)} · out of ${pointsFigure(total)} points${stale}` : undefined}
-            action={<span className="flex flex-wrap items-center gap-2">{agentSelect}<RefreshButton onClick={refresh} refreshing={loading} /><Link href={tableHref} className="whitespace-nowrap text-sm text-foreground underline-offset-2 hover:underline">Open as a table ›</Link></span>}
+            action={<span className="flex flex-wrap items-center gap-2">{agentSelect}<RefreshButton onClick={refresh} refreshing={loading} /><Link href={tableHref} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "no-underline")}>Open as a Table</Link></span>}
           />
           {state ?? (rows.length === 0 ? (
             <EmptyState title="Nothing to serve" hint={`Nothing is servable to ${agentName} right now.`} />

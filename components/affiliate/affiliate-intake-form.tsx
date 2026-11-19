@@ -10,6 +10,7 @@ import { US_STATES } from "@/lib/signup/constants";
 import { normalizeZip, stateForZip } from "@/lib/geo/zipState";
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 
+import { CheckBox } from "@/components/ui/check-box";
 type Product = { code: string; name: string; category: string };
 type LinkData = { slug: string; campaign: string | null; partner_name: string };
 
@@ -244,9 +245,7 @@ export function AffiliateIntakeForm({ slug }: { slug: string }) {
 
             <div className="rounded-lg border-[1.5px] border-[var(--border-strong)] bg-card p-[18px]">
               <label className="flex gap-3 text-sm leading-relaxed tracking-[-0.02em] text-[var(--body)]">
-                <input
-                  className="mt-0.5 size-5 shrink-0 accent-[var(--primary)]"
-                  type="checkbox"
+                <CheckBox className="mt-0.5"
                   checked={values.consent}
                   onChange={(event) => update("consent", event.target.checked)}
                   required

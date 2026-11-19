@@ -407,6 +407,43 @@ Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in tha
   will appear (inside the TableCard, or in place of the panel). Never "Loading …" text, never a
   spinner-only box, never an empty card with a sentence in it.
 
+### 7a. Frame first, data after (owner 2026-11-12)
+A page shows what it knows at once and lets the data follow. The frame is never held back for the slowest read.
+
+1. **The frame never waits for data.** The trail, the title and its (i), the sub-page tabs, the action buttons, the
+   rail and the card outlines all draw from what the page knows without a read: the route, the session and the gate.
+   - **A server page** does its gate checks (`guardPage`, `scopeFor`, `searchParams`, and so on), which may return a
+     gate notice. Then it starts every read as a promise, returns its frame, and puts each block in its own
+     `StreamSection` (`components/ui/stream-section.tsx`), whose child awaits the block's read.
+     `app/app/(shell)/needs-you/page.tsx` is the model.
+   - **A client workspace** always renders its `PageHeader`. Its loading state goes where the content will be:
+     `SectionLoading`, `StreamFallback`, or `PageLoading header={false}`. Never `if (!data) return <PageLoading/>`
+     ahead of the title.
+2. **Hold the space.** A fallback has the shape and height of what replaces it (`StreamSection`'s `shape`: table ·
+   strip+table · strip · cards · form · rows). Nothing moves when the data lands.
+3. **No flash.** Every skeleton bar (`.m-skel`) shows only after 180ms (`app/globals.css`; `[data-skel-wait]` does the
+   same for a placeholder not built from bars). Data that lands sooner draws as if it came with the frame. The card
+   outlines draw at once; only the grey bars wait.
+4. **Cached first.** A screen with a kept answer shows it at once and asks again behind it, with no skeleton:
+   `seed`/`peek` + `readResource` (`lib/client/resource-cache.ts`) in the browser, and the router's `staleTimes` with
+   `BackgroundRefresh` for server pages.
+5. **Settle once.** Data replacing a skeleton fades in place (the cascade's `[data-settle]` / `m-content-in`, §18)
+   and never slides a second time.
+6. **Most important first.** Each block is its own boundary, top to bottom, and its read starts in the page before the
+   frame returns. The top figures are never queued behind a list, and no read is added: a page reads what it read
+   before, only started earlier.
+7. **Draw as one block, never piece by piece:**
+   - **A form or an editor** (Settings, a record's edit form, a wizard): the frame first, then the form whole
+     (`shape="form"`), never field by field.
+   - **Figures that belong together** (a total and its parts, a stat strip): one boundary for the group
+     (`shape="strip"`).
+   - **A record page whose name comes from its data** (a lead, a policy, a file): the trail, tabs and buttons draw at
+     once. The title is `<Suspense fallback={<TitleShape />}>` (`components/ui/stream-section.tsx`), or the name the link
+     already knew.
+
+Enforced in `lib/design/uiConsistency.test.mjs`. `title-hidden-while-loading` and `page-awaits-before-frame` ratchet
+down to zero, and a test keeps the 180ms delay on `.m-skel`.
+
 ## 8. Layout
 - A page is: header → (optional) stat strip → the main TableCard(s) → secondary tables. `space-y-6`.
 - No card around a card. No decorative side panels. Two-column layouts only when the second column is

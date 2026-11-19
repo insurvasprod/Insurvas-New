@@ -218,7 +218,7 @@ export async function loadAccountingView(props: DashViewProps): Promise<Accounti
   // The agency's books are agency-wide: a reader narrowed to a producer scope never gets them (AG-0.5).
   if (props.scope !== null) return null;
 
-  const open = (key: string) => firstOpenable([key], props.available, props.context.role, props.solo);
+  const open = (key: string) => firstOpenable([key], props.available, props.context.role, props.solo, props.gate);
   const hrefs = {
     pnl: open("accounting.pnl"),
     bank: open("accounting.bank"),

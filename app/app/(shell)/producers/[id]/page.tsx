@@ -1,3 +1,4 @@
+import { Suspense, type ReactNode } from "react";
 import { notFound } from "next/navigation";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
@@ -7,6 +8,8 @@ import { ProducerActions, ProducerDetail, type ProducerTab } from "@/components/
 import { AgencyPage } from "@/components/app/agency/agency-page";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ViewTabs } from "@/components/ui/view-tabs";
+import { StreamSection, TitleShape } from "@/components/ui/stream-section";
+import { Part, startParts } from "@/components/app/commissions/frame-parts";
 import { hasFeature } from "@/lib/entitlements/types";
 import { PRODUCER_STATUS_LABELS } from "@/lib/agency/constants";
 import { readProducerHeader } from "@/lib/agency/producerHeader";
@@ -35,86 +38,128 @@ export default async function ProducerPage({ params, searchParams }: { params: P
   if (!actAsPage(guard, ["owner", "bookkeeper", "producer"])) return <RoleGateNotice featureLabel="Producers" detail="The owner, admins, managers, producers and the bookkeeper open producer records." />;
   const [{ id }, { tab: asked, from, period: askedPeriod, chip }] = await Promise.all([params, searchParams]);
   if (!UUID.test(id)) notFound();
-  const producer = await readProducerHeader(guard.context, id);
-  if (!producer) notFound();
-
+  type Header = NonNullable<Awaited<ReturnType<typeof readProducerHeader>>>;
   const isManager = guard.context.memberRole === "manager";
-  const showMoney = hasFeature(guard.entitlement, "producer_payouts") && !(isManager && !producer.isSelf);
-  const blocked = !producer.canSubmit && producer.status !== "offboarded" && producer.status !== "invited";
+  const keeper = guard.role === "owner" || guard.role === "bookkeeper";
+  const readOnly = guard.entitlement.access === "read_only";
   const base = `/app/producers/${id}`;
-  // Round 7 (mockups-r7/commissions.html 4·1): opened from Commissions › Producer pay, the record stays in the
-  // Commissions frame for that month, every tab keeps it, and ‹ › walk Producer pay's list.
-  const fromPay = from === "reconciliation" && showMoney;
   const period = parsePeriod(askedPeriod);
-  const carry = fromPay ? `from=reconciliation&period=${period}` : "";
-  const withCarry = (query: string) => (query || carry ? `${base}?${[query, carry].filter(Boolean).join("&")}` : base);
-  const tabs: Array<{ key: ProducerTab; label: string; href: string; tone?: "danger" }> = [
-    { key: "overview", label: "Overview", href: withCarry("") },
-    { key: "carriers", label: "Carriers", href: withCarry("tab=carriers") },
-    { key: "onboarding", label: "Onboarding", href: withCarry("tab=onboarding"), ...(blocked ? { tone: "danger" as const } : {}) },
-    ...(showMoney ? [{ key: "money" as const, label: "Money", href: withCarry("tab=money") }] : []),
-  ];
-  const tab: ProducerTab = tabs.find((t) => t.key === asked)?.key ?? "overview";
-  const role = producer.role ? MEMBER_ROLE_LABELS[producer.role as MemberRole] ?? producer.role : "Producer";
-  const facts = [
-    role,
-    `reports to ${producer.managerName === "Owner" ? "the owner" : producer.managerName}`,
-    producer.status === "offboarded" && producer.offboardedOn ? `offboarded ${producer.offboardedOn}` : producer.hiredOn ? `hired ${producer.hiredOn}` : null,
-  ].filter(Boolean).join(" · ");
+  const moneyView: MoneyView = chip === "statements" || chip === "chargebacks" ? chip : "ledger";
 
+  // Everything the record draws from its header: the tabs, the facts, the frame it sits in.
+  const shape = (producer: Header) => {
+    const showMoney = hasFeature(guard.entitlement, "producer_payouts") && !(isManager && !producer.isSelf);
+    const blocked = !producer.canSubmit && producer.status !== "offboarded" && producer.status !== "invited";
+    // Round 7 (mockups-r7/commissions.html 4·1): opened from Commissions › Producer pay, the record stays in the
+    // Commissions frame for that month, every tab keeps it, and ‹ › walk Producer pay's list.
+    const fromPay = from === "reconciliation" && showMoney;
+    const tabs = tabsFor(fromPay, showMoney, blocked);
+    const tab: ProducerTab = tabs.find((t) => t.key === asked)?.key ?? "overview";
+    const role = producer.role ? MEMBER_ROLE_LABELS[producer.role as MemberRole] ?? producer.role : "Producer";
+    const facts = [
+      role,
+      `reports to ${producer.managerName === "Owner" ? "the owner" : producer.managerName}`,
+      producer.status === "offboarded" && producer.offboardedOn ? `offboarded ${producer.offboardedOn}` : producer.hiredOn ? `hired ${producer.hiredOn}` : null,
+    ].filter(Boolean).join(" · ");
+    const detail = (
+      <ProducerDetail
+        producerId={id}
+        tab={tab}
+        viewer={{ isOwner: guard.role === "owner", isManager, isBookkeeper: guard.role === "bookkeeper", canSeeMoney: showMoney }}
+        money={{ name: producer.displayName, initialView: moneyView, initialSelection: fromPay || askedPeriod ? period : "all", months: periodOptions() }}
+      />
+    );
+    return { showMoney, fromPay, tab, facts, detail, tabBar: <ViewTabs label="Producer" value={tab} tabs={tabs} /> };
+  };
+  const tabsFor = (fromPay: boolean, showMoney: boolean, blocked: boolean) => {
+    const carry = fromPay ? `from=reconciliation&period=${period}` : "";
+    const withCarry = (query: string) => (query || carry ? `${base}?${[query, carry].filter(Boolean).join("&")}` : base);
+    const tabs: Array<{ key: ProducerTab; label: string; href: string; tone?: "danger" }> = [
+      { key: "overview", label: "Overview", href: withCarry("") },
+      { key: "carriers", label: "Carriers", href: withCarry("tab=carriers") },
+      { key: "onboarding", label: "Onboarding", href: withCarry("tab=onboarding"), ...(blocked ? { tone: "danger" as const } : {}) },
+      ...(showMoney ? [{ key: "money" as const, label: "Money", href: withCarry("tab=money") }] : []),
+    ];
+    return tabs;
+  };
   // The Money tab: ‹ › name the neighbouring producers (by name, as Producer pay and the roster list them), and the
   // open review is the primary. Only for the people who see everyone's pay; a producer has no neighbours to walk.
-  const keeper = guard.role === "owner" || guard.role === "bookkeeper";
-  const onMoney = tab === "money" && showMoney;
-  const [roster, reviews] = onMoney && keeper
-    ? await Promise.all([readRoster(guard.context).catch(() => null), readOpenReviews(guard.context.tenantId, producer.userId).catch(() => [])])
-    : [null, []];
-  const ordered = (roster?.rows ?? []).filter((p) => p.status !== "invited").sort((a, b) => a.displayName.localeCompare(b.displayName));
-  const at = ordered.findIndex((p) => p.id === id);
-  const neighbour = (p: (typeof ordered)[number] | undefined): Neighbour => (p ? { name: p.displayName, href: fromPay ? producerPayHref(p.id, period) : `/app/producers/${p.id}?tab=money` } : null);
-  const review = reviews.find((r) => fromPay && r.periodStart.startsWith(period)) ?? reviews[0] ?? null;
-  const readOnly = guard.entitlement.access === "read_only";
-  const actions = (
-    <>
-      {onMoney && at >= 0 && ordered.length > 1 && <NeighbourLinks previous={neighbour(ordered[at - 1])} next={neighbour(ordered[at + 1])} noun="producer" />}
-      {onMoney && review && <ReviewButton review={review} name={producer.displayName} readOnly={readOnly} />}
-      <ProducerActions producer={producer} canManage={guard.role === "owner" && !readOnly} scorecards={hasFeature(guard.entitlement, "producer_scorecards")} />
-    </>
-  );
-  const moneyView: MoneyView = chip === "statements" || chip === "chargebacks" ? chip : "ledger";
-  const detail = (
-    <ProducerDetail
-      producerId={id}
-      tab={tab}
-      viewer={{ isOwner: guard.role === "owner", isManager, isBookkeeper: guard.role === "bookkeeper", canSeeMoney: showMoney }}
-      money={{ name: producer.displayName, initialView: moneyView, initialSelection: fromPay || askedPeriod ? period : "all", months: periodOptions() }}
-    />
-  );
+  const actionsFor = async (producer: Header, { tab, showMoney, fromPay }: ReturnType<typeof shape>) => {
+    const onMoney = tab === "money" && showMoney;
+    const [roster, reviews] = onMoney && keeper
+      ? await Promise.all([readRoster(guard.context).catch(() => null), readOpenReviews(guard.context.tenantId, producer.userId).catch(() => [])])
+      : [null, []];
+    const ordered = (roster?.rows ?? []).filter((p) => p.status !== "invited").sort((a, b) => a.displayName.localeCompare(b.displayName));
+    const at = ordered.findIndex((p) => p.id === id);
+    const neighbour = (p: (typeof ordered)[number] | undefined): Neighbour => (p ? { name: p.displayName, href: fromPay ? producerPayHref(p.id, period) : `/app/producers/${p.id}?tab=money` } : null);
+    const review = reviews.find((r) => fromPay && r.periodStart.startsWith(period)) ?? reviews[0] ?? null;
+    return (
+      <>
+        {onMoney && at >= 0 && ordered.length > 1 && <NeighbourLinks previous={neighbour(ordered[at - 1])} next={neighbour(ordered[at + 1])} noun="producer" />}
+        {onMoney && review && <ReviewButton review={review} name={producer.displayName} readOnly={readOnly} />}
+        <ProducerActions producer={producer} canManage={guard.role === "owner" && !readOnly} scorecards={hasFeature(guard.entitlement, "producer_scorecards")} />
+      </>
+    );
+  };
+  const header = readProducerHeader(guard.context, id).then((producer) => {
+    if (!producer) notFound();
+    return producer;
+  });
 
-  if (fromPay) {
+  // Frame first (§7a). Opened from Producer pay, the Commissions frame (its trail and tabs) draws at once and the
+  // person's name, their buttons and the record stream in. (A manager's own record decides its frame from the header.)
+  if (from === "reconciliation" && hasFeature(guard.entitlement, "producer_payouts") && !isManager) {
+    const parts = startParts(header.then(async (producer) => {
+      const shaped = shape(producer);
+      return { title: producer.displayName, tabs: shaped.tabBar, actions: await actionsFor(producer, shaped), body: shaped.detail };
+    }));
+    const guessed = tabsFor(true, true, false);
+    return (
+      <CommissionsPage
+        step="reconciliation"
+        title={<Suspense fallback={<TitleShape />}><Part read={parts} part="title" /></Suspense>}
+        breadcrumbs={[{ label: "Commissions" }, { label: "Producer pay", href: `/app/producer-reconciliation?period=${period}` }, { label: "Producer" }]}
+        tabs={<Suspense fallback={<ViewTabs label="Producer" value={guessed.find((t) => t.key === asked)?.key ?? "overview"} tabs={guessed} />}><Part read={parts} part="tabs" /></Suspense>}
+        actions={<Suspense fallback={null}><Part read={parts} part="actions" /></Suspense>}
+      >
+        <StreamSection shape="cards"><Part read={parts} part="body" /></StreamSection>
+      </CommissionsPage>
+    );
+  }
+
+  // The Agency record: its title, status chip and facts are the header (AgencyPage takes text), so the frame waits
+  // for that one read; the roster and the open reviews behind the Money tab's buttons stream in after it.
+  const producer = await header;
+  const shaped = shape(producer);
+  const actions = <Suspense fallback={<ProducerActions producer={producer} canManage={guard.role === "owner" && !readOnly} scorecards={hasFeature(guard.entitlement, "producer_scorecards")} />}><Later read={actionsFor(producer, shaped)} /></Suspense>;
+  if (shaped.fromPay) {
     return (
       <CommissionsPage
         step="reconciliation"
         title={producer.displayName}
         breadcrumbs={[{ label: "Commissions" }, { label: "Producer pay", href: `/app/producer-reconciliation?period=${period}` }, { label: producer.displayName }]}
-        tabs={<ViewTabs label="Producer" value={tab} tabs={tabs} />}
+        tabs={shaped.tabBar}
         actions={actions}
       >
-        {detail}
+        {shaped.detail}
       </CommissionsPage>
     );
   }
-
   return (
     <AgencyPage
       step="producers"
       title={producer.displayName}
       chip={<StatusChip tone={TONE[producer.status]}>{PRODUCER_STATUS_LABELS[producer.status]}</StatusChip>}
-      facts={facts}
-      tabs={<ViewTabs label="Producer" value={tab} tabs={tabs} />}
+      facts={shaped.facts}
+      tabs={shaped.tabBar}
       actions={actions}
     >
-      {detail}
+      {shaped.detail}
     </AgencyPage>
   );
+}
+
+/** The Money tab's buttons, once the roster and the open reviews are read. */
+async function Later({ read }: { read: Promise<ReactNode> }) {
+  return await read;
 }

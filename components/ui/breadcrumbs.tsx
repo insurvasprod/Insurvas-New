@@ -18,6 +18,7 @@ export function Breadcrumbs({ crumbs, className }: { crumbs: Crumb[]; className?
   const trail = buildTrail(crumbs);
   if (trail.length < 2) return null;
   const parent = parentOf(crumbs);
+  const currentLabel = crumbs[crumbs.length - 1]?.label;
   const link = "rounded-sm text-muted-foreground no-underline outline-none transition-colors hover:text-foreground hover:underline hover:underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring";
   return (
     <nav aria-label="Breadcrumb" data-breadcrumbs="" className={cn("text-label", className)}>
@@ -25,9 +26,13 @@ export function Breadcrumbs({ crumbs, className }: { crumbs: Crumb[]; className?
       {parent?.href && (
         <Link href={parent.href} className={cn(link, "inline-flex min-h-6 items-center gap-1 sm:hidden")}>
           <ArrowLeft className="size-3.5" aria-hidden="true" />
-          {titleCaseNode(parent.label)}
+          {parent.node ?? titleCaseNode(parent.label)}
         </Link>
       )}
+      {/* No page to step back to (the parent is a menu group): name the page instead, so a page whose trail is its
+          title (PageHeader hideTitle: Settings, the partner overview) is never left as a lone (i) on a phone
+          (QA pass 2026-11). */}
+      {!parent?.href && currentLabel && <span className="inline-flex min-h-6 items-center text-foreground sm:hidden">{currentLabel}</span>}
       <ol className="m-0 hidden list-none flex-wrap items-center gap-x-1.5 gap-y-1 p-0 sm:flex">
         {trail.map((entry, index) => (
           <li key={entry.kind === "crumb" ? `${index}-${entry.label}` : `more-${index}`} className="inline-flex min-h-6 items-center gap-1.5">
@@ -47,9 +52,9 @@ export function Breadcrumbs({ crumbs, className }: { crumbs: Crumb[]; className?
                 </ul>
               </details>
             ) : entry.current ? (
-              <span aria-current="page" className="text-foreground">{entry.label}</span>
+              <span aria-current="page" className="text-foreground">{entry.node ?? entry.label}</span>
             ) : entry.href ? (
-              <Link href={entry.href} className={link}>{titleCaseNode(entry.label)}</Link>
+              <Link href={entry.href} className={link}>{entry.node ?? titleCaseNode(entry.label)}</Link>
             ) : (
               <span className="text-muted-foreground">{titleCaseNode(entry.label)}</span>
             )}

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -8,9 +9,10 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { WinbackBoard } from "@/components/app/winback-board";
 import { WINBACK_VIEWS, isWinbackView, winbackCounts, winbackViewHref, type WinbackView } from "@/components/app/retention/winback-stages";
-import { RetentionPage } from "@/components/app/retention/retention-page";
+import { Await, RetentionPage } from "@/components/app/retention/retention-page";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/page-states";
+import { StreamSection } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs } from "@/components/ui/view-tabs";
 
@@ -42,43 +44,64 @@ export default async function ReinstatementPage({ searchParams }: { searchParams
   if (!canWinback && !listView) redirect("/app/retention?step=lapsed");
   // Round 7: the retired "Reinstatement record" list answers on Cases › Lapsed.
   if (listView) redirect("/app/retention?step=lapsed");
-  const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope: await scopeFor(guard.context) };
   const readOnly = guard.entitlement.access === "read_only";
-  const winback = await loadWinback(viewer, { release: !readOnly });
+  // Frame first (UI-CONSISTENCY §7a): the title, the tabs and the primary draw at once; the read (it classifies and
+  // releases what is due, as before) starts here, and the tab counts, the primary and the board each wait on it.
+  const read = scopeFor(guard.context).then((scope) => {
+    const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope };
+    return loadWinback(viewer, { release: !readOnly });
+  });
   const info = "Former clients past the carrier's reinstatement window. Each waits out the cooling-off for why they left, then goes on the Win-back lead list, which is scrubbed before anyone dials.";
-
-  if (!winback.available) {
-    return <RetentionPage step="reinstatement" title="Win-back" info={info}><TableCard><EmptyState title="Not switched on yet" hint={WINBACK_PENDING_MESSAGE} /></TableCard></RetentionPage>;
-  }
-
   const view: WinbackView = isWinbackView(show) ? show : "open";
-  const counts = winbackCounts(winback.rows, winback.claims.length, winback.today);
+
   // The scrub notice, as a count: someone is on an unscrubbed list, so nobody may be dialled yet.
-  const needsScrub = Boolean(winback.listScrub && winback.listScrub !== "scrubbed" && counts.released > 0);
-  const tabs = (
-    <ViewTabs
-      label="Where the former clients stand"
-      value={view}
-      tabs={WINBACK_VIEWS.map(({ key, label }) => ({
-        key,
-        label,
-        count: counts[key],
-        href: winbackViewHref(key),
-        ...(key === "claims" ? { tone: "danger" as const } : {}),
-        ...(key === "released" && needsScrub ? {
-          // ViewTabs has a danger tone only: an amber dot before the label is the warning, said aloud after it.
-          marker: <i aria-hidden="true" className="block size-1.5 rounded-full bg-[var(--warning-ink)]" />,
-          srSuffix: "(the list needs a scrub before anyone is dialled)",
-        } : {}),
-      }))}
-    />
+  const scrubOf = (winback: Winback) => {
+    const counts = winbackCounts(winback.rows, winback.claims.length, winback.today);
+    return { counts, needsScrub: Boolean(winback.listScrub && winback.listScrub !== "scrubbed" && counts.released > 0) };
+  };
+  const tabsOf = (winback: Winback | null) => {
+    const { counts, needsScrub } = winback ? scrubOf(winback) : { counts: null, needsScrub: false };
+    return (
+      <ViewTabs
+        label="Where the former clients stand"
+        value={view}
+        tabs={WINBACK_VIEWS.map(({ key, label }) => ({
+          key,
+          label,
+          ...(counts ? { count: counts[key] } : {}),
+          href: winbackViewHref(key),
+          ...(key === "claims" ? { tone: "danger" as const } : {}),
+          ...(key === "released" && needsScrub ? {
+            // ViewTabs has a danger tone only: an amber dot before the label is the warning, said aloud after it.
+            marker: <i aria-hidden="true" className="block size-1.5 rounded-full bg-[var(--warning-ink)]" />,
+            srSuffix: "(the list needs a scrub before anyone is dialled)",
+          } : {}),
+        }))}
+      />
+    );
+  };
+  const primaryOf = (winback: Winback) => {
+    const listHref = winback.listId ? `/app/campaigns/${winback.listId}` : "/app/campaigns";
+    return <Button asChild><Link href={listHref}>{scrubOf(winback).needsScrub && !readOnly ? "Scrub the list first" : "Open the Win-back list"}</Link></Button>;
+  };
+  // Until the read lands, the primary holds its place, paused.
+  const primary = (
+    <Suspense fallback={<Button type="button" disabled>Open the Win-back list</Button>}>
+      <Await read={read}>{(winback) => (winback.available ? primaryOf(winback) : null)}</Await>
+    </Suspense>
   );
-  const listHref = winback.listId ? `/app/campaigns/${winback.listId}` : "/app/campaigns";
-  const primary = <Button asChild><Link href={listHref}>{needsScrub && !readOnly ? "Scrub the list first" : "Open the Win-back list"}</Link></Button>;
 
   return (
-    <RetentionPage step="reinstatement" title="Win-back" info={info} tabs={tabs} actions={primary}>
-      <WinbackBoard key={view} data={winback} view={view} />
+    <RetentionPage step="reinstatement" title="Win-back" info={info} tabs={<Suspense fallback={tabsOf(null)}><Await read={read}>{(winback) => (winback.available ? tabsOf(winback) : null)}</Await></Suspense>} actions={primary}>
+      <StreamSection shape="table">
+        <Await read={read}>
+          {(winback) => (winback.available
+            ? <WinbackBoard key={view} data={winback} view={view} />
+            : <TableCard><EmptyState title="Not switched on yet" hint={WINBACK_PENDING_MESSAGE} /></TableCard>)}
+        </Await>
+      </StreamSection>
     </RetentionPage>
   );
 }
+
+type Winback = Extract<Awaited<ReturnType<typeof loadWinback>>, { available: true }>;

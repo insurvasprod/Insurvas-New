@@ -3,12 +3,17 @@
 import { useTheme } from "@/components/theme-provider";
 import { Sun, Moon, Monitor } from "lucide-react";
 
+import { revealTheme } from "@/components/theme-reveal";
+
 /**
  * Light / dark / follow-the-system, as three explicit choices rather than a two-state switch.
  *
  * A toggle that only flips between light and dark has no way back to "whatever my machine is
  * doing", and someone who lands on the wrong one at 9am is stuck with it. Three states costs one
  * extra button and removes that trap.
+ *
+ * A choice that changes what the page shows reveals it as a circle from the button (components/theme-reveal.ts, the
+ * public switch's `startViewTransition` reveal, Wave D 2026-11-18); under reduced motion it switches at once.
  *
  * The provider uses a stable server snapshot, so this control can render the same three choices on
  * the server and the first client pass without a placeholder or hydration mismatch.
@@ -48,7 +53,7 @@ export function ThemeToggle({ tone = "default" }: { tone?: "default" | "onBrand"
             aria-checked={selected}
             aria-label={label}
             title={label}
-            onClick={() => setTheme(value)}
+            onClick={(event) => revealTheme(event.currentTarget, () => setTheme(value), showsDark(value) !== document.documentElement.classList.contains("dark"))}
             className={`flex flex-1 items-center justify-center rounded px-2 py-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring-color)] ${
               selected ? active : idle
             }`}
@@ -59,4 +64,9 @@ export function ThemeToggle({ tone = "default" }: { tone?: "default" | "onBrand"
       })}
     </div>
   );
+}
+
+/** Whether `choice` leaves the page dark (System follows the machine). */
+function showsDark(choice: (typeof OPTIONS)[number]["value"]) {
+  return choice === "dark" || (choice === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
 }

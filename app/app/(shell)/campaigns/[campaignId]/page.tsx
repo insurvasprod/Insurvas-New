@@ -13,6 +13,7 @@ import { CampaignLists } from "@/components/app/campaigns/campaign-lists";
 import { LeadListDetailView } from "@/components/app/lead-list-detail";
 import { LeadListAssignDrawer } from "@/components/app/lead-list-assign-drawer";
 import { LeadsInPage } from "@/components/app/lead-sources/leads-in";
+import { StreamSection } from "@/components/ui/stream-section";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -32,33 +33,52 @@ export default async function CampaignPage({ params, searchParams }: { params: P
   const [{ campaignId }, { tab }] = await Promise.all([params, searchParams]);
   if (!UUID.test(campaignId)) notFound();
 
-  // The list sections are Lead import's, behind its own gate; what a list cost is True CPA's.
-  const [lists, trueCpa, solo] = await Promise.all([guardPage("lead_import"), guardPage("true_cpa"), isSoloWorkspace(guard.context.tenantId)]);
-  const canLists = lists.entitled && actAsPage(lists, ["owner", "producer", "assistant"]);
-  const money = trueCpa.entitled && holdsAnyRole(guard.roles, ["owner", "producer"]);
-  const manager = holdsAnyRole(guard.roles, ["owner", "producer"]) && !solo;
-  const assignBlocked = guard.entitlement.access === "read_only" ? "Restore full access to your plan to assign leads — it is read-only." : null;
-  const [detail, timeZone] = canLists
-    ? await Promise.all([
-      leadListDetail(guard.context.tenantId, guard.context.userId, campaignId, { money, readOnly: trueCpa.entitlement.access === "read_only" }).catch(() => null),
-      getViewerTimezone(guard.context.tenantId, guard.context.userId).catch(() => null),
-    ])
-    : [null, null];
+  // Frame first (UI-CONSISTENCY §7a): the step's title and rail draw at once. Every read starts here, side by side as
+  // before; the workspace streams in under the frame as one block, since its figures (Owed back) and its next-up line
+  // (Assign) come from the list detail.
+  const tenantId = guard.context.tenantId;
+  const reads = Promise.all([guardPage("lead_import"), guardPage("true_cpa"), isSoloWorkspace(tenantId)]).then(async ([lists, trueCpa, solo]) => {
+    // The list sections are Lead import's, behind its own gate; what a list cost is True CPA's.
+    const canLists = lists.entitled && actAsPage(lists, ["owner", "producer", "assistant"]);
+    const money = trueCpa.entitled && holdsAnyRole(guard.roles, ["owner", "producer"]);
+    const [detail, timeZone] = canLists
+      ? await Promise.all([
+        leadListDetail(tenantId, guard.context.userId, campaignId, { money, readOnly: trueCpa.entitlement.access === "read_only" }).catch(() => null),
+        getViewerTimezone(guard.context.tenantId, guard.context.userId).catch(() => null),
+      ])
+      : [null, null];
+    return { trueCpa, solo, money, detail, timeZone };
+  });
 
   return (
     <LeadsInPage step="source">
-      <CampaignWorkspace embedded focusId={campaignId} initialTab={tab === "settings" || tab === "report" ? tab : "lists"}
-        report={detail ? <LeadListDetailView
-          inCampaign
-          detail={detail}
-          money={money}
-          timeZone={timeZone}
-          assign={{ manager, blocked: assignBlocked }}
-          claimBlocked={trueCpa.entitlement.access === "read_only" ? "Restore full access to your plan to draft a claim — it is read-only." : null}
-        /> : null} readOnly={guard.entitlement.access === "read_only"} owedCents={money && detail?.claims.supported ? detail.claims.unclaimedCents : null}
-        assign={detail && manager && !assignBlocked && detail.assignable > 0 ? { count: detail.assignable, node: <LeadListAssignDrawer campaignId={campaignId} listName={detail.campaignName} assignable={detail.assignable} /> } : null}>
-        <CampaignLists campaignId={campaignId} />
-      </CampaignWorkspace>
+      <StreamSection shape="strip+table">
+        <Campaign read={reads} guard={guard} campaignId={campaignId} tab={tab} />
+      </StreamSection>
     </LeadsInPage>
+  );
+}
+
+type Guard = Extract<Awaited<ReturnType<typeof guardPage>>, { entitled: true }>;
+type Reads = { trueCpa: Awaited<ReturnType<typeof guardPage>>; solo: boolean; money: boolean; detail: Awaited<ReturnType<typeof leadListDetail>> | null; timeZone: string | null };
+
+/** The campaign's workspace, once its list detail is in. */
+async function Campaign({ read, guard, campaignId, tab }: { read: Promise<Reads>; guard: Guard; campaignId: string; tab: string | undefined }) {
+  const { trueCpa, solo, money, detail, timeZone } = await read;
+  const manager = holdsAnyRole(guard.roles, ["owner", "producer"]) && !solo;
+  const assignBlocked = guard.entitlement.access === "read_only" ? "Restore full access to your plan to assign leads — it is read-only." : null;
+  return (
+    <CampaignWorkspace embedded focusId={campaignId} initialTab={tab === "settings" || tab === "report" ? tab : "lists"}
+      report={detail ? <LeadListDetailView
+        inCampaign
+        detail={detail}
+        money={money}
+        timeZone={timeZone}
+        assign={{ manager, blocked: assignBlocked }}
+        claimBlocked={trueCpa.entitlement.access === "read_only" ? "Restore full access to your plan to draft a claim — it is read-only." : null}
+      /> : null} readOnly={guard.entitlement.access === "read_only"} owedCents={money && detail?.claims.supported ? detail.claims.unclaimedCents : null}
+      assign={detail && manager && !assignBlocked && detail.assignable > 0 ? { count: detail.assignable, node: <LeadListAssignDrawer campaignId={campaignId} listName={detail.campaignName} assignable={detail.assignable} /> } : null}>
+      <CampaignLists campaignId={campaignId} />
+    </CampaignWorkspace>
   );
 }

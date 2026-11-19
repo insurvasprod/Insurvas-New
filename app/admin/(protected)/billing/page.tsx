@@ -1,62 +1,73 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 
+import { BillingPage } from "@/components/admin/billing/billing-page";
+import { WsExportMenu } from "@/components/admin/billing/ws-export-menu";
+import { WsPanelLoading } from "@/components/admin/billing/ws-panel";
+import { WsComingUp, WsFigures, WsFiguresLoading, WsHappened, WsNeeds } from "@/components/admin/billing/ws-sections";
+import { CustomInvoiceDialog } from "@/components/admin/custom-invoice-dialog";
+import { buttonVariants } from "@/components/ui/button";
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
 import { canViewInvoices } from "@/lib/invoices/permissions";
-import { BillingTabs } from "@/components/admin/billing-tabs";
-import { Card, CardContent } from "@/components/ui/card";
-import { PageHeader } from "@/components/ui/page-header";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
-const destinations = [
-  ["Invoices", "What we billed, and whether it matches what the provider charged.", "/admin/invoices"],
-  [
-    "Coupons",
-    "Price breaks that apply at the payment provider, so the customer is really charged less.",
-    "/admin/coupons",
-  ],
-  ["Refunds & credits", "Credit notes, their approvals, and what the provider actually did.", "/admin/credit-notes"],
-  ["Revenue", "Contracted revenue, collections, churn and plan mix.", "/admin/revenue"],
-] as const;
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
+/** This month and the five before it, for Export month: "2026-11" · "November 2026". */
+function exportMonths(): { key: string; label: string }[] {
+  const now = new Date();
+  return Array.from({ length: 6 }, (_, back) => {
+    const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, 1));
+    return { key: date.toISOString().slice(0, 7), label: `${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}${back === 0 ? " (so far)" : ""}` };
+  });
+}
+
+/**
+ * Admin › Billing workspace (admin round 1, docs/design/admin-r1/billing-r2.html screen 1). Replaces the four link
+ * cards (their destinations are every step in the rail now): the billing figures with their trend lines, Needs
+ * you from the billing checks (worst first, each opening its page filtered), what is coming up in the next seven
+ * days and what just happened. Each part streams and fails on its own; the rail and the title show at once.
+ */
 export default async function BillingWorkspacePage() {
   const admin = await getCurrentAdmin();
   if (!admin) redirect("/admin/login");
   if (!canViewInvoices(admin.role)) redirect("/admin");
 
+  // The custom invoice's customer list. A failed read must not offer an empty picker: the route's error page says so.
+  const { data: tenants, error } = await getSupabaseServiceClient().from("tenants").select("id, name").order("name");
+  if (error) throw new Error(`Could not load customers: ${error.message}`);
+  const viewer = { id: admin.id, role: admin.role };
+
   return (
-    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <PageHeader title="Billing" tabs={<BillingTabs />} />
-      <div className="grid gap-6 sm:grid-cols-2">
-        {destinations.map(([title, description, href]) => (
-          // The whole card is the link, so its accessible name carries the title and "Open" alone
-          // is not ambiguous to a screen reader.
-          <Link key={href} href={href} className="group rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            <Card interactive className="h-full">
-              <CardContent>
-                <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-[var(--ink)]">{title}</h2>
-                <p className="mt-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{description}</p>
-                <span className="mt-5 inline-flex items-center gap-1.5 text-sm leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)]">
-                  Open
-                  <svg
-                    width="13"
-                    height="13"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                    className="shrink-0 transition-transform duration-150 group-hover:translate-x-1 motion-reduce:transition-none"
-                  >
-                    <path d="M5 12h14m0 0-6-6m6 6-6 6" />
-                  </svg>
-                </span>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
+    <BillingPage
+      step="workspace"
+      title="Billing"
+      info="Billing at a glance: the figures, what needs you, what's coming up in the next seven days and what just happened."
+      actions={
+        <>
+          <WsExportMenu months={exportMonths()} />
+          <CustomInvoiceDialog tenants={tenants ?? []} triggerLabel="Raise a custom invoice" triggerClassName={buttonVariants({ variant: "highlight" })} />
+        </>
+      }
+    >
+      <div className="m-stagger flex w-full min-w-0 flex-col gap-4">
+        <Suspense fallback={<WsFiguresLoading />}>
+          <WsFigures role={admin.role} />
+        </Suspense>
+        <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+          <Suspense fallback={<WsPanelLoading title="Needs you" rows={6} />}>
+            <WsNeeds viewer={viewer} />
+          </Suspense>
+          <div className="flex min-w-0 flex-col gap-4">
+            <Suspense fallback={<WsPanelLoading title="Coming up · 7 days" rows={5} />}>
+              <WsComingUp role={admin.role} />
+            </Suspense>
+            <Suspense fallback={<WsPanelLoading title="Just happened" rows={5} />}>
+              <WsHappened viewer={viewer} />
+            </Suspense>
+          </div>
+        </div>
       </div>
-    </div>
+    </BillingPage>
   );
 }

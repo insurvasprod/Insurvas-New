@@ -8,6 +8,7 @@ import { CONTACT_INCOME_TYPE_LABELS, CONTACT_INCOME_TYPES, type ContactIncomeTyp
 import type { IncomeView } from "@/lib/retention/incomeStore";
 import { notify } from "@/lib/notify";
 
+import { CheckBox } from "@/components/ui/check-box";
 const field = `${toolbarControl} w-full`;
 const dollars = (cents: number) => (cents / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
@@ -98,8 +99,8 @@ export function IncomeCapture({ readUrl, save, defaultType, prompt, readOnly, co
         </label>
       </div>
       <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-foreground">
-        <label className="inline-flex items-center gap-2"><input type="checkbox" checked={household} disabled={readOnly || busy} onChange={(e) => setHousehold(e.target.checked)} />The household&apos;s total</label>
-        <label className="inline-flex items-center gap-2"><input type="checkbox" checked={estimate} disabled={readOnly || busy} onChange={(e) => setEstimate(e.target.checked)} />My estimate, not what they said</label>
+        <label className="inline-flex items-center gap-2"><CheckBox checked={household} disabled={readOnly || busy} onChange={(e) => setHousehold(e.target.checked)} />The household&apos;s total</label>
+        <label className="inline-flex items-center gap-2"><CheckBox checked={estimate} disabled={readOnly || busy} onChange={(e) => setEstimate(e.target.checked)} />My estimate, not what they said</label>
       </div>
       {error && <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{error}</p>}
       {!readOnly && (

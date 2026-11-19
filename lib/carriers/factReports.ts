@@ -143,7 +143,7 @@ export const resolveFactReportSchema = z.object({
 }).strict();
 
 /** The platform value as the carriers table stores it, or the reason it cannot be. */
-function platformValue(key: FixableFactKey, raw: string): { value: string } | { problem: string } {
+export function platformFactValue(key: FixableFactKey, raw: string): { value: string } | { problem: string } {
   if (key === "portal_origin") {
     const origin = toHttpsOrigin(raw);
     return origin && HTTPS_ORIGIN.test(origin) ? { value: origin } : { problem: "Use the portal's https address, like https://agents.carrier.com." };
@@ -171,7 +171,7 @@ export async function resolveFactReport(adminId: string, id: string, input: z.in
   let changed: { column: string; before: string | null; after: string } | null = null;
   if (input.status === "fixed" && input.value?.trim()) {
     if (!isFixable(row.fact_key)) throw new FactReportError("Fix this one on the product catalog, then mark it fixed without a value.", 400);
-    const next = platformValue(row.fact_key, input.value.trim());
+    const next = platformFactValue(row.fact_key, input.value.trim());
     if ("problem" in next) throw new FactReportError(next.problem, 400);
     const column = FACT_COLUMN[row.fact_key];
     const before = await db().from("carriers").select(`id, ${column}`).eq("id", row.carrier_id).is("organization_id", null).maybeSingle();

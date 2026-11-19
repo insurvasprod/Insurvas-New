@@ -63,6 +63,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Segmented, ViewTabs } from "@/components/ui/view-tabs";
 import { PartnerOnboarding } from "@/components/app/partner-onboarding";
 import { PageLoading } from "@/components/ui/page-loading";
+import { TitleShape } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
 import { ActiveFilters, type ActiveFilter, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { SelectMenu } from "@/components/ui/select-menu";
@@ -75,6 +76,7 @@ import { partnerLimitMessage } from "@/lib/partnerLimits/copy";
 import { cn } from "@/lib/utils";
 import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
 
+import { CheckBox } from "@/components/ui/check-box";
 type Term = {
   id: string;
   partner_id: string;
@@ -773,7 +775,23 @@ export function PartnersWorkspace({
   // Said as it is typed (manager review §6), only once there is something that is clearly not an email.
   const emailLooksWrong = draft.contact_email.trim().length > 3 && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(draft.contact_email.trim());
 
-  if (loading) return <PageLoading />;
+  // Frame first (UI-CONSISTENCY §7a): the header draws at once (a partner's name as its shape until the read lands);
+  // the list or the record loads under it.
+  if (loading) {
+    return (
+      <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+        <PageHeader
+          visible
+          hideTitle={!detailOnly}
+          title={detailOnly ? <TitleShape /> : "Publishers"}
+          infoDescription={!detailOnly}
+          description={detailOnly ? undefined : "Everyone who sends you leads or live calls: what you pay them, and how they are doing this month."}
+          breadcrumbs={detailOnly ? [{ label: "Partners" }, { label: "Publishers", href: "/app/publishers" }, { label: "Publisher" }] : [{ label: "Partners" }, { label: "Publishers" }]}
+        />
+        <PageLoading header={false} />
+      </div>
+    );
+  }
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
@@ -1026,13 +1044,12 @@ export function PartnersWorkspace({
                               Close
                             </Button>
                           ) : (
-                            <Link
-                              href={`/app/publishers/${partner.id}`}
-                              aria-label={`Open ${partner.name}`}
-                              className="inline-flex size-8 items-center justify-center rounded-[8px] text-[var(--muted)] transition-colors group-hover:bg-[var(--surface-alt)] group-hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]"
-                            >
-                              <ChevronRight className="size-4" aria-hidden="true" />
-                            </Link>
+                            <Button asChild variant="outline" size="sm">
+                              <Link href={`/app/publishers/${partner.id}`} aria-label={`Open ${partner.name}`} className="no-underline">
+                                Open
+                                <ChevronRight aria-hidden="true" />
+                              </Link>
+                            </Button>
                           )}
                         </td>
                       </tr>
@@ -1196,9 +1213,7 @@ export function PartnersWorkspace({
                                 !product.is_enabled && "opacity-60",
                               )}
                             >
-                              <input
-                                type="checkbox"
-                                className="size-4 shrink-0 accent-[var(--primary)]"
+                              <CheckBox
                                 checked={product.approved}
                                 disabled={
                                   readOnly ||
@@ -1528,6 +1543,7 @@ export function PartnersWorkspace({
               <Button
                 type="button"
                 variant="outline"
+                data-guide="publisher-done"
                 onClick={() => setDialogOpen(false)}
               >
                 {justAdded ? "Done" : "Cancel"}

@@ -536,7 +536,21 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
   // Ticked rows (2026-10-09 saved views): kept across pages, dropped when a filter hides them.
   const selection = useRowSelection(rows.map((item) => item.id));
 
-  if (loading) return <PageLoading />;
+  // Frame first (UI-CONSISTENCY §7a): the title and its buttons draw at once; the list loads where it will be.
+  if (loading) {
+    return (
+      <main className="m-stagger flex w-full min-w-0 flex-col gap-6">
+        <PageHeader
+          title="Callbacks"
+          actions={<div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline"><Link href="/app/dialer"><ListOrdered aria-hidden="true" />Open the queue</Link></Button>
+            <Button type="button" disabled><Plus aria-hidden="true" />Add callback</Button>
+          </div>}
+        />
+        <PageLoading header={false} />
+      </main>
+    );
+  }
 
   const { current: listCurrent, rows: pageRows } = paginate(rows, listPage, pageSize);
   const filtersOn = Boolean(needle || day || when !== "open" || agentFilter || sourceFilter);
@@ -858,14 +872,16 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
           className={cn("flex min-w-0 flex-1 flex-col", !grouped && "min-h-0 [&>*:nth-child(2)]:min-h-0 [&>*:nth-child(2)]:flex-1 [&>*:nth-child(2)]:overflow-y-auto")}
           toolbar={<>
             {toolbar}
-            {/* In the toolbar band rather than above the rows: the table fits the window by measuring
-                the toolbar (useFillHeight), so the bar appearing re-fits the rows instead of
-                pushing the last one out of view. Drawn as a full-width band at the band's foot. */}
+            {/* In the toolbar band rather than above the rows, so it stays put while the rows scroll under it.
+                Its own line in the band (basis-full); the bar hangs from the band's foot (12px padding + 1px rule
+                below that line) and spans the card edge to edge, over the header row or the Select all line. */}
+            <div className="basis-full">
             <BulkBar
-              className="-mx-4 -mb-3 w-[calc(100%+2rem)] border-t border-b-0"
+              className="-mx-4 top-[13px]"
               count={selection.count}
               noun={["callback", "callbacks"]}
               onClear={selection.clear}
+              selectAll={<SelectAllCheckbox selection={selection} ids={shownRows.map((item) => item.id)} label="Select every callback shown" />}
               actions={<>
                 {/* Callbacks A's bar: Move (into the next legal times), Give to…, Put in shared queue, Export. */}
                 {canSpread && <Button type="button" variant="outline" title="Move these callbacks into the next open legal times" disabled={spreadable(rows.filter((item) => selection.selected.has(item.id))).length === 0} onClick={() => setSpreadIds(spreadable(rows.filter((item) => selection.selected.has(item.id))))}><Shuffle aria-hidden="true" />Move</Button>}
@@ -874,6 +890,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
                 <Button type="button" variant="outline" onClick={exportSelected}><Download aria-hidden="true" />Export</Button>
               </>}
             />
+            </div>
           </>}
           footer={grouped ? undefined : <Pager page={listCurrent} total={rows.length} pageSize={pageSize} noun="callbacks" suffix={settledView ? "newest first" : "soonest first"} onPage={setListPage} />}
         >

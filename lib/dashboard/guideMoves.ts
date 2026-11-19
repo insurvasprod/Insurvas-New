@@ -40,34 +40,54 @@ export type GuideMove = {
   advance: GuideAdvance;
   /** A field the form itself marks optional: the coach offers "Skip this". */
   optional?: boolean;
+  /**
+   * Other controls that stay usable (not dimmed, not shielded) while this move is lit: the search and pager
+   * beside a list, the card a tick lands in. `data-guide` values, like `target`.
+   */
+  use?: readonly string[];
+  /** Said when the lit control stays disabled: what to do first ("Pick a campaign first"). */
+  blocked?: string;
+  /** The page this move happens on when it is not the step's own page: `/app/import/review/*`. */
+  page?: string;
+  /** The label of a "check" move's button ("Looks right" when absent). */
+  confirm?: string;
   /** The picture of the screen on the step's Docs page. */
   shot?: GuideShot;
 };
 
 const MOVES: Record<string, readonly GuideMove[]> = {
   carriers: [
-    { target: "carriers-setup-list", say: "Tick each carrier you're contracted with", detail: "Every tick saves. Level, contracted from and writing number are optional: add them now or later.", advance: "click" },
-    { target: "carriers-setup-next", say: "Click Next: Set Up States", detail: "Your carriers are already saved. Next you pick the states you sell in.", advance: "click" },
+    { target: "carriers-setup-list", use: ["carriers-setup-search", "carriers-setup-pager"], say: "Tick each carrier you're contracted with", detail: "Every tick saves. Use the search or the pages to find more. Level and writing number can wait.", advance: "click" },
+    { target: "carriers-setup-list", use: ["carriers-setup-search", "carriers-setup-pager"], say: "Tick the rest of your carriers", detail: "When every carrier you're contracted with is ticked, click Done ticking.", advance: "check", confirm: "Done ticking" },
   ],
   states: [
     { target: "carriers-setup-next", say: "Click Next: Set Up States", detail: "Your carriers are saved. This opens the states.", advance: "click" },
-    { target: "states-setup-list", say: "Click a state you sell in", detail: "Then tick the carriers you're appointed with there. Every tick saves.", advance: "click" },
-    { target: "states-setup-list", say: "Tick your carriers in each state", detail: "Do every state you sell in. Quotes only offer what is ticked here.", advance: "check" },
-    { target: "states-setup-finish", say: "Click Finish set-up", advance: "click" },
+    { target: "states-setup-list", say: "Click a state you sell in", detail: "Its carriers open on the right.", advance: "click" },
+    { target: "states-setup-list", use: ["states-setup-carriers"], say: "Tick the carriers you're appointed with there", detail: "Every tick saves. Pick the next state and do the same, for every state you sell in.", advance: "check", confirm: "All states done" },
+    { target: "states-setup-finish", say: "Click Finish set-up", blocked: "Tick at least one carrier in a state first.", advance: "click" },
   ],
   "lead-sources": [
     { target: "publisher-add", say: "Click Add publisher", detail: "A publisher is a company that sends you leads or transfers calls.", advance: "click" },
-    { target: "publisher-submit", say: "Fill in the company, then click Add publisher", detail: "Only the company name is needed now. Contact, country and pay can wait.", advance: "click" },
+    { target: "publisher-submit", say: "Type the company, then click Add publisher", detail: "Only the company name is needed now. Contact, country and pay can wait.", blocked: "Type the company name first.", advance: "click" },
+    { target: "publisher-done", say: "Click Done", detail: "Or add another one first. Every publisher you add is saved.", advance: "click" },
+  ],
+  products: [
+    { target: "products-list", say: "Switch on each product you sell", detail: "Each switch saves at once. Only these show in imports, campaigns and quotes.", advance: "click" },
+    { target: "products-list", say: "Switch on any others you sell", detail: "When every product you sell is on, click Done.", advance: "check", confirm: "Done" },
   ],
   campaign: [
-    { target: "campaign-vendor-new", say: "Click New Vendor", detail: "The company you buy leads from. Skip this if it's already listed.", advance: "click" },
-    { target: "campaign-new", say: "Click New Campaign", detail: "A campaign is one batch of leads you bought, so its cost is tracked.", advance: "click" },
-    { target: "campaign-create", say: "Pick the vendor, name it, then click Create campaign", advance: "click" },
+    { target: "campaign-vendor-picker", say: "Click Vendor", detail: "The company you buy leads from. If it's already in the list, pick it and go on.", advance: "click" },
+    { target: "campaign-vendor-add", say: "Click Add a vendor", advance: "click" },
+    { target: "vendor-create", say: "Type the vendor's name, then click Add vendor", blocked: "Type the vendor's name first.", advance: "click" },
+    { target: "campaign-new", say: "Click New Campaign", detail: "A campaign is one batch of leads you bought, so its cost is tracked.", blocked: "Add a vendor first: a campaign belongs to one.", advance: "click" },
+    { target: "campaign-create", say: "Pick the vendor, name it, then click Create campaign", blocked: "Pick the vendor and type a name first.", advance: "click" },
   ],
   import: [
+    { target: "lead-import-campaign", say: "Pick the campaign the leads go into", detail: "The one you just made.", advance: "leave" },
     { target: "lead-import-upload", say: "Click Choose a file", detail: "A CSV or Excel file of your leads.", advance: "click" },
-    { target: "lead-import-continue", say: "Check the columns, then click Continue to Review", detail: "Insurvas checks do-not-call, litigators and duplicates. Nothing is written yet.", advance: "click" },
-    { say: "Review the leads, then import them", detail: "Get set up ticks this step once the import lands.", advance: "done" },
+    { target: "lead-import-columns-ok", use: ["lead-import-columns"], say: "Check each column, then click Looks right", detail: "Insurvas matched what it could. Fix any row it couldn't.", advance: "click" },
+    { target: "lead-import-continue", say: "Click Continue to Review", detail: "Insurvas checks do-not-call, litigators and duplicates. Nothing is written yet.", blocked: "Pick the campaign and check the columns first.", advance: "click" },
+    { target: "import-review-commit", page: "/app/import/review/*", say: "Check the counts, then click Import", detail: "Only the leads that passed are imported.", advance: "click" },
   ],
   team: [
     { target: "team-invite", say: "Click Invite someone", advance: "click" },
@@ -75,17 +95,18 @@ const MOVES: Record<string, readonly GuideMove[]> = {
   ],
   "calling-windows": [
     { say: "Check your earliest and latest calling hours", detail: "They apply in each lead's own time zone. Federal and state limits always apply on top.", advance: "check" },
-    { target: "calling-windows-save", say: "Click Save changes", advance: "click" },
+    { target: "calling-windows-save", say: "Click Save hours", detail: "Even if you keep the hours shown, saving makes them yours.", advance: "click" },
   ],
   assign: [
-    { target: "assignments-assign", say: "Hand out leads to your agents", detail: "Each agent's dialer only holds the leads given to them.", advance: "click" },
+    { target: "assignments-assign", say: "Hand out leads to your agents", detail: "Each agent's dialer only holds the leads given to them.", blocked: "Nothing can be handed out yet: the page above says what's missing (a licence, an appointment, or leads).", advance: "click" },
   ],
   statement: [
-    { target: "statement-open", say: "Click Import a statement", advance: "click" },
+    // No "Click Import a statement" move: the step's page (?import=1) opens the dialog itself.
     { target: "statement-file", say: "Choose the statement file, then pick its carrier and period", detail: "PDF, Excel or CSV, as the carrier sent it.", advance: "click" },
     { target: "statement-next", say: "Click Next: columns", advance: "click" },
     { target: "statement-preview", say: "Match Policy number and Amount, then click Preview", detail: "Insurvas remembers the columns for this carrier next time.", advance: "click" },
     { target: "statement-import", say: "Check the matches, then click Import for review", detail: "Nothing reaches your ledger until you accept the matches.", advance: "click" },
+    { page: "/app/statements/*", say: "Your statement is in", detail: "Accept the matches here whenever you're ready. Get set up ticks this step now.", advance: "done" },
   ],
   book: [
     { target: "book-carriers", say: "Click Bring it in on a carrier", detail: "Each carrier row says where to find its policy report.", advance: "click" },
@@ -128,9 +149,10 @@ const MOVES: Record<string, readonly GuideMove[]> = {
   ],
   "first-transfer": [
     { target: "inbound-claim", say: "Click Take this call", detail: "An unclaimed transfer escalates after a few minutes.", advance: "click" },
-    { say: "Talk to the caller, then finish the call", advance: "done" },
+    { page: "/app/inbound/call/*", say: "Talk to the caller, then finish the call", advance: "done" },
   ],
   "first-outcome": [
+    { target: "dialer-next", say: "Click Serve next lead", advance: "click" },
     { target: "disposition-open", say: "Pick what happened on the call", detail: "The outcome moves the lead and books any callback.", advance: "done" },
   ],
   statements: [
@@ -149,15 +171,16 @@ const MOVES: Record<string, readonly GuideMove[]> = {
 export type GuideShot = "list" | "footer-button" | "toolbar-button" | "dialog" | "grid" | "table" | "row" | "upload" | "field" | "map" | "menu" | "check";
 
 const SHOTS: Record<string, readonly GuideShot[]> = {
-  carriers: ["list", "footer-button"],
+  carriers: ["list", "list"],
   states: ["footer-button", "grid", "grid", "footer-button"],
-  "lead-sources": ["toolbar-button", "dialog"],
-  campaign: ["toolbar-button", "toolbar-button", "dialog"],
-  import: ["upload", "footer-button", "table"],
+  "lead-sources": ["toolbar-button", "dialog", "dialog"],
+  products: ["list", "list"],
+  campaign: ["toolbar-button", "menu", "dialog", "toolbar-button", "dialog"],
+  import: ["field", "upload", "table", "footer-button", "footer-button"],
   team: ["toolbar-button", "dialog"],
   "calling-windows": ["field", "footer-button"],
   assign: ["toolbar-button"],
-  statement: ["toolbar-button", "upload", "dialog", "dialog", "dialog"],
+  statement: ["upload", "dialog", "dialog", "dialog", "check"],
   book: ["row", "dialog", "table"],
   outcomes: ["row", "map"],
   disclosures: ["table"],
@@ -169,7 +192,7 @@ const SHOTS: Record<string, readonly GuideShot[]> = {
   hierarchy: ["menu", "dialog"],
   "first-call": ["toolbar-button", "check"],
   "first-transfer": ["toolbar-button", "check"],
-  "first-outcome": ["grid"],
+  "first-outcome": ["toolbar-button", "grid"],
   statements: ["table"],
   ledger: ["table"],
 };
@@ -216,4 +239,27 @@ export function resolveMove(moves: readonly GuideMove[], current: number, presen
     if (later && present(later)) return index;
   }
   return current;
+}
+
+/** Whether a move's `page` pattern (`/app/import/review/*`) is this path. */
+export function pageMatches(pattern: string, pathname: string): boolean {
+  if (pattern.endsWith("/*")) {
+    const base = pattern.slice(0, -2);
+    return pathname.startsWith(`${base}/`) && pathname.length > base.length + 1;
+  }
+  return pathname === pattern;
+}
+
+/**
+ * Pages a step can land on after its last move without a move of its own there: an import with duplicates opens
+ * Duplicates. The guide keeps the run there, so the step still finishes and the next one opens.
+ */
+const LANDS_ON: Record<string, readonly string[]> = {
+  import: ["/app/duplicates", "/app/import/review/*"],
+};
+
+/** Every page a step's guide follows: its own page, the pages its moves name, and where it can land. */
+export function guidePages(step: { key: string; path: string; instruction: string; target?: string }): string[] {
+  const home = step.path.split(/[?#]/)[0];
+  return [...new Set([home, ...guideMovesFor(step).flatMap((move) => (move.page ? [move.page] : [])), ...(LANDS_ON[step.key] ?? [])])];
 }

@@ -1,4 +1,6 @@
-/* The tilted product frame: it settles flat-ish as it arrives, then floats a little. */
+/* The tilted product frame: it settles flat-ish as it arrives, then holds still (Wave D, 2026-11-18: nothing loops,
+   UI-CONSISTENCY §17; the float ran forever, tasks/auth-doors/RESEARCH.md P2). Every effect below plays once, when the
+   page opens or a scene comes in. */
 .stage {
   margin-top: 1.75rem;
   perspective: 1400px;
@@ -9,7 +11,7 @@
   zoom: 0.86;
   transform: rotateY(-7deg) rotateX(4deg);
   transform-origin: 30% 50%;
-  animation: frame-in 620ms cubic-bezier(0.2, 0.75, 0.25, 1) both, frame-float 7s ease-in-out 700ms infinite;
+  animation: frame-in 620ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
 
 .copy {
@@ -31,15 +33,16 @@
 
 .ring {
   box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 55%, transparent);
-  animation: ring 1.6s ease-out 600ms infinite;
+  animation: ring 1.6s ease-out 600ms 1 both;
 }
 
 .glow {
-  animation: pop-in 360ms cubic-bezier(0.34, 1.56, 0.64, 1) both, glow 2s ease-in-out 1.8s infinite;
+  animation: pop-in 360ms cubic-bezier(0.34, 1.56, 0.64, 1) both, glow 2s ease-in-out 1.8s 1;
 }
 
+/* The "Live" dot is still, as the app's own live marker is (.m-live). */
 .live {
-  animation: live 1.8s ease-in-out infinite;
+  animation: none;
 }
 
 /* The bar under the frame fills over the time a scene stays up (7s). */
@@ -58,11 +61,6 @@
 @keyframes frame-in {
   from { opacity: 0; transform: translate3d(24px, 10px, 0) rotateY(-14deg) rotateX(6deg); }
   to { opacity: 1; transform: rotateY(-7deg) rotateX(4deg); }
-}
-
-@keyframes frame-float {
-  0%, 100% { transform: rotateY(-7deg) rotateX(4deg) translate3d(0, 0, 0); }
-  50% { transform: rotateY(-6deg) rotateX(3.5deg) translate3d(0, -6px, 0); }
 }
 
 @keyframes copy-in {
@@ -93,11 +91,6 @@
 @keyframes glow {
   0%, 100% { filter: none; }
   50% { filter: brightness(1.12); }
-}
-
-@keyframes live {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
 }
 
 @keyframes progress {

@@ -8,12 +8,12 @@ import { MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog, confirmAction } from "@/components/ui/confirm-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { checkboxControl } from "@/components/ui/field";
 import type { RuleMode } from "@/lib/pipelineRules/rules";
 import { notify } from "@/lib/notify";
 
 import { PreviewTodayButton } from "./preview-table";
 
+import { CheckBox } from "@/components/ui/check-box";
 const ENDPOINT = "/api/app/pipeline-rules";
 
 /**
@@ -123,7 +123,7 @@ export function RuleActions({ ruleId, name, mode, enabled, forecast, readOnly, p
           <dt className="text-muted-foreground">You checked</dt><dd className="m-0">{forecast.right} right · {forecast.wrong} wrong</dd>
         </dl>
         <label className="mt-3 flex items-center gap-2">
-          <input type="checkbox" className={checkboxControl} checked={replay} disabled={!qualify} onChange={(e) => setReplay(e.target.checked)} />
+          <CheckBox checked={replay} disabled={!qualify} onChange={(e) => setReplay(e.target.checked)} />
           {qualify === null ? "Counting the cards that qualify right now" : qualify === 0 ? "No card qualifies right now" : `Also move the ${qualify} ${qualify === 1 ? "card" : "cards"} that qualify right now`}
         </label>
       </ConfirmDialog>

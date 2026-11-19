@@ -1,11 +1,15 @@
 import { setupStepDefinitions, setupStepGroup } from "../dashboard/checklist.ts";
 import { guideMovesFor } from "../dashboard/guideMoves.ts";
 
+import { DOC_MODULES } from "./modules.ts";
+import { SETTINGS_DOCS } from "./settingsDocs.ts";
+import { DOC_TASKS } from "./tasks.ts";
+
 /**
  * Docs (owner, 2026-11-13): "something like Vercel docs… not documentation… trying to help people get set
  * up into insurance… leave places for the video". Simple pages, one at a time (owner: "don't make it like a
  * book you have to scroll around"): chapters on the left, the page in the middle, "On this page" on the
- * right. Every page has one video slot, keyed so a video can be attached later without touching the page.
+ * right. No page has a video (owner 2026-11-16): a Get set up page shows every click on real screenshots instead.
  *
  * Chapter 3 is built from Get set up itself (checklist.ts + guideMoves.ts), so its pages can never drift
  * from the steps and the guide. The insurance chapters are plain guidance, not legal advice.
@@ -19,8 +23,6 @@ export type DocPage = {
   title: string;
   minutes: number;
   summary: string;
-  /** The video slot: `url` empty means "Video coming". */
-  video: { key: string; title: string; url?: string };
   sections: DocSection[];
   terms?: [string, string][];
   /** A Get set up step this page explains: the page offers "Do it in Insurvas" (its guide) or says it's done. */
@@ -28,11 +30,11 @@ export type DocPage = {
   /** A page in Insurvas to open, for pages with no setup step. */
   open?: { href: string; label: string };
   /**
-   * A "how to" page, exactly step by step (R4, owner 2026-11-13): the ordered steps with their time, cost and the
-   * moment in the video. The reader ticks them off; the first not ticked is the one they are on.
+   * A "how to" page, exactly step by step (R4, owner 2026-11-13): the ordered steps with their time (no costs, owner
+   * 2026-11-16). The reader ticks them off; the first not ticked is the one they are on.
    */
   steps?: DocStep[];
-  /** A few figures over the page: total time, typical cost. */
+  /** A few figures beside the steps: total time, how many steps. */
   facts?: { label: string; value: string }[];
   /** One line to read before the steps. */
   before?: string;
@@ -42,9 +44,10 @@ export type DocStep = {
   title: string;
   detail: string;
   time?: string;
-  cost?: string;
-  /** The moment in the page's video. */
-  at?: string;
+  /** The part of the journey this step opens ("Get licensed"): shown once, over its first step. */
+  phase?: string;
+  /** The Docs page that explains this step in full. */
+  read?: string;
   /**
    * A step Insurvas can see done (R4 rework, owner 2026-11-13: "if he has completed it, there is no need to show
    * that button anymore"): the setup step whose fact ticks it, or "ready" for the whole of Ready to sell.
@@ -66,7 +69,7 @@ export const DOC_CHAPTERS: readonly DocChapter[] = [
 ];
 
 const page = (chapter: string, slug: string, title: string, minutes: number, summary: string, sections: DocSection[], extra: Partial<DocPage> = {}): DocPage => ({
-  slug, chapter, title, minutes, summary, video: { key: `${chapter}.${slug}`, title }, sections, ...extra,
+  slug, chapter, title, minutes, summary, sections, ...extra,
 });
 
 const WRITTEN: DocPage[] = [
@@ -74,14 +77,15 @@ const WRITTEN: DocPage[] = [
     { id: "time", heading: "How long it takes", paragraphs: ["Most people go from starting a course to a first sale in four to eight weeks. The exam and the carrier appointments are usually the slowest parts."] },
   ], {
     before: "Pick your lines first: life, health, or both. Every step below is per line, and most agents take both.",
-    facts: [{ label: "Total time", value: "4–8 weeks" }, { label: "Typical cost", value: "$300–$700" }, { label: "Steps", value: "6" }],
+    facts: [{ label: "Total time", value: "4–8 weeks" }, { label: "Steps", value: "7" }, { label: "In Insurvas", value: "About 1 hour" }],
     steps: [
-      { title: "Take a pre-licensing course", detail: "An approved course for each line you want to sell.", time: "20–40 hours", cost: "$100–$250", at: "0:00" },
-      { title: "Pass the state exam", detail: "At a test centre or online, proctored. You get the result the same day.", time: "2 hours", cost: "$40–$150", at: "0:34" },
-      { title: "Apply for your resident licence", detail: "Through NIPR, with fingerprints and a background check.", time: "1–3 weeks", cost: "$50–$200", at: "1:12" },
-      { title: "Get E&O insurance and AML training", detail: "Most carriers ask for both before they contract you.", time: "1 day", cost: "$25–$60 a month", at: "1:50" },
-      { title: "Contract with carriers", detail: "Usually through an IMO or FMO; then each carrier appoints you in your states.", time: "1–3 weeks", cost: "Free", at: "2:20" },
-      { title: "Set up Insurvas and start calling", detail: "Get set up walks you through every click.", time: "About 1 hour", at: "2:45", doneWhen: "ready", action: { label: "Open Get set up", href: "/app/setup" } },
+      { phase: "Get licensed", title: "Choose your lines", detail: "Life, health, or both. Each line has its own course and exam.", time: "1 day", read: "licence" },
+      { title: "Take a pre-licensing course", detail: "An approved course for each line you want to sell.", time: "20–40 hours", read: "licence" },
+      { title: "Pass the state exam", detail: "At a test centre or online, proctored. You get the result the same day.", time: "2 hours", read: "licence" },
+      { title: "Apply for your resident licence", detail: "Through NIPR, with fingerprints and a background check. Add non-resident states once it's active.", time: "1–3 weeks", read: "licence" },
+      { phase: "Get contracted", title: "Get E&O insurance and AML training", detail: "Most carriers ask for both before they contract you.", time: "1 day", read: "eo-aml-ce" },
+      { title: "Contract and get appointed with carriers", detail: "Usually through an IMO or FMO; then each carrier appoints you in your states.", time: "1–3 weeks", read: "appointments" },
+      { phase: "Start selling", title: "Set up Insurvas and start calling", detail: "Get set up walks you through every click. Each step below has its screens in Docs.", time: "About 1 hour", doneWhen: "ready", action: { label: "Open Get set up", href: "/app/setup" } },
     ],
   }),
   page("start", "licence", "Pre-licensing, the exam and your licence", 5, "What you study, how the exam works, and how to apply.", [
@@ -106,9 +110,9 @@ const WRITTEN: DocPage[] = [
     { id: "what", heading: "What an appointment is", paragraphs: ["Your licence lets you sell insurance. An appointment is a carrier saying you may sell its products, filed with each state you sell in."] },
     { id: "time", heading: "How long it takes", paragraphs: ["Usually one to three weeks per carrier. Some states need you appointed before you take an application; others accept it when the first application arrives."] },
   ], { stepKey: "carriers", terms: [["Appointment", "A carrier's filing that lets you sell its products in a state"], ["Writing number", "Your ID with a carrier, printed on its commission statements"]],
-    facts: [{ label: "Per carrier", value: "1–3 weeks" }, { label: "Cost", value: "Usually free" }],
+    facts: [{ label: "Per carrier", value: "1–3 weeks" }, { label: "Steps", value: "4" }],
     steps: [
-      { title: "Choose who you contract through", detail: "An IMO or FMO, or the carrier directly.", time: "1 day" },
+      { title: "Choose who you contract through", detail: "An IMO or FMO, or the carrier directly.", time: "1 day", read: "imo-or-direct" },
       { title: "Send the contracting packet", detail: "Your licence numbers, E&O and AML certificates, a background check and bank details for commissions.", time: "1 hour" },
       { title: "Wait for the appointment", detail: "The carrier files it with each state you sell in.", time: "1–3 weeks" },
       { title: "Add the carrier and its writing number in Insurvas", detail: "So quotes offer it and its statements match your policies.", time: "5 minutes", doneWhen: "carriers", action: { label: "Do it in Insurvas", step: "carriers" } },
@@ -167,36 +171,36 @@ const WRITTEN: DocPage[] = [
 /** The step-by-step version of each written page (R4 rework, owner 2026-11-13: "what is all of that text?"). */
 const STEPS_FOR: Record<string, Pick<DocPage, "steps" | "facts" | "before">> = {
   licence: {
-    facts: [{ label: "Total time", value: "3–6 weeks" }, { label: "Typical cost", value: "$200–$600" }, { label: "Steps", value: "4" }],
+    facts: [{ label: "Total time", value: "3–6 weeks" }, { label: "Steps", value: "4" }],
     before: "Life and health are separate lines of authority. Most agents take both, one course and exam each.",
     steps: [
       { title: "Choose your lines of authority", detail: "Life, accident and health, or both.", time: "1 day" },
-      { title: "Finish an approved pre-licensing course", detail: "Your state sets the hours for each line.", time: "20–40 hours", cost: "$100–$250" },
-      { title: "Book and pass the state exam", detail: "At a test centre or online, proctored. The result comes the same day; a fail can be retaken after a short wait.", time: "2 hours", cost: "$40–$150" },
-      { title: "Apply for your resident licence", detail: "Usually through NIPR, with fingerprints and a background check. Your licence number is what carriers ask for first.", time: "1–3 weeks", cost: "$50–$200" },
+      { title: "Finish an approved pre-licensing course", detail: "Your state sets the hours for each line.", time: "20–40 hours" },
+      { title: "Book and pass the state exam", detail: "At a test centre or online, proctored. The result comes the same day; a fail can be retaken after a short wait.", time: "2 hours" },
+      { title: "Apply for your resident licence", detail: "Usually through NIPR, with fingerprints and a background check. Your licence number is what carriers ask for first.", time: "1–3 weeks", read: "non-resident" },
     ],
   },
   "non-resident": {
-    facts: [{ label: "Per state", value: "1–2 weeks" }, { label: "Typical cost", value: "$50–$300" }],
+    facts: [{ label: "Per state", value: "1–2 weeks" }, { label: "Steps", value: "4" }],
     before: "You need an active resident licence first. Most states grant a non-resident licence without another exam.",
     steps: [
       { title: "List the states your leads come from", detail: "Add states as you need them; each has its own fee and renewal date.", time: "1 hour" },
-      { title: "Apply for each state through NIPR", detail: "Your resident licence carries over; no new exam in most states.", time: "30 minutes a state", cost: "$50–$300 a state" },
-      { title: "Get appointed in those states", detail: "Each carrier files its appointment in every state you sell in.", time: "1–3 weeks" },
+      { title: "Apply for each state through NIPR", detail: "Your resident licence carries over; no new exam in most states.", time: "30 minutes a state" },
+      { title: "Get appointed in those states", detail: "Each carrier files its appointment in every state you sell in.", time: "1–3 weeks", read: "appointments" },
       { title: "Add the states in Insurvas", detail: "Quotes and leads follow the states you're appointed in.", doneWhen: "states", action: { label: "Do it in Insurvas", step: "states" } },
     ],
   },
   "eo-aml-ce": {
-    facts: [{ label: "Total time", value: "1–2 days" }, { label: "Typical cost", value: "$25–$60 a month" }],
+    facts: [{ label: "Total time", value: "1–2 days" }, { label: "Steps", value: "4" }],
     steps: [
-      { title: "Buy E&O insurance", detail: "Covers you if a client says you gave bad advice. Carriers often ask for $1 million per claim.", time: "1 hour", cost: "$25–$60 a month" },
-      { title: "Take AML training", detail: "A short online anti-money-laundering course; keep the certificate.", time: "2–4 hours", cost: "Often free" },
+      { title: "Buy E&O insurance", detail: "Covers you if a client says you gave bad advice. Carriers often ask for $1 million per claim.", time: "1 hour" },
+      { title: "Take AML training", detail: "A short online anti-money-laundering course; keep the certificate.", time: "2–4 hours" },
       { title: "Take each carrier's product training", detail: "Some carriers ask for their own short course before you sell.", time: "1 hour each" },
       { title: "Keep up continuing education", detail: "Each licence renewal needs CE hours. Keep every certificate.", time: "Every 2 years" },
     ],
   },
   "imo-or-direct": {
-    facts: [{ label: "Decision", value: "1 day" }, { label: "Cost", value: "Usually free" }],
+    facts: [{ label: "Decision", value: "1 day" }, { label: "Steps", value: "4" }],
     steps: [
       { title: "Decide how much support you want", detail: "New agents usually want leads, training and underwriting help.", time: "1 hour" },
       { title: "Compare two or three IMOs or FMOs", detail: "Ask about contract levels, carriers offered and who owns your book.", time: "Half a day" },
@@ -289,7 +293,6 @@ function setupPages(): DocPage[] {
     title: step.label,
     minutes: 2,
     summary: step.why,
-    video: { key: `setup.${step.key}`, title: step.label },
     stepKey: step.key,
     sections: [
       { id: "why", heading: "Why it matters", paragraphs: [step.why] },
@@ -311,8 +314,33 @@ export function allDocPages(): DocPage[] {
 export function docsSearchIndex(insurvas: { title: string; href: string; meta: string }[] = []): { kind: "doc" | "insurvas" | "term"; href: string; title: string; meta: string; text: string }[] {
   const chapters = new Map(DOC_CHAPTERS.map((chapter) => [chapter.key, chapter.title]));
   const pages = allDocPages();
+  const moduleTitle = new Map(DOC_MODULES.map((module) => [module.key, module.title]));
+  const tasks = new Set(DOC_TASKS.map((task) => task.slug));
   return [
-    ...pages.map((item) => ({
+    // R6 (2026-11-16): the "How do I…" tasks and the module guides come first; a setup step's page is its task.
+    ...DOC_TASKS.map((task) => ({
+      kind: "doc" as const,
+      href: `/app/docs/${task.slug}`,
+      title: task.title,
+      meta: `${moduleTitle.get(task.module) ?? ""} · How do I…`,
+      text: [task.why, task.whenDone, ...(task.steps ?? []).flatMap((step) => [step.say, step.detail ?? ""])].join(" "),
+    })),
+    // Settings, page by page (2026-11-17): each page, findable by any setting's name on it.
+    ...SETTINGS_DOCS.map((page) => ({
+      kind: "doc" as const,
+      href: `/app/docs/settings/${page.slug}`,
+      title: `${page.title} settings`,
+      meta: `Settings · ${page.group}`,
+      text: [page.why, ...page.parts.flatMap((part) => [part.title, part.what, ...part.fields.flatMap((field) => [field.label, field.what])])].join(" "),
+    })),
+    ...DOC_MODULES.map((module) => ({
+      kind: "doc" as const,
+      href: `/app/docs/modules/${module.key}`,
+      title: `${module.title}: how it works`,
+      meta: "Module guide",
+      text: [module.promise, module.covers, ...module.how.flatMap((node) => [node.title, node.detail]), ...module.why].join(" "),
+    })),
+    ...pages.filter((item) => !tasks.has(item.slug)).map((item) => ({
       kind: "doc" as const,
       href: `/app/docs/${item.slug}`,
       title: item.title,

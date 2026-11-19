@@ -3,90 +3,124 @@ import { redirect } from "next/navigation";
 
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
 import { AuditLogTable } from "@/components/admin/audit-log-table";
-import { PageHeader } from "@/components/ui/page-header";
-import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
+import { AuditExportButton } from "@/components/admin/monitoring/audit-export-button";
+import { MonitoringPage } from "@/components/admin/monitoring/monitoring-page";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { AUDIT_ACTIONS } from "@/lib/audit/actions";
-import { fetchAuditLogPage, fetchAuditSummary, isSuperAdmin, listStaff, type AuditSummary } from "@/lib/audit/logQuery";
-import { parseAuditLogFilters } from "@/lib/audit/logView";
+import {
+  AUDIT_EXPORT_LIMIT,
+  fetchAuditEntry,
+  fetchAuditLogPage,
+  fetchAuditSummary,
+  isSuperAdmin,
+  listStaff,
+  type AuditSummary,
+} from "@/lib/audit/logQuery";
+import { auditQueryString, parseAuditLogFilters, type AuditLogEntry } from "@/lib/audit/logView";
 import { MONEY_ACTIONS_DESCRIPTION } from "@/lib/audit/moneyActions";
 
 function plural(n: number, one: string, many: string) {
-  return `${n.toLocaleString()} ${n === 1 ? one : many}`;
+  return `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
 }
 
-export default async function AuditLogPage({ searchParams }: { searchParams: Promise<{ target?: string }> }) {
+type Search = Promise<Record<string, string | string[] | undefined>>;
+
+/**
+ * Admin › Monitoring › Audit log (admin round 1, docs/design/admin-r1/monitoring.html screen 5), inside the Monitoring
+ * frame. Every staff role may open it; only a super admin sees other people's actions (lib/audit/logQuery.ts), and the
+ * tiles count the same rows the table shows. Every filter is in the address and is applied on the server for the first
+ * render — `?target=` from a record's page still opens that record's history — and `?entry=` opens one entry's sheet.
+ */
+export default async function AuditLogPage({ searchParams }: { searchParams: Search }) {
   const admin = await getCurrentAdmin();
   if (!admin) redirect("/admin/login");
 
   const viewer = { id: admin.id, role: admin.role };
   const everyone = isSuperAdmin(viewer);
 
-  // `?target=` deep-links one record's history (detail screens link here). It is applied on the
-  // server, so the first render is already the filtered list rather than the whole log.
-  const { target } = await searchParams;
-  const initialFilters = parseAuditLogFilters(new URLSearchParams(target ? { target } : {}), AUDIT_ACTIONS);
+  const raw = await searchParams;
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(raw)) {
+    const first = Array.isArray(value) ? value[0] : value;
+    if (typeof first === "string") params.set(key, first);
+  }
+  const filters = parseAuditLogFilters(params, AUDIT_ACTIONS);
+  const entryId = params.get("entry");
 
   const staff = await listStaff(viewer);
   const [firstPage, summary] = await Promise.all([
     // Throws when the log cannot be read: the evidence of record must never render as "empty".
-    fetchAuditLogPage(viewer, initialFilters, staff),
+    fetchAuditLogPage(viewer, filters, staff),
     fetchAuditSummary(viewer).catch((error: unknown): AuditSummary | null => {
       console.error("audit log summary failed", error);
       return null;
     }),
   ]);
+  // A linked entry not on this page is read on its own (still under the per-actor rule).
+  const entry: AuditLogEntry | null =
+    entryId && !firstPage.entries.some((row) => row.id === entryId)
+      ? await fetchAuditEntry(viewer, entryId, staff).catch((error: unknown) => {
+          console.error("audit entry read failed", error);
+          return null;
+        })
+      : null;
 
-  const unavailable = "—";
-  const todayFoot = !summary
-    ? "could not be counted"
+  // The tiles' links name UTC days, from the clock the rows were read at.
+  const weekAgo = new Date(firstPage.readAt - 6 * 86_400_000).toISOString().slice(0, 10);
+  const today = new Date(firstPage.readAt).toISOString().slice(0, 10);
+  const admins = summary?.todayAdmins;
+  const by = !summary
+    ? null
     : everyone
-      ? summary.todayAdmins === null
-        ? "staff count unavailable"
-        : `${summary.todayAdminsAtLeast ? "at least " : ""}${plural(summary.todayAdmins, "admin", "admins")}`
-      : "your actions";
+      ? admins === null || admins === undefined
+        ? null
+        : `by ${summary.todayAdminsAtLeast ? "at least " : ""}${plural(admins, "admin", "admins")}`
+      : "all yours";
 
   return (
-    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <PageHeader title="Audit log" description={everyone ? undefined : "Only your own recorded actions."} />
+    <MonitoringPage
+      step="audit"
+      info="Every recorded staff, agency and system action, newest first. Nothing is purged, and the database refuses edits and deletes, including from a super admin."
+      actions={<AuditExportButton isSuperAdmin={everyone} limit={AUDIT_EXPORT_LIMIT} />}
+    >
+      <div className="m-stagger flex w-full min-w-0 flex-col gap-4">
+        <StatStrip label="Audit log at a glance">
+          <StatTile
+            label="Entries today"
+            value={summary ? summary.todayCount.toLocaleString("en-US") : "—"}
+            footnote={!summary ? "Could not be counted" : everyone ? (by ? by.replace(/^by /, "") : "Staff count unavailable") : "Your actions"}
+            labelTitle="Since 00:00 UTC today"
+            href={`/admin/audit-log?from=${today}`}
+          />
+          <StatTile
+            label="This week"
+            value={summary ? summary.weekCount.toLocaleString("en-US") : "—"}
+            footnote={summary ? (everyone ? "Last 7 days" : "Your actions, last 7 days") : "Could not be counted"}
+            labelTitle="The last 7 days, to this moment"
+            href={`/admin/audit-log?from=${weekAgo}`}
+          />
+          <StatTile
+            label="Money actions"
+            value={summary ? summary.moneyCount.toLocaleString("en-US") : "—"}
+            footnote={summary ? "Billing and credit, 7 days" : "Could not be counted"}
+            labelTitle={MONEY_ACTIONS_DESCRIPTION}
+            href={`/admin/audit-log?lens=money&from=${weekAgo}`}
+          />
+        </StatStrip>
 
-      <BoardStatGrid>
-        <BoardStatTile
-          label="Entries today"
-          value={summary ? summary.todayCount.toLocaleString() : unavailable}
-          footnote={todayFoot}
-          title="Since 00:00 UTC today"
+        <AuditLogTable
+          initialEntries={firstPage.entries}
+          initialTotal={firstPage.total}
+          initialApproximate={firstPage.approximate}
+          initialQuery={auditQueryString(filters, everyone)}
+          initialEntry={entry}
+          renderedAt={firstPage.readAt}
+          pageSize={AUDIT_LOG_PAGE_SIZE}
+          isSuperAdmin={everyone}
+          allAdmins={staff}
+          role={admin.role}
         />
-        <BoardStatTile
-          label="This week"
-          value={summary ? summary.weekCount.toLocaleString() : unavailable}
-          footnote={summary ? (everyone ? "last 7 days" : "your actions, last 7 days") : "could not be counted"}
-          title="The last 7 days, to this moment"
-        />
-        <BoardStatTile
-          label="Money actions"
-          value={summary ? summary.moneyCount.toLocaleString() : unavailable}
-          tone={summary && summary.moneyCount > 0 ? "warning" : "default"}
-          footnote={summary ? "billing and credit actions, last 7 days" : "could not be counted"}
-          title={MONEY_ACTIONS_DESCRIPTION}
-        />
-        <BoardStatTile
-          label="Retention"
-          value="Kept indefinitely"
-          footnote="append-only"
-          title="Nothing is purged, and the database refuses edits and deletes, including from a super admin."
-        />
-      </BoardStatGrid>
-
-      <AuditLogTable
-        initialEntries={firstPage.entries}
-        initialTotal={firstPage.total}
-        initialApproximate={firstPage.approximate}
-        initialTarget={initialFilters.target ?? ""}
-        renderedAt={firstPage.readAt}
-        pageSize={AUDIT_LOG_PAGE_SIZE}
-        isSuperAdmin={everyone}
-        allAdmins={staff}
-      />
-    </div>
+      </div>
+    </MonitoringPage>
   );
 }

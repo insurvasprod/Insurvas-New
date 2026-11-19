@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { InfoTip } from "@/components/ui/info-tip";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
+import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
@@ -40,6 +41,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { inputControl } from "@/components/ui/field";
 
+import { CheckBox } from "@/components/ui/check-box";
 /** One view at a time (2026-10-06 redesign): the three stacked tables became tabs. */
 type View = "claims" | "claimable" | "undialable";
 const VIEWS: readonly View[] = ["claims", "claimable", "undialable"];
@@ -178,7 +180,7 @@ function ClaimPreview({ entry, cost, busy, fallback, onCreate, onCancel }: {
           const id = `claim-${entry.campaign_id}-${row.reason}`;
           const on = !off.has(row.reason);
           return <tr key={row.reason} className="m-row">
-            <td className={td}><input id={id} type="checkbox" className="size-4" checked={on} disabled={fallback || busy} onChange={() => toggle(row.reason)} /></td>
+            <td className={td}><CheckBox id={id} checked={on} disabled={fallback || busy} onChange={() => toggle(row.reason)} /></td>
             <td className={td} title={`Evidence per row: ${reasonEvidence(row.reason, row.sources)}`}><label htmlFor={id} className="font-medium text-foreground">{REASON_LABEL[row.reason]}</label></td>
             <td className={`${td} text-right tabular-nums`}>{count(row.rows)}</td>
             <td className={`${td} text-right tabular-nums`}>{entry.unit_cost_cents == null ? "—" : dollars(row.cents)}</td>
@@ -246,6 +248,9 @@ function CandidateRows({ state }: { state: { rows: ReturnCandidateRow[]; limit: 
  * strip of figures, then one row of tabs (claims, claimable rows, undialable share) with New claim on
  * its right; each tab is one table with its own toolbar, and a claim or a preview opens in a dialog.
  */
+/** The page's read, as the app's cache keys it (lib/client/resource-cache.ts). */
+const RETURNS_KEY = "/api/app/vendor-returns";
+
 /**
  * `embedded`: drawn as the Returns tab of Vendor bills (2026-10-26), whose header is the page's. Round 7 (owner
  * 2026-11-10, mockups-r7/accounting.html 2·6, 2·7), embedded only: the inner tab bar becomes chips in each
@@ -253,12 +258,14 @@ function CandidateRows({ state }: { state: { rows: ReturnCandidateRow[]; limit: 
  * holds Evidence CSV; a claimable row opens Review a claim, which holds Rows), and Review a claim is the title
  * line's primary, on the group whose window closes first.
  */
+
 export function VendorReturnsWorkspace({ initialVendorId, embedded = false }: { initialVendorId?: string; embedded?: boolean }) {
   const params = useSearchParams();
   const [actionSlot, setActionSlot] = useState<HTMLElement | null>(null);
   useEffect(() => { if (embedded) setActionSlot(document.getElementById(RETURNS_ACTIONS)); }, [embedded]);
-  const [report, setReport] = useState<VendorReturnsPageData | null>(null);
-  const [loading, setLoading] = useState(true);
+  // A repeat visit draws the last answer at once, then asks again (lib/client/resource-cache.ts).
+  const [report, setReport] = useState<VendorReturnsPageData | null>(() => seed<VendorReturnsPageData>(RETURNS_KEY)?.data ?? null);
+  const [loading, setLoading] = useState(() => report === null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [vendorId, setVendorId] = useState(initialVendorId ?? "");
@@ -282,17 +289,23 @@ export function VendorReturnsWorkspace({ initialVendorId, embedded = false }: { 
   const [newOpen, setNewOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
+  // Through the app's cache: `fresh` (every call but the first) after a change, so it is never the old answer.
+  const load = useCallback(async (fresh = true) => {
     setError(null);
     try {
-      const response = await fetch("/api/app/vendor-returns", { cache: "no-store" });
-      const body = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(body?.error ?? "Could not load vendor returns");
-      setReport(body);
+      setReport(await (fresh ? loadResource<VendorReturnsPageData>(RETURNS_KEY) : readResource<VendorReturnsPageData>(RETURNS_KEY)));
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load vendor returns"); }
     finally { setLoading(false); }
   }, []);
-  useEffect(() => { void (async () => { await Promise.resolve(); await load(); })(); }, [load]);
+  useEffect(() => {
+    void (async () => {
+      await Promise.resolve();
+      // A fresh document starts from the kept answer once it has hydrated, then asks again.
+      const kept = peek<VendorReturnsPageData>(RETURNS_KEY);
+      if (kept?.data) { setReport((current) => current ?? kept.data ?? null); setLoading(false); }
+      await load(false);
+    })();
+  }, [load]);
 
   async function refresh() {
     setRefreshing(true);
@@ -416,7 +429,16 @@ export function VendorReturnsWorkspace({ initialVendorId, embedded = false }: { 
   const creditedCents = sum(claims, (claim) => claim.amount_credited_cents);
   const outstandingCents = sum(claims.filter((claim) => claim.status !== "rejected"), (claim) => claim.amount_claimed_cents - claim.amount_credited_cents);
 
-  if (loading && !report) return <PageLoading />;
+  // Frame first (UI-CONSISTENCY §7a): the title draws at once (in Vendor bills, the frame's); the figures and the list
+  // load where they will be.
+  if (loading && !report) {
+    return (
+      <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+        {!embedded && <PageHeader title="Vendor returns" description="Return claims, and what each vendor credited." />}
+        <PageLoading header={false} />
+      </div>
+    );
+  }
 
   const clearFilters = () => { setSearch(""); setStatusFilter(""); chooseVendor(""); };
   const filtered = search.trim() !== "" || statusFilter !== "" || vendorId !== "";

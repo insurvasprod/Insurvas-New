@@ -14,8 +14,20 @@
  * A role's layout can only ever narrow what the gates allow: listing a section for a role does not
  * show it unless its page is open to them, and leaving it out hides it even when it is.
  */
-import type { TenantRole } from "../tenantAuth/roles.ts";
-import { allMenuItems } from "../menu/definition.ts";
+import type { MemberRole, TenantRole } from "../tenantAuth/roles.ts";
+import { AGENCY_OWNER_ONLY_KEYS, allMenuItems, menuRoleAdmits } from "../menu/definition.ts";
+
+/**
+ * The narrowing the sidebar applies on top of plan and role (roles r1, 2026-11-18: the dashboard ignored it, so a
+ * setter got an empty Compliance tab and an assistant an "Import a list" that led to "owners only"):
+ *   narrow       a session narrowed to a producer scope inside an agency (AG-0.5): the agency's own screens
+ *                (AGENCY_OWNER_ONLY_KEYS) are not offered
+ *   memberRole   the role as held (an admin, a manager), which the menu's gates read
+ *   extraRoles   custom team access: each role the member also holds opens its items
+ *   hiddenPages  custom team access: menu keys the owner hid for this member
+ * Omitted, nothing narrows: exactly the old rule.
+ */
+export type MenuGate = { narrow?: boolean; memberRole?: MemberRole; extraRoles?: readonly TenantRole[]; hiddenPages?: readonly string[] };
 
 /**
  * The blocks a home can hold.
@@ -312,16 +324,21 @@ export type TodayReads = { dialing: boolean; policies: boolean; inbound: boolean
 export type HomePlan = { code: string | null; features: readonly string[]; disabled?: readonly string[] };
 
 /** The path of the first menu entry in `opens` that this person's menu holds, or null. */
-export function firstOpenable(opens: Opens, granted: Iterable<string>, role: TenantRole, solo = false): string | null {
+export function firstOpenable(opens: Opens, granted: Iterable<string>, role: TenantRole, solo = false, gate: MenuGate = {}): string | null {
   const features = new Set(granted);
   const items = allMenuItems();
+  // The menu's own rule (buildAgentMenu): the held role and every extra role, less what the agency or the owner hid.
+  const roles: MemberRole[] = [gate.memberRole ?? role, ...(gate.extraRoles ?? [])];
+  const hidden = new Set(gate.hiddenPages ?? []);
   for (const key of opens) {
     const entry = items.find((item) => item.key === key);
     if (!entry || !entry.built) continue;
     // Solo mode (lib/tenantTeam/solo.ts): a team-only page is not in this person's menu.
     if (solo && entry.teamOnly) continue;
     if (entry.required_feature && !features.has(entry.required_feature)) continue;
-    if (entry.required_roles && !entry.required_roles.includes(role)) continue;
+    if (!roles.some((held) => menuRoleAdmits(entry.required_roles, held))) continue;
+    if (gate.narrow && AGENCY_OWNER_ONLY_KEYS.has(entry.key)) continue;
+    if (hidden.has(entry.key)) continue;
     return entry.path;
   }
   return null;
@@ -338,10 +355,11 @@ const DIALING_FIGURES: ReadonlySet<HomeFigureKey> = new Set(["dials", "reached",
  * `plan` is the raw plan (before kill switches): it picks the dashboard profile and decides the
  * upgrade tile. `granted` stays the effective list every link is gated by.
  */
-export function resolveRoleHome(granted: Iterable<string>, role: TenantRole, plan?: HomePlan | null, options: { solo?: boolean } = {}): ResolvedHome {
+export function resolveRoleHome(granted: Iterable<string>, role: TenantRole, plan?: HomePlan | null, options: { solo?: boolean; gate?: MenuGate } = {}): ResolvedHome {
   const features = [...granted];
   const layout = ROLE_HOMES[role];
-  const open = (opens: Opens) => firstOpenable(opens, features, role, options.solo === true);
+  const gate = options.gate ?? {};
+  const open = (opens: Opens) => firstOpenable(opens, features, role, options.solo === true, gate);
   const profile = dashboardProfile(plan, role);
   const moneyProfile = DASHBOARD_PROFILES[profile];
 
@@ -352,7 +370,7 @@ export function resolveRoleHome(granted: Iterable<string>, role: TenantRole, pla
     .map((key) => ({ key, href: open(HOME_NEEDS[key].opens) }))
     .filter((item): item is { key: HomeNeedKey; href: string } => item.href !== null);
   const money = (moneyProfile.money ?? layout.money)
-    .map((key) => ({ key, href: moneyHref(key, features, role) }))
+    .map((key) => ({ key, href: moneyHref(key, features, role, gate) }))
     .filter((item): item is { key: HomeMoneyKey; href: string } => item.href !== null);
 
   // The upgrade tile: the plan lacks the feature (and staff did not merely switch it off, which is
@@ -420,10 +438,10 @@ export function resolveRoleHome(granted: Iterable<string>, role: TenantRole, pla
 }
 
 /** A money figure's link: the first of its pages this person can open, with the view of its rows. */
-export function moneyHref(key: HomeMoneyKey, granted: Iterable<string>, role: TenantRole): string | null {
+export function moneyHref(key: HomeMoneyKey, granted: Iterable<string>, role: TenantRole, gate: MenuGate = {}): string | null {
   const entry = HOME_MONEY[key];
   for (const menuKey of entry.opens) {
-    const path = firstOpenable([menuKey], granted, role);
+    const path = firstOpenable([menuKey], granted, role, false, gate);
     if (path) return `${path}${entry.query?.[menuKey] ?? ""}`;
   }
   return null;

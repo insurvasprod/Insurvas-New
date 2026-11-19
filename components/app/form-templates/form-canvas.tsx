@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, type DragEvent } from "react";
+import { useRef, useState, type DragEvent } from "react";
+import { useFlip } from "@/components/ui/use-flip";
+import { useDragLift } from "@/components/ui/use-drag-lift";
 import { ArrowLeft, ArrowRight, Copy, Ellipsis, GripVertical, Plus, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -31,14 +33,16 @@ function readDrop(event: DragEvent): { item: LibraryItem } | { move: { fieldKey:
 const carries = (event: DragEvent) => event.dataTransfer.types.includes(LIBRARY_DRAG) || event.dataTransfer.types.includes(QUESTION_DRAG);
 
 /** One question as it sits on the page: the handle, the words, and what it is in a few words. */
-function QuestionCard({ field, placed, picked, changed, dropping, onPick, onDragStart, onDragOver, onDrop, onDuplicate, onMove, onRemove, canUp, canDown, pages, sectionKey }: {
+function QuestionCard({ field, placed, picked, changed, dropping, held, onPick, onDragStart, onDragEnd, onDragOver, onDrop, onDuplicate, onMove, onRemove, canUp, canDown, pages, sectionKey }: {
   field: TemplateField;
   placed: TemplateFormField;
   picked: boolean;
   changed: boolean;
   dropping: boolean;
+  held: boolean;
   onPick: () => void;
   onDragStart: (event: DragEvent<HTMLDivElement>) => void;
+  onDragEnd: () => void;
   onDragOver: (event: DragEvent<HTMLDivElement>) => void;
   onDrop: (event: DragEvent<HTMLDivElement>) => void;
   onDuplicate: (() => void) | null;
@@ -55,10 +59,12 @@ function QuestionCard({ field, placed, picked, changed, dropping, onPick, onDrag
   const required = field.is_required || placed.is_required;
   return (
     <div className={cn("min-w-0", placementWidth(field, placed) === "full" && "@xl:col-span-2")} onDragOver={onDragOver} onDrop={onDrop}>
-      {dropping && <div aria-hidden="true" className="mb-2 h-9 rounded-[10px] border-2 border-dashed border-[var(--primary)] bg-[var(--primary-soft)]" />}
+      {dropping && <div aria-hidden="true" className="m-drop-gap mb-2 h-9 rounded-[10px]" />}
       <div
+        data-flip-key={field.field_key}
         draggable
         onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
         onClick={onPick}
         onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onPick(); } }}
         role="button"
@@ -66,7 +72,8 @@ function QuestionCard({ field, placed, picked, changed, dropping, onPick, onDrag
         aria-pressed={picked}
         aria-label={`${field.label || "Untitled question"}${required ? ", must be answered" : ""}`}
         className={cn(
-          "group relative flex min-w-0 cursor-pointer items-start gap-2 rounded-[10px] border bg-[var(--surface)] py-2.5 pr-2 pl-1.5 transition-colors",
+          "group relative flex min-w-0 cursor-pointer items-start gap-2 rounded-[10px] border bg-[var(--surface)] py-2.5 pr-2 pl-1.5 transition-[color,background-color,border-color,opacity]",
+          held && "opacity-50",
           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
           picked ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-[var(--border-strong)]",
         )}
@@ -123,6 +130,12 @@ export function FormCanvas({ form, fields, page, onPage, picked, changed, onPick
   matched: { matched: number; total: number };
 }) {
   const [over, setOver] = useState<{ section: string; index: number } | null>(null);
+  // Wave C (plan item 12): a question picked up lifts and follows the pointer, the gap where it will land pushes the
+  // others aside, and on drop it glides from where it was let go into its place (useFlip); Move up/down glide too.
+  const [held, setHeld] = useState<string | null>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const flip = useFlip(pageRef);
+  const lift = useDragLift();
   const byKey = new Map(fields.map((field) => [field.field_key, field]));
   const sectionIndex = Math.max(0, form.sections.findIndex((section) => section.section_key === page));
   const section = form.sections[sectionIndex];
@@ -133,6 +146,8 @@ export function FormCanvas({ form, fields, page, onPage, picked, changed, onPick
     setOver(null);
     const read = readDrop(event);
     if (!read) return;
+    const from = lift.rect();
+    if (from && "move" in read) flip.place(read.move.fieldKey, from);
     if ("item" in read) onDropItem(read.item, sectionKey, index);
     else onMove(read.move.fieldKey, read.move.from, sectionKey, index);
   }
@@ -168,7 +183,7 @@ export function FormCanvas({ form, fields, page, onPage, picked, changed, onPick
               <Button type="button" variant="ghost" size="sm" className="text-[var(--error-ink)]" disabled={form.sections.length < 2} onClick={() => onRemovePage(section.section_key)}>Remove page</Button>
             </div>
             <p className="m-0 text-xs text-[var(--muted)]">Partners see this page {ORDINALS[sectionIndex] ?? `number ${sectionIndex + 1}`}. Drag a field by its handle, or drag one in from the left.</p>
-            <div className="grid gap-2.5 @xl:grid-cols-2" onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setOver(null); }}>
+            <div ref={pageRef} className="grid gap-2.5 @xl:grid-cols-2" onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setOver(null); }}>
               {section.fields.map((placed, index) => {
                 const field = byKey.get(placed.field_key);
                 if (!field) return null;
@@ -182,8 +197,10 @@ export function FormCanvas({ form, fields, page, onPage, picked, changed, onPick
                     picked={picked?.fieldKey === placed.field_key && picked.sectionKey === section.section_key}
                     changed={changed.has(placed.field_key)}
                     dropping={over?.section === section.section_key && over.index === index}
+                    held={held === placed.field_key}
                     onPick={() => onPick(placed.field_key, section.section_key)}
-                    onDragStart={(event) => { event.dataTransfer.setData(QUESTION_DRAG, JSON.stringify({ fieldKey: placed.field_key, from: section.section_key })); event.dataTransfer.effectAllowed = "move"; }}
+                    onDragStart={(event) => { event.dataTransfer.setData(QUESTION_DRAG, JSON.stringify({ fieldKey: placed.field_key, from: section.section_key })); event.dataTransfer.effectAllowed = "move"; lift.lift(event); setHeld(placed.field_key); }}
+                    onDragEnd={() => { setHeld(null); setOver(null); }}
                     onDragOver={(event) => overAt(event, section.section_key, index)}
                     onDrop={(event) => dropAt(event, section.section_key, index)}
                     onDuplicate={onDuplicate ? () => onDuplicate(placed.field_key, section.section_key) : null}

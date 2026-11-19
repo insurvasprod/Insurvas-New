@@ -9,6 +9,8 @@ import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ToggleChip } from "@/components/ui/toggle-chip";
+import { useArrivals } from "@/components/ui/use-arrivals";
+import { useDepartures } from "@/components/ui/use-row-exit";
 import { payIssueState } from "@/components/app/commissions/pay-issues/pay-issues-list";
 import { fileDay } from "@/lib/ingestion/constants";
 import { daysSince, payIssueMoney as money, type PayIssue } from "@/lib/commissions/payIssueGroups";
@@ -26,7 +28,11 @@ export function GroupRows({ rows, today, emptyTitle, emptyHint }: { rows: GroupR
   const [lag, setLag] = useState<"" | "past" | "within">("");
   const needle = query.trim().toLowerCase();
   const within = rows.filter((r) => r.withinLag).length;
-  const visible = useMemo(() => rows.filter((r) => (!needle || `${r.policyNumber ?? ""} ${r.clientName ?? ""}`.toLowerCase().includes(needle)) && (!lag || (lag === "within" ? r.withinLag : !r.withinLag))), [rows, needle, lag]);
+  // Tier 1 motion (2026-11-17): issues a letter from this group takes (or a decision on an issue's page) leave as the
+  // refresh lands: each stays in place, plays out, then goes. Ones a refresh brings in arrive tinted.
+  const left = useDepartures(rows, (row) => row.id);
+  const isNew = useArrivals(rows.map((row) => row.id));
+  const visible = useMemo(() => left.rows.filter((r) => (!needle || `${r.policyNumber ?? ""} ${r.clientName ?? ""}`.toLowerCase().includes(needle)) && (!lag || (lag === "within" ? r.withinLag : !r.withinLag))), [left.rows, needle, lag]);
 
   return (
     <PagedTableCard
@@ -62,7 +68,7 @@ export function GroupRows({ rows, today, emptyTitle, emptyHint }: { rows: GroupR
               const age = daysSince(row.foundAt, today);
               const chip = payIssueState(row);
               return (
-                <tr key={row.id} className="cursor-pointer" onClick={() => router.push(row.href)}>
+                <tr key={row.id} {...left.rowProps(row.id)} data-row-new={isNew(row.id) ? "" : undefined} className="cursor-pointer" onClick={() => router.push(row.href)}>
                   <td className="whitespace-nowrap font-medium tabular-nums text-foreground">
                     <Link href={row.policyHref ?? row.href} className="hover:underline" onClick={(e) => e.stopPropagation()}>{row.policyNumber ?? "Whole account"}</Link>
                   </td>

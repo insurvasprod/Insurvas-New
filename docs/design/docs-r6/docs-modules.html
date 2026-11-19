@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Use Insurvas guides</title>
+<!--kit-css-->
+<style>
+/*
+ * Docs round 6 — copied from the Settings round 8 kit, plus the Docs pieces at the end. Every board links this file so all boards share one look.
+ * Tokens = the live app: light "C · White + olive lines" + gold third colour; dark = the live dark theme.
+ * Text 12 / 14 / 16 only; page title 24. Theme: <body class="light|dark">. Option: <body data-opt="A|B|C">.
+ */
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--board);color:var(--ink)}
+body.light{--board:#e9ecea;--board-ink:#0d4037;--board-line:#cdd6d1;--board-card:#fff;
+  --canvas:#fbfcfb;--card:#fff;--card-border:#cbd8d2;--band:#e9f2ee;--tile:#fff;--tile-edge:#d9e5df;--hover:#f1f7f4;--rule:#dbe6e1;
+  --border:#cbd8d2;--border-strong:#6d7f77;--ink:#0d4037;--body:#26332e;--muted:#4d5f58;
+  --primary:#07d6a0;--primary-hover:#08bf8b;--on-primary:#0d4037;--primary-soft:#dcfaf0;--accent-ink:#00735a;--ring:#008769;
+  --ok:#0c6633;--ok-s:#e0f3e7;--warn:#9a3d00;--warn-s:#fde8dc;--bad:#ab1f1f;--bad-s:#fdeaea;--info:#1d4f9a;--info-s:#e3edfa;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#8a5a00;--hl-soft:#fdf2d9;--hl-mark:#c98a12;
+  --backdrop:rgba(13,40,34,.38);--shadow:0 1px 0 rgba(13,64,55,.04);--overlay:0 2px 6px rgba(13,64,55,.08),0 28px 60px -12px rgba(13,64,55,.28);--code:#f4f8f6}
+body.dark{--board:#050b09;--board-ink:#f2f7f5;--board-line:#1d2b26;--board-card:#0d1714;
+  --canvas:#08110f;--card:#0d1714;--card-border:rgba(255,255,255,.09);--band:rgba(255,255,255,.04);--tile:rgba(255,255,255,.035);--tile-edge:rgba(255,255,255,.06);--hover:rgba(255,255,255,.04);--rule:#1b2a25;
+  --border:#22342e;--border-strong:#5f7a71;--ink:#f2f7f5;--body:#c9d6d1;--muted:#93a69f;
+  --primary:#07d6a0;--primary-hover:#2fe0b0;--on-primary:#0d4037;--primary-soft:#0f3a30;--accent-ink:#4fe3bb;--ring:#07d6a0;
+  --ok:#45c07d;--ok-s:#11291d;--warn:#f08a4b;--warn-s:#2e180c;--bad:#f0837c;--bad-s:#2d1412;--info:#7fb0ff;--info-s:#10203a;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#f5c562;--hl-soft:#2b2210;--hl-mark:#f2b33d;
+  --backdrop:rgba(0,0,0,.6);--shadow:none;--overlay:0 24px 64px rgba(0,0,0,.7);--code:#0a1412}
+body{--nav:#0d4037;--nav-ink:#eaf6f2;--nav-muted:#9fc4b8;--nav-line:#1d5649}
+
+/* ── Board chrome ───────────────────────────────────────────── */
+.board{max-width:1520px;margin:0 auto;padding:24px 16px 120px;color:var(--board-ink)}
+.board > h1{font-size:24px;margin:0;letter-spacing:-.02em}
+.lead{max-width:1100px;margin:8px 0 0;color:var(--board-ink);opacity:.85}
+.bar{position:sticky;top:0;z-index:80;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 0;margin:16px 0;background:var(--board);border-bottom:1px solid var(--board-line)}
+.bar .grp{display:flex;gap:6px;align-items:center;margin-right:10px}
+.bar .grp > span{font-size:12px;font-weight:600;opacity:.75;margin-right:2px}
+.bar button{font:600 14px Inter,system-ui,sans-serif;border:1px solid var(--board-line);background:var(--board-card);color:var(--board-ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+.bar button[aria-pressed=true]{background:#0d4037;color:#fff;border-color:#0d4037}
+.bar .hint{font-size:12px;opacity:.7;margin-left:auto}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin:14px 0}
+.notes > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px;font-size:14px}
+.notes b{display:block;margin-bottom:3px}
+.sec{display:flex;align-items:baseline;gap:12px;margin:30px 0 10px}
+.sec h2{font-size:16px;margin:0}
+.sec span{font-size:12px;opacity:.75}
+.opt{display:none}
+body[data-opt=A] .opt.A, body[data-opt=B] .opt.B, body[data-opt=C] .opt.C{display:block}
+.pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px}
+.pick > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:14px;font-size:14px}
+.pick > div.rec{border:2px solid #07d6a0}
+.pick b{font-size:16px;display:block;margin-bottom:4px}
+.pick ul{margin:6px 0 0;padding-left:18px}
+.tag-mig{display:inline-block;font-size:12px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink);margin-left:6px;vertical-align:middle}
+
+/* ── App shell ──────────────────────────────────────────────── */
+.app{display:grid;grid-template-columns:56px 232px 1fr;grid-template-rows:52px 1fr;height:760px;background:var(--canvas);border-radius:14px;overflow:hidden;border:1px solid var(--board-line);margin-bottom:20px;color:var(--ink);position:relative}
+.app.tall{height:880px}
+.app.norail{grid-template-columns:56px 1fr}
+.top{grid-column:1/-1;background:var(--nav);display:flex;align-items:center;gap:12px;padding:0 16px}
+.top .logo{width:22px;height:22px;border-radius:6px;background:var(--primary)}
+.top .search{flex:0 0 280px;height:32px;border-radius:8px;background:rgba(234,246,242,.08);color:var(--nav-muted);display:flex;align-items:center;padding:0 12px;font-size:12px}
+.top .sp{flex:1}
+.top .me{width:30px;height:30px;border-radius:50%;background:var(--hl);color:var(--on-hl);display:grid;place-items:center;font-size:12px;font-weight:700}
+.icons{background:var(--nav);display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0}
+.icons i{display:block;width:22px;height:22px;border-radius:6px;border:1.5px solid var(--nav-muted);opacity:.85}
+.icons i.on{border-color:var(--primary);background:rgba(7,214,160,.16)}
+/* settings rail */
+.srail{border-right:1px solid var(--border);background:var(--card);padding:12px 10px;overflow:auto}
+.srail .find{height:32px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--muted);margin-bottom:10px}
+.srail h5{font-size:12px;font-weight:600;color:var(--muted);margin:12px 6px 4px}
+.srail a{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:8px;font-size:14px;color:var(--body);text-decoration:none}
+.srail a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.srail a small{font-size:12px;color:var(--muted)}
+.srail a .cnt{font-size:12px;font-weight:700;padding:0 6px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink)}
+/* main */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px 24px 20px}
+.crumb{font-size:12px;color:var(--muted)}
+.head{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;margin:2px 0 4px}
+.head h3{font-size:24px;font-weight:600;letter-spacing:-.025em;margin:0}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--border);flex:1;min-width:200px}
+.tabs a{font-size:14px;color:var(--muted);padding:6px 0 8px;border-bottom:2px solid transparent;text-decoration:none;white-space:nowrap}
+.tabs a.on{color:var(--ink);border-color:var(--primary);font-weight:500}
+.tabs a .c{font-size:12px;margin-left:4px;padding:0 5px;border-radius:5px;background:var(--band);color:var(--muted)}
+.head .acts{display:flex;gap:8px;margin-left:auto;padding-bottom:6px}
+.status{font-size:12px;color:var(--muted);margin:2px 0 12px;display:flex;align-items:center;gap:6px}
+.status .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.status.bad .dot{background:var(--bad)}
+.status.warn .dot{background:var(--warn)}
+.body{flex:1;min-height:0;display:flex;gap:12px}
+/* cards */
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--shadow);min-width:0;display:flex;flex-direction:column;min-height:0}
+.card.flex1{flex:1}
+.card-h{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--rule);background:var(--band);border-radius:16px 16px 0 0}
+.card-h b{font-size:14px;font-weight:600}
+.card-h .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.card-b{padding:14px 16px}
+.scroll{overflow:auto;min-height:0;flex:1}
+.card-f{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule)}
+.card-f .sp{flex:1}
+.savebar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule);background:var(--hl-soft);border-radius:0 0 16px 16px;font-size:14px;color:var(--hl-ink);font-weight:500}
+.savebar .sp{flex:1}
+/* form */
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+.fgrid .full{grid-column:1/-1}
+label.l{display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:5px}
+.help{font-size:12px;color:var(--muted);margin-top:4px}
+.err{font-size:12px;color:var(--bad);margin-top:4px}
+.input{height:36px;border-radius:8px;border:1px solid var(--border-strong);background:var(--card);color:var(--ink);padding:0 12px;font-size:14px;display:flex;align-items:center;gap:8px;min-width:0}
+.input.ph{color:var(--muted)}
+.input.focus{outline:2px solid var(--ring);outline-offset:2px}
+.input.bad{border-color:var(--bad)}
+.input.dis{background:var(--band);color:var(--muted);border-color:var(--border)}
+.input .end{margin-left:auto;color:var(--muted);font-size:12px}
+.textarea{min-height:72px;align-items:flex-start;padding:8px 12px;height:auto}
+.fsec{padding:16px 0;border-top:1px solid var(--rule)}
+.fsec:first-child{border-top:0;padding-top:4px}
+.fsec > h4{font-size:16px;margin:0 0 2px}
+.fsec > p{font-size:12px;color:var(--muted);margin:0 0 12px}
+/* controls */
+.btn{font:500 14px Inter,system-ui,sans-serif;height:36px;padding:0 14px;border-radius:8px;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;cursor:default}
+.btn.sm{height:30px;padding:0 10px;font-size:12px}
+.btn.p{background:var(--primary);color:var(--on-primary)}
+.btn.o{background:var(--card);border-color:var(--border);color:var(--ink)}
+.btn.g{background:transparent;color:var(--body)}
+.btn.hl{background:var(--hl);color:var(--on-hl);font-weight:600}
+.btn.danger{background:var(--bad-s);color:var(--bad)}
+.btn.d{opacity:.5}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:500;background:var(--card);color:var(--body);border:1px solid var(--tile-edge);white-space:nowrap}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.n::before{display:none}
+.chip.ok{background:var(--ok-s);color:var(--ok);border-color:transparent}
+.chip.warn{background:var(--warn-s);color:var(--warn);border-color:transparent}
+.chip.bad{background:var(--bad-s);color:var(--bad);border-color:transparent}
+.chip.info{background:var(--info-s);color:var(--info);border-color:transparent}
+.chip.act{background:var(--primary-soft);color:var(--accent-ink);border-color:transparent}
+.chip.hl{background:var(--hl-soft);color:var(--hl-ink);border-color:transparent;font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg span{padding:6px 12px;font-size:14px;color:var(--body);border-left:1px solid var(--border)}
+.seg span:first-child{border-left:0}
+.seg span.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.tog{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);font-size:14px;color:var(--body)}
+.tog.on{background:var(--primary-soft);border-color:transparent;color:var(--accent-ink);font-weight:500}
+.switch{width:36px;height:20px;border-radius:999px;background:var(--border-strong);position:relative;display:inline-block;vertical-align:middle;flex:none}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(13,64,55,.25)}
+.switch.on{background:var(--primary)}
+.switch.on::after{left:18px}
+.check{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.check.on{background:var(--primary);border-color:var(--primary)}
+.radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.radio.on{border:5px solid var(--primary)}
+.av{width:28px;height:28px;border-radius:50%;display:inline-grid;place-items:center;font-size:12px;font-weight:700;background:var(--hl-soft);color:var(--hl-ink);flex:none}
+.ic{width:32px;height:32px;border-radius:9px;display:inline-grid;place-items:center;background:var(--primary-soft);color:var(--accent-ink);font-weight:700;flex:none}
+.muted{color:var(--muted)}
+small{font-size:12px}
+.small{font-size:12px}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--code);border:1px solid var(--tile-edge);border-radius:10px;padding:10px 12px;color:var(--body);white-space:pre;overflow:auto}
+.copy{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:0 4px 0 12px;height:36px;background:var(--card)}
+.copy .v{flex:1;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile{background:var(--tile);box-shadow:inset 0 0 0 1px var(--tile-edge);border-radius:12px;padding:10px 12px}
+.tile small{display:block;font-size:12px;color:var(--muted)}
+.tile b{font-size:16px}
+.list a,.li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--rule);color:var(--body);text-decoration:none}
+.li.on{background:var(--primary-soft);box-shadow:inset 2px 0 0 var(--primary)}
+.li b{font-size:14px;color:var(--ink);display:block}
+.li small{font-size:12px;color:var(--muted)}
+.li .end{margin-left:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+thead th{background:var(--band);color:var(--muted);font-weight:500;font-size:12px;text-align:left;padding:8px 14px;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:9px 14px;border-bottom:1px solid var(--rule);color:var(--body);white-space:nowrap}
+tbody tr.h td{background:var(--hover)}
+tbody tr.s td{background:var(--primary-soft)}
+.strip{display:grid;grid-auto-flow:column;grid-auto-columns:1fr}
+.strip > div{padding:10px 16px;border-left:1px solid var(--rule)}
+.strip > div:first-child{border-left:0}
+.strip small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.strip b{display:block;font-size:24px;font-weight:600;letter-spacing:-.02em}
+.steps{display:flex;gap:8px;align-items:center}
+.steps span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.steps span i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;background:var(--band);color:var(--muted)}
+.steps span.on{color:var(--ink);font-weight:600}
+.steps span.on i{background:var(--primary);color:var(--on-primary)}
+.steps span.done i{background:var(--primary-soft);color:var(--accent-ink)}
+.steps em{flex:1;height:1px;background:var(--border);min-width:16px}
+/* overlays */
+.scrim{position:absolute;inset:52px 0 0 0;background:var(--backdrop);z-index:5}
+.sheet{position:absolute;top:52px;right:0;bottom:0;width:480px;background:var(--card);border-left:1px solid var(--border);box-shadow:var(--overlay);z-index:6;display:flex;flex-direction:column}
+.sheet.wide{width:640px}
+.sheet-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--rule)}
+.sheet-h b{font-size:16px}
+.sheet-h .x{margin-left:auto;color:var(--muted);font-size:16px}
+.sheet-b{padding:16px 18px;overflow:auto;flex:1}
+.sheet-f{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--rule)}
+.dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:440px;background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--overlay);z-index:6;padding:18px}
+.dialog h4{margin:0 0 6px;font-size:16px}
+.dialog p{margin:0 0 12px;font-size:14px;color:var(--body)}
+.menu{background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:var(--overlay);padding:4px;width:220px}
+.menu div{padding:8px 10px;border-radius:6px;font-size:14px;color:var(--body);display:flex;justify-content:space-between}
+.menu div.h{background:var(--hover);color:var(--ink)}
+.menu hr{border:0;border-top:1px solid var(--rule);margin:4px 0}
+.toast{display:inline-flex;align-items:center;gap:10px;background:#0d4037;color:#f2f7f5;border-radius:999px;padding:10px 16px;font-size:14px}
+body.dark .toast{background:#f2f7f5;color:#0d4037}
+.toast i{width:8px;height:8px;border-radius:50%;background:#07d6a0}
+.skel{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--band),var(--hover),var(--band));margin:8px 0}
+.empty{text-align:center;padding:28px 16px}
+.empty .ic{margin:0 auto 10px}
+.empty b{display:block;font-size:16px}
+.empty p{font-size:14px;color:var(--muted);margin:4px 0 12px}
+/* state strip under a board section: loading / empty / error side by side */
+.states{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.states > .card{min-height:180px}
+@media (max-width:1100px){.app{grid-template-columns:56px 1fr}.srail{display:none}.states{grid-template-columns:1fr}.fgrid{grid-template-columns:1fr}}
+
+/* ── Docs round 6 additions ─────────────────────────────────── */
+.app.docs{grid-template-columns:56px 1fr}
+.dmain{display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px 24px 20px;gap:12px;overflow:auto}
+.dhead{display:flex;align-items:center;gap:16px}
+.dhead h3{font-size:24px;font-weight:600;letter-spacing:-.025em;margin:0}
+.dhead .dsearch{flex:0 1 460px;margin:0 auto;height:36px;border:1px solid var(--border-strong);border-radius:8px;display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--muted);font-size:14px}
+.dhead .dsearch kbd{margin-left:auto;font:600 12px Inter,sans-serif;border:1px solid var(--border);border-radius:5px;padding:0 5px}
+.dgrid{display:grid;gap:12px;min-height:0;flex:1}
+.drail{background:var(--card);border:1px solid var(--card-border);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:8px;overflow:auto}
+.drail h6{font-size:12px;font-weight:600;color:var(--muted);margin:8px 6px 2px}
+.drail a{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;font-size:14px;color:var(--body);text-decoration:none}
+.drail a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.drail a .n{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--band);color:var(--muted);flex:none}
+.drail a.on .n{background:var(--primary);color:var(--on-primary)}
+.drail a .end{margin-left:auto;font-size:12px;color:var(--muted)}
+.dot-done{width:16px;height:16px;border-radius:50%;background:var(--ok);flex:none;position:relative}
+.dot-done::after{content:"";position:absolute;left:5px;top:3px;width:4px;height:7px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.dot-todo{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-strong);flex:none}
+.dot-read{width:16px;height:16px;border-radius:50%;border:5px solid var(--hl);flex:none}
+.ring{--p:50;width:64px;height:64px;border-radius:50%;background:conic-gradient(var(--primary) calc(var(--p)*1%),var(--band) 0);display:grid;place-items:center;flex:none}
+.ring::before{content:attr(data-v);width:50px;height:50px;border-radius:50%;background:var(--card);display:grid;place-items:center;font-size:14px;font-weight:700;color:var(--ink)}
+.ring.lg{width:92px;height:92px}.ring.lg::before{width:74px;height:74px;font-size:16px}
+.segbar{display:flex;gap:3px;height:8px}
+.segbar i{flex:1;border-radius:4px;background:var(--band);position:relative;overflow:hidden}
+.segbar i::after{content:"";position:absolute;inset:0;width:var(--f,0%);background:var(--primary)}
+.segbar i.read::after{background:var(--hl)}
+.legend{display:flex;gap:12px;font-size:12px;color:var(--muted);align-items:center}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+.pbar{height:6px;border-radius:999px;background:var(--band);overflow:hidden}
+.pbar i{display:block;height:100%;background:var(--primary);border-radius:999px}
+.scard{background:var(--card);border:1px solid var(--card-border);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.scard.cur{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+.scard .k{font-size:12px;color:var(--muted)}
+.scard b{font-size:14px;color:var(--ink)}
+.scard p{margin:0;font-size:14px;color:var(--muted)}
+.shot{border:1px solid var(--border);border-radius:10px;background:linear-gradient(var(--band),var(--band)) 0 0/100% 14px no-repeat,var(--canvas);aspect-ratio:16/10;position:relative;overflow:hidden}
+.shot::before{content:"";position:absolute;left:8%;top:22%;right:40%;height:10%;border-radius:4px;background:var(--tile-edge)}
+.shot::after{content:"";position:absolute;left:8%;top:40%;right:20%;height:34%;border-radius:6px;background:var(--hover);box-shadow:inset 0 0 0 1px var(--tile-edge)}
+.shot .lit{position:absolute;border:2px solid var(--primary);border-radius:6px;z-index:2}
+.shot .coach{position:absolute;z-index:2;background:var(--card);border:1px solid var(--primary);border-radius:6px;padding:4px 6px;font-size:12px;color:var(--ink);box-shadow:var(--overlay);max-width:46%}
+.flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap}
+.flow .node{flex:1 1 120px;min-width:110px;background:var(--card);border:1px solid var(--card-border);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:3px}
+.flow .node small{font-size:12px;color:var(--muted)}
+.flow .node b{font-size:14px}
+.flow .arr{width:22px;display:grid;place-items:center;color:var(--border-strong);font-size:16px}
+.flow .node.on{border-color:var(--primary);background:var(--primary-soft)}
+.modgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.mod{background:var(--card);border:1px solid var(--card-border);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mod .t{display:flex;align-items:center;gap:8px}
+.mod .t b{font-size:14px}
+.mod p{margin:0;font-size:12px;color:var(--muted)}
+.qa{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.qa > div{background:var(--card);border:1px solid var(--card-border);border-radius:14px;padding:12px 14px}
+.qa h5{margin:0 0 6px;font-size:12px;font-weight:600;color:var(--accent-ink)}
+.qa ul,.qa ol{margin:0;padding-left:18px;font-size:14px;color:var(--body)}
+.qa li{margin:3px 0}
+.content{background:var(--board-card);border:1px solid var(--board-line);border-radius:14px;padding:14px 16px;color:var(--board-ink)}
+.content h3{margin:0 0 2px;font-size:16px}
+.content .who{font-size:12px;opacity:.75;margin-bottom:8px}
+.content .cols{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:16px;font-size:14px}
+.content h5{margin:0 0 4px;font-size:12px}
+.content ol,.content ul{margin:0;padding-left:18px}
+.content li{margin:2px 0}
+.content .open{font-size:12px;opacity:.8;margin-top:8px}
+@media (max-width:1100px){.qa,.content .cols{grid-template-columns:1fr}}
+
+</style>
+<!--/kit-css-->
+<style>
+.roles{display:flex;gap:6px;flex-wrap:wrap}
+.roles span{border:1px solid var(--border);border-radius:999px;padding:3px 10px;font-size:12px;color:var(--body)}
+.roles span.on{background:var(--primary-soft);color:var(--accent-ink);border-color:transparent;font-weight:600}
+.tabsbar{display:flex;gap:18px;border-bottom:1px solid var(--border)}
+.tabsbar a{font-size:14px;color:var(--muted);padding:6px 0 8px;border-bottom:2px solid transparent}
+.tabsbar a.on{color:var(--ink);border-color:var(--primary);font-weight:500}
+.day{display:grid;grid-template-columns:90px 1fr;gap:0}
+.day .t{font-size:12px;color:var(--muted);padding:12px 10px 0 0;text-align:right;border-right:2px solid var(--border)}
+.day .e{padding:8px 0 8px 16px;position:relative}
+.day .e::before{content:"";position:absolute;left:-7px;top:14px;width:12px;height:12px;border-radius:50%;background:var(--primary)}
+.big-why{font-size:16px;color:var(--ink);margin:0}
+.stat{display:flex;flex-direction:column}
+.stat b{font-size:24px;letter-spacing:-.02em}
+.stat small{color:var(--muted)}
+.contentgrid{display:grid;gap:12px}
+</style>
+</head>
+<body class="dark" data-opt="A">
+<div class="board">
+  <h1>Docs › Use Insurvas, module by module (new chapter)</h1>
+  <p class="lead">A new chapter with one guide per module, 12 in all. Each answers three questions in plain words: how it works, why we built it, and what it does for you, the person reading. Each ends with the first three clicks and a button into the module. The template is the A/B/C choice. The content for all 12 is written below it, for you to correct.</p>
+  <div class="notes">
+    <div><b>Why a separate chapter</b>"Set up Insurvas" is one-time setup. These guides are for the day after: what Pay issues means, why Carrier sync wants agent codes, when to open the Consent locker.</div>
+    <div><b>Linked both ways</b>Each module's page in the app gets an (i) "How this works" link to its guide. Each guide links back into the module and to the setup steps it needs.</div>
+    <div><b>Per role</b>One guide, with "What it does for you" switching by role (owner, producer, bookkeeper…). People only see the modules on their plan.</div>
+  </div>
+
+  <div class="bar" role="toolbar">
+    <div class="grp"><span>Template</span><button data-opt-btn="A">A · How · Why · For you</button><button data-opt-btn="B">B · Four tabs</button><button data-opt-btn="C">C · A day with it</button></div>
+    <div class="grp"><span>Theme</span><button data-theme-btn="light">Light</button><button data-theme-btn="dark">Dark</button></div>
+    <span class="hint">Keys 1–3 option · L / D theme</span>
+  </div>
+
+  <!-- ───────── A ───────── -->
+  <div class="opt A">
+    <div class="sec"><h2>A · How · Why · For you</h2><span>One screen: the module's flow as boxes, then three cards side by side, then the first three clicks on real screens</span></div>
+    <div class="app docs tall">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DD</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i class="on"></i><i></i></div>
+      <div class="dmain">
+        <div class="crumb">Docs › Use Insurvas</div>
+        <div class="dhead"><h3>Commissions</h3><span class="chip n">5 min read</span><div class="dsearch">⌕ Search Docs<kbd>⌘K</kbd></div><span class="btn hl">Open Commissions ›</span></div>
+        <p class="big-why">Get paid every dollar the carriers owe you, and pay your team from what really came in.</p>
+        <div class="card"><div class="card-b">
+          <div class="small muted" style="margin-bottom:8px">How it works</div>
+          <div class="flow">
+            <div class="node"><small>1</small><b>Statements</b><small>Upload what each carrier sent</small></div><div class="arr">→</div>
+            <div class="node"><small>2</small><b>Matched</b><small>Each line to a policy</small></div><div class="arr">→</div>
+            <div class="node on"><small>3</small><b>Pay issues</b><small>Missing, short, wrong chargebacks</small></div><div class="arr">→</div>
+            <div class="node"><small>4</small><b>Who gets the credit</b><small>Producer, splits, overrides</small></div><div class="arr">→</div>
+            <div class="node"><small>5</small><b>Pay out</b><small>Producers, team, partners</small></div>
+          </div>
+        </div></div>
+        <div class="qa">
+          <div><h5>Why we built it</h5><ul><li>Carriers short-pay, miss advances and charge back the wrong policy. Agencies lose a few percent of revenue to it without knowing.</li><li>Checking a statement by hand takes hours, so most agencies don't.</li></ul></div>
+          <div><h5>What it does for you</h5><div class="roles" style="margin-bottom:6px"><span class="on">Owner</span><span>Producer</span><span>Bookkeeper</span></div><ul><li>Every statement is checked against your book in minutes.</li><li>Money owed comes back: claim it with a letter Insurvas writes.</li><li>Producer pay comes from reconciled numbers, so there are no pay disputes.</li></ul></div>
+          <div><h5>You'll need first</h5><ul><li><span class="dot-done" style="display:inline-block;width:12px;height:12px;vertical-align:-1px"></span> Add your carriers</li><li><span class="dot-done" style="display:inline-block;width:12px;height:12px;vertical-align:-1px"></span> Upload a statement</li><li><span class="dot-todo" style="display:inline-block;width:12px;height:12px;vertical-align:-1px"></span> Set your hierarchy (for overrides)</li></ul></div>
+        </div>
+        <div class="card"><div class="card-h"><b>Your first three clicks</b><span class="r"><span class="chip n">Real screens</span></span></div><div class="card-b"><div class="thumbs" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+          <div><div class="shot"><span class="lit" style="left:70%;top:20%;width:20%;height:10%"></span></div><div class="small" style="margin-top:4px"><b>1</b> Commissions › Statements › Import</div></div>
+          <div><div class="shot"><span class="lit" style="left:10%;top:40%;width:50%;height:12%"></span></div><div class="small" style="margin-top:4px"><b>2</b> Open Pay issues, choose a group</div></div>
+          <div><div class="shot"><span class="lit" style="left:60%;top:70%;width:24%;height:10%"></span></div><div class="small" style="margin-top:4px"><b>3</b> Decide: claim, accept or write off</div></div>
+        </div></div></div>
+      </div>
+    </div>
+    <div class="sec"><h2>A · Where it's linked from</h2><span>The (i) on every module page's title opens its guide (an edit surface the owner asked to see)</span></div>
+    <div class="app docs" style="height:300px">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DD</span></div>
+      <div class="icons"><i></i><i></i><i class="on"></i><i></i><i></i><i></i></div>
+      <div class="dmain" style="position:relative">
+        <div class="crumb">Commissions</div>
+        <div class="dhead"><h3>Pay issues ⓘ</h3><nav class="tabs"><a class="on">Open <span class="c">12</span></a><a>Claimed</a><a>Closed</a></nav></div>
+        <div class="menu" style="position:absolute;left:200px;top:70px;width:300px"><div class="h"><b>Pay issues</b></div><div style="display:block;font-size:12px;color:var(--muted)">What a carrier didn't pay, short-paid or charged back wrongly, grouped so you claim it in one letter.</div><hr><div class="h">How Commissions works · Docs ›</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── B ───────── -->
+  <div class="opt B">
+    <div class="sec"><h2>B · Four tabs</h2><span>The same content in tabs: How it works · Why · For you · First clicks. Shorter screens, more clicks</span></div>
+    <div class="app docs tall">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DD</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i class="on"></i><i></i></div>
+      <div class="dmain">
+        <div class="crumb">Docs › Use Insurvas</div>
+        <div class="dhead"><h3>Commissions</h3><nav class="tabsbar" style="flex:1"><a class="on">How it works</a><a>Why we built it</a><a>For you</a><a>First clicks</a></nav><span class="btn hl">Open Commissions ›</span></div>
+        <div class="dgrid" style="grid-template-columns:1fr 300px">
+          <div class="card"><div class="card-b" style="display:flex;flex-direction:column;gap:12px">
+            <div class="steprow" style="display:grid;grid-template-columns:30px 1fr;gap:10px"><span class="ic">1</span><div><b>Upload each carrier statement</b><div class="muted small">PDF, Excel or CSV, as the carrier sent it. Insurvas remembers each carrier's columns.</div></div></div>
+            <div style="display:grid;grid-template-columns:30px 1fr;gap:10px"><span class="ic">2</span><div><b>Insurvas matches every line to a policy</b><div class="muted small">By policy number, then by writing number and name.</div></div></div>
+            <div style="display:grid;grid-template-columns:30px 1fr;gap:10px"><span class="ic">3</span><div><b>Anything wrong becomes a pay issue</b><div class="muted small">Missing advance, short-paid, a chargeback on a policy still in force.</div></div></div>
+            <div style="display:grid;grid-template-columns:30px 1fr;gap:10px"><span class="ic">4</span><div><b>Credit goes to the right people</b><div class="muted small">Writing agent, splits and the overrides up the hierarchy.</div></div></div>
+            <div style="display:grid;grid-template-columns:30px 1fr;gap:10px"><span class="ic">5</span><div><b>Pay out from what came in</b><div class="muted small">Producer pay, team payouts, partner payouts. Each producer sees "My pay".</div></div></div>
+          </div></div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div class="scard"><b>In this module</b><div class="toc"><a>Statements</a><a>Pay issues</a><a>Who gets the credit</a><a>Producer pay</a><a>Team payouts</a><a>Commission splits</a><a>Partner payouts</a><a>My pay</a></div></div>
+            <div class="scard"><b>Needs first</b><p class="small">Add your carriers · Upload a statement</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── C ───────── -->
+  <div class="opt C">
+    <div class="sec"><h2>C · A day with it</h2><span>Told as a story: when in the week or month you open the module, and what you do there, with real numbers from a sample agency</span></div>
+    <div class="app docs tall">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DD</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i class="on"></i><i></i></div>
+      <div class="dmain">
+        <div class="crumb">Docs › Use Insurvas</div>
+        <div class="dhead"><h3>Commissions</h3><div class="roles"><span class="on">Owner</span><span>Bookkeeper</span><span>Producer</span></div><span style="flex:1"></span><span class="btn hl">Open Commissions ›</span></div>
+        <div class="dgrid" style="grid-template-columns:1fr 300px">
+          <div class="card"><div class="card-b">
+            <div class="day">
+              <div class="t">1st of the month</div><div class="e"><b>Statements arrive</b><div class="muted small">You upload Mutual of Omaha's and Americo's statements. 214 lines, 209 match on their own.</div></div>
+              <div class="t">Same day</div><div class="e"><b>5 pay issues appear</b><div class="muted small">3 missing advances, 1 short-paid, 1 chargeback on a policy that's still in force: $2,480 in all.</div></div>
+              <div class="t">Day 2</div><div class="e"><b>One letter per carrier</b><div class="muted small">Insurvas drafts the claim. You send it and mark it claimed.</div></div>
+              <div class="t">Day 5</div><div class="e"><b>Producer pay</b><div class="muted small">Each producer's pay comes from matched lines only. They see the same numbers in My pay.</div></div>
+            </div>
+          </div></div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div class="scard"><div class="stat"><small>Found in a typical month</small><b>$2,480</b><small>sample agency, 4 carriers</small></div></div>
+            <div class="scard"><b>Why we built it</b><p class="small">Carriers make mistakes, and nobody checks 200 lines by hand.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec"><h2>Pick a template</h2><span>Nothing is built until you choose</span></div>
+  <div class="pick">
+    <div class="rec"><b>A · How · Why · For you (recommended)</b>Answers all three questions on one screen, then hands you the first three clicks.<ul><li>The flow as boxes teaches the module's shape at a glance.</li><li>"For you" switches by role.</li><li>The (i) on every module page links here.</li></ul></div>
+    <div><b>B · Four tabs</b>Shorter, but "why" and "for you" are hidden behind tabs most people won't open.</div>
+    <div><b>C · A day with it</b>The most human: real numbers and real timing. Harder to keep true as the product changes; the numbers come from a sample agency.</div>
+  </div>
+
+  <div class="sec"><h2>The 12 guides: content to review</h2><span>Same words in every template. Tell me what's wrong or missing; the order follows a lead becoming money</span></div>
+  <div class="contentgrid">
+
+    <div class="content"><h3>1 · Leads</h3><div class="who">Owner · manager · Lead workspace, Lead flow, Vendors &amp; campaigns, Duplicate check, Lead recycling</div><div class="cols">
+      <div><h5>How it works</h5><ol><li>Each lead buy is a campaign under its vendor.</li><li>You import the vendor's file into that campaign.</li><li>Insurvas checks every lead: do-not-call, known litigators, duplicates, before anyone can dial it.</li><li>Routing hands leads to agents who are licensed and appointed in the lead's state.</li><li>Leads nobody reached go to recycling on a schedule.</li></ol></div>
+      <div><h5>Why we built it</h5><ul><li>Spreadsheets lose where a lead came from, so nobody knows which vendor really sells.</li><li>One TCPA claim from a bad list costs more than the list.</li></ul></div>
+      <div><h5>What it does for you</h5><ul><li><b>Owner:</b> cost per sale for every vendor and campaign.</li><li><b>Producer:</b> only clean leads you can legally call, in your states.</li></ul></div>
+    </div><div class="open">First clicks: Vendors &amp; campaigns › New campaign · Lead flow › Import · Route</div></div>
+
+    <div class="content"><h3>2 · Today: dialer, inbound, callbacks, calendar</h3><div class="who">Producer · setter · Dialer, Inbound, Callbacks, Calendar, Appointments &amp; setters</div><div class="cols">
+      <div><h5>How it works</h5><ol><li>The dialer serves your next lead: assigned to you, inside its calling hours, best first.</li><li>Inbound transfers wait in a queue. Claim one before its time runs out, or it escalates.</li><li>A call runs check, verify, underwriting, finish on one screen.</li><li>Every call ends with an outcome. The outcome moves the lead, or books a callback.</li></ol></div>
+      <div><h5>Why we built it</h5><ul><li>Agents waste the first hour of every day deciding who to call.</li><li>Calling outside the hours, or forgetting a callback, loses the sale or breaks the law.</li></ul></div>
+      <div><h5>What it does for you</h5><ul><li><b>Producer:</b> one button, "Serve next lead", all day.</li><li><b>Manager:</b> no transfer sits unclaimed. You see who's on a call.</li></ul></div>
+    </div><div class="open">First clicks: Dialer › Serve next lead · record the outcome · Callbacks</div></div>
+
+    <div class="content"><h3>3 · Sales: quotes and applications</h3><div class="who">Producer · reviewer · Applications, Quotes, Pending cases, Draft dates, Application review, Daily deal flow</div><div class="cols">
+      <div><h5>How it works</h5><ol><li>Quote from the call: products you sell, carriers you're appointed with.</li><li>Fill the application once: health questions, beneficiary, payment.</li><li>Submit, and the case moves through underwriting in Pending cases.</li><li>Draft dates show when each first premium comes out.</li></ol></div>
+      <div><h5>Why we built it</h5><ul><li>Each carrier portal asks the same things differently, and cases get lost between them.</li><li>A missed draft date is a policy that never goes in force.</li></ul></div>
+      <div><h5>What it does for you</h5><ul><li><b>Producer:</b> quote to submitted without leaving the call.</li><li><b>Owner:</b> daily deal flow: what was written today, by whom.</li></ul></div>
+    </div><div class="open">First clicks: a lead › Start application · Pending cases · Daily deal flow</div></div>
+
+    <div class="content"><h3>4 · Book of business</h3><div class="who">Owner · bookkeeper · Carrier files, Policies, Commission ledger</div><div class="cols">
+      <div><h5>How it works</h5><ol><li>Upload each carrier's policy report.</li><li>Each policy gets a status: issued, in force, lapsed, charged back.</li><li>Its premium, commission and history sit on one page.</li><li>The ledger lists every dollar per policy.</li></ol></div>
+      <div><h5>Why we built it</h5><ul><li>Your book is spread across carrier portals. Nobody has the whole picture.</li><li>Retention and commission checks need one true list of policies.</li></ul></div>
+      <div><h5>What it does for you</h5><ul><li><b>Owner:</b> the agency's real book, and what it's worth.</li><li><b>Producer:</b> your own policies and their status.</li></ul></div>
+    </div><div class="open">First clicks: Carrier files › Upload · Policies · open one policy</div></div>
+
+    <div class="content"><h3>5 · Carrier sync</h3><div class="who">Owner · bookkeeper · Needs you, Rate card, Carrier terms, Card moves, Agent codes, Files in, Lapse risk</div><div class="cols">
+      <div><h5>How it works</h5><ol><li>Tell Insurvas each carrier's terms once: rates, advance, chargeback window.</li><li>Map each agent code to a person.</li><li>Every file that comes in then reads itself.</li><li>Needs you lists only what it couldn't place.</li></ol></div>
+      <div><h5>Why we built it</h5><ul><li>Every carrier's file looks different. Without a setup, every month is manual.</li><li>An unknown agent code means unpaid commission.</li></ul></div>
+      <div><h5>What it does for you</h5><ul><li><b>Owner/bookkeeper:</b> set up once, then a few minutes a month on Needs you.</li></ul></div>
+    </div><div class="open">First clicks: Needs you · Agent codes › map one · Carrier terms</div></div>
+
+    <div class="content"><h3>6 · Commissions</h3><div class="who">Owner · bookkeeper · producer · Statements, Pay issues, Who gets the credit, Producer pay, Team payouts, Splits, Partner payouts, My pay</div><div class="cols">
+      <div><h5>How it works</h5><ol><li>Upload each carrier statement.</li><li>Every line is matched to a policy.</li><li>Missing, short-paid or wrong lines become pay issues you can claim.</li><li>Credit goes to the writing agent, splits and overrides.</li><li>Pay producers, the team and partners from what came in.</li></ol></div>
+      <div><h5>Why we built it</h5><ul><li>Carriers short-pay and charge back wrongly. It goes unnoticed without a line-by-line check.</li></ul></div>
+      <div><h5>What it does for you</h5><ul><li><b>Owner:</b> money owed comes back.</li><li><b>Producer:</b> My pay shows exactly what you earned and why.</li></ul></div>
+    </div><div class="open">First clicks: Statements › Import · Pay issues · My pay</div></div>
+
+    <div class="content"><h3>7 · Retention</h3><div class="who">Retention specialist · owner · Cases, Waiting on the client, Win-back, Lapse risk, Retention settings</div><div class="cols">
+      <div><h5>How it works</h5><ol><li>Lapse risk flags policies likely to lapse: missed draft, payment problem, carrier notice.</li><li>Flagged policies become cases in a save queue.</li><li>Work each case: call, fix the payment, re-date the draft.</li><li>Lost ones go to win-back.</li></ol></div>
+      <div><h5>Why we built it</h5><ul><li>A lapse in year one means the carrier takes the advance back.</li><li>Saving a policy is far cheaper than selling a new one.</li></ul></div>
+      <div><h5>What it does for you</h5><ul><li><b>Owner:</b> fewer chargebacks and better persistency, so a higher contract level.</li><li><b>Specialist:</b> one queue, best saves first.</li></ul></div>
+    </div><div class="open">First clicks: Cases › open the first · log the outcome</div></div>
+
+    <div class="content"><h3>8 · Accounting</h3><div class="who">Bookkeeper · owner · To do, Vendor bills, Vendor returns, Expenses, Producer splits, Bank deposits, Profit &amp; loss, Tax summaries</div><div class="cols">
+      <div><h5>How it works</h5><ol><li>Vendor bills are checked against the leads you actually got.</li><li>Bank deposits are matched to carrier statements.</li><li>Expenses and producer splits go to the right month.</li><li>Profit &amp; loss and tax summaries build themselves.</li></ol></div>
+      <div><h5>Why we built it</h5><ul><li>Agencies overpay vendors and don't know their real profit per month.</li><li>A separate bookkeeping tool never knows about leads or policies.</li></ul></div>
+      <div><h5>What it does for you</h5><ul><li><b>Bookkeeper:</b> one To do list each month.</li><li><b>Owner:</b> real profit, by month and by vendor.</li></ul></div>
+    </div><div class="open">First clicks: To do · Bank deposits › match · Profit &amp; loss</div></div>
+
+    <div class="content"><h3>9 · Partners</h3><div class="who">Owner · manager · Publishers, Partner chat, partner portal</div><div class="cols">
+      <div><h5>How it works</h5><ol><li>Add each publisher who sends you leads or live transfers.</li><li>They get their own portal and a chat with you.</li><li>Every lead and transfer they send is tracked to a result.</li></ol></div>
+      <div><h5>Why we built it</h5><ul><li>Publisher deals live in texts and email, and quality is guessed.</li></ul></div>
+      <div><h5>What it does for you</h5><ul><li><b>Owner:</b> pay partners for what converts, from their quality report.</li></ul></div>
+    </div><div class="open">First clicks: Publishers › Add publisher · Partner chat</div></div>
+
+    <div class="content"><h3>10 · Compliance</h3><div class="who">Owner · compliance · Overview, TCPA / DNC, Consent locker, Complaints, Deletion requests, Evidence report, Carrier appointments</div><div class="cols">
+      <div><h5>How it works</h5><ol><li>Every lead's consent is kept in the consent locker.</li><li>Do-not-call and litigator checks run on import and before dialing.</li><li>Complaints and deletion requests are logged with deadlines.</li><li>An evidence report is one click when a claim arrives.</li></ol></div>
+      <div><h5>Why we built it</h5><ul><li>A single TCPA claim can cost more than a year's profit.</li><li>The proof must exist before the claim, not after.</li></ul></div>
+      <div><h5>What it does for you</h5><ul><li><b>Owner:</b> proof ready, deadlines met.</li><li><b>Producer:</b> you can't dial someone you shouldn't.</li></ul></div>
+    </div><div class="open">First clicks: Overview · Consent locker › search a number · Evidence report</div></div>
+
+    <div class="content"><h3>11 · Reports</h3><div class="who">Owner · manager · Sales performance, Team activity, Queue scoring, Book scorecards, True CPA, Partner quality, Retention, Producer scorecards, Hierarchy &amp; overrides</div><div class="cols">
+      <div><h5>How it works</h5><ol><li>Every report reads the same data: leads, calls, applications, policies, money.</li><li>Pick a period. Click any number for the records behind it.</li></ol></div>
+      <div><h5>Why we built it</h5><ul><li>The real questions: which vendor, which producer, which carrier makes money. They need lead-to-money data in one place.</li></ul></div>
+      <div><h5>What it does for you</h5><ul><li><b>Owner:</b> true cost per sale before you buy more leads.</li><li><b>Manager:</b> who needs coaching, from activity and placement.</li></ul></div>
+    </div><div class="open">First clicks: True CPA · Producer scorecards · Sales performance</div></div>
+
+    <div class="content"><h3>12 · Home and dashboards</h3><div class="who">Everyone · Home, Agency dashboard, Compare</div><div class="cols">
+      <div><h5>How it works</h5><ol><li>Home answers "what do I do today": Needs you, Today, My numbers, Shortcuts. Each role gets its own.</li><li>The agency dashboard answers "is the agency healthy": five figures, business health, producers.</li><li>Compare puts two periods or two people side by side.</li></ol></div>
+      <div><h5>Why we built it</h5><ul><li>Every number should link to the records behind it, so nobody exports to a spreadsheet.</li></ul></div>
+      <div><h5>What it does for you</h5><ul><li><b>Producer:</b> start every day from Home.</li><li><b>Owner:</b> the agency on one screen each week.</li></ul></div>
+    </div><div class="open">First clicks: Home › Needs you · Agency › Compare</div></div>
+
+  </div>
+</div>
+<!--kit-js-->
+<script>
+/* Settings round 8 board kit: option (A/B/C) and theme switching. Keys 1–3 pick an option, L / D the theme.
+   Buttons: <button data-opt="A">, <button data-theme="light">. The body carries class light|dark and data-opt. */
+(function () {
+  var body = document.body;
+  if (!body.dataset.opt) body.dataset.opt = "A";
+  if (!/\b(light|dark)\b/.test(body.className)) body.classList.add("light");
+  function sync() {
+    document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.optBtn === body.dataset.opt)); });
+    document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(body.classList.contains(b.dataset.themeBtn))); });
+  }
+  function opt(v) { body.dataset.opt = v; sync(); }
+  function theme(v) { body.classList.remove("light", "dark"); body.classList.add(v); sync(); }
+  document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.addEventListener("click", function () { opt(b.dataset.optBtn); }); });
+  document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.addEventListener("click", function () { theme(b.dataset.themeBtn); }); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "1") opt("A"); if (e.key === "2") opt("B"); if (e.key === "3") opt("C");
+    if (e.key === "l" || e.key === "L") theme("light"); if (e.key === "d" || e.key === "D") theme("dark");
+  });
+  sync();
+})();
+
+</script>
+<!--/kit-js-->
+</body>
+</html>

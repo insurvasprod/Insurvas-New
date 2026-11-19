@@ -11,6 +11,8 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { Segmented } from "@/components/ui/view-tabs";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
+import { useArrivals } from "@/components/ui/use-arrivals";
+import { useDepartures } from "@/components/ui/use-row-exit";
 import { dayMonth } from "@/lib/format/dates";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { atStakeCents, orderTodo, type TodoItem } from "@/lib/accounting/todoCore";
@@ -31,12 +33,17 @@ export function TodoBoard({ items, groupLabel }: { items: TodoItem[]; groupLabel
   const pageSize = useFittingPageSize(520, 56);
   const [refreshing, startRefresh] = useTransition();
   const needle = q.trim().toLowerCase();
+  // Tier 1 motion (2026-11-17): a row is finished where it opens (a page, or a sheet over this one); when the refresh
+  // brings the list back without it, it plays out in its place and the rows under it close up. Another group's list
+  // is another list: nothing plays. New work a refresh brings in arrives tinted.
+  const left = useDepartures(items, (item) => item.key, groupLabel);
+  const isNew = useArrivals(items.map((item) => item.key), groupLabel);
   const shown = useMemo(() => {
-    const rows = items
+    const rows = left.rows
       .filter((i) => show === "all" || (show === "yours" ? i.yours : i.tone === "bad"))
       .filter((i) => !needle || `${i.what} ${i.detail} ${i.where}`.toLowerCase().includes(needle));
     return order === "oldest" ? orderTodo(rows) : [...rows].sort((a, b) => Math.abs(b.amountCents ?? 0) - Math.abs(a.amountCents ?? 0));
-  }, [items, show, needle, order]);
+  }, [left.rows, show, needle, order]);
   const paged = paginate(shown, page, pageSize);
   const pick = (s: Show) => { setShow(s); setPage(1); };
   const yours = items.filter((i) => i.yours).length;
@@ -78,10 +85,12 @@ export function TodoBoard({ items, groupLabel }: { items: TodoItem[]; groupLabel
       ) : (
         <table className="portal-lead-table w-full min-w-[920px] text-left text-sm">
           <thead><tr><th>What&apos;s waiting</th><th>Where</th><th className="text-right">Amount</th><th>Since</th><th>Status</th><th>Next step</th></tr></thead>
-          <tbody>
+          {/* Keyed by the pick and the order (not the typed search, which would flicker per key): a new set of rows
+              settles in (§ Motion, "rows-filter"). */}
+          <tbody key={`${show}|${order}`} className="m-rows-settle">
             {paged.rows.map((i) => (
               // One line per row (owner 2026-11-11): the old second line is the name's tooltip; colour is the chip's alone.
-              <tr key={i.key} className="cursor-pointer" onClick={() => router.push(i.href)}>
+              <tr key={i.key} {...left.rowProps(i.key)} data-row-new={isNew(i.key) ? "" : undefined} className="cursor-pointer" onClick={() => router.push(i.href)}>
                 <td className="whitespace-nowrap font-medium text-foreground" title={i.detail}>
                   <Link href={i.href} className="hover:underline" onClick={(e) => e.stopPropagation()}>{i.what}</Link>
                 </td>

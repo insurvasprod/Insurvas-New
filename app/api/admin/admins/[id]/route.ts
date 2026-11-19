@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit/log";
 import { requireAdminRole } from "@/lib/adminAuth/requireAdminRole";
+import { endAdminSessions, type SessionVersionClient } from "@/lib/adminAuth/sessionVersion";
 import { updateAdminSchema } from "@/lib/adminAuth/schemas";
 import type { AdminRole } from "@/lib/adminAuth/roles";
 import { LAST_SUPER_ADMIN_REFUSAL, SELF_REFUSAL, removesActiveSuperAdmin, staffChangeRefusal } from "@/lib/adminStaff/present";
@@ -84,6 +85,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ error: "Admin not found" }, { status: 404 });
   }
 
+  // Security review 2026-11, M-2: deactivating or reactivating ends every session the account had.
+  // Deactivation already refuses them (is_active); raising the version as well means a cookie from
+  // before the deactivation does not come back to life when the account is reactivated.
+  const sessionsEnded =
+    changes.is_active === undefined
+      ? undefined
+      : (await endAdminSessions(supabase as unknown as SessionVersionClient, id)) === "ended";
+
   await audit({
     actorId: auth.session.sub,
     action: "admin.updated",
@@ -93,6 +102,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       email: target.email,
       changes,
       before: { role: target.role, is_active: target.is_active },
+      ...(sessionsEnded === undefined ? {} : { sessions_ended: sessionsEnded }),
     },
     request,
   });

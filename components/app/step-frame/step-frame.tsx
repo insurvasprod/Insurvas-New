@@ -15,7 +15,8 @@ import { FRAME_HEADER, StepFrameLayout } from "@/components/app/step-frame/step-
  * reads the rail's collapsed cookie; this only draws.
  */
 export function StepFrame({ title, titleInfo, meta, rail, tabs, actions, breadcrumbs, children }: {
-  title: string;
+  /** Text, or a record's name streamed behind `TitleShape` (UI-CONSISTENCY §7a, frame first): PageHeader's `title`. */
+  title: ReactNode;
   /** A record's own trail when its parent is a record too (a row: Files › its file › Row N); else the page trail. */
   breadcrumbs?: Crumb[];
   /** An (i) beside the title, for a word the page cannot do without (Statements: what a carrier statement is). */

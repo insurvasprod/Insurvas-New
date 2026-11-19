@@ -39,7 +39,8 @@ import { ScorecardsCsv, ScorecardsFilter, ScorecardsPeriod, ScorecardsRefresh } 
  */
 
 type Period = { from: string; to: string };
-const LINK = "whitespace-nowrap text-sm text-foreground underline-offset-2 hover:underline";
+// A way to the full page reads as a button (QA pass 2026-11), never a bare text link.
+const LINK = `${buttonVariants({ variant: "outline", size: "sm" })} no-underline`;
 const count = (n: number) => n.toLocaleString("en-US");
 const rangeText = (p: Period) => `${dayMonth(p.from)} – ${dayMonth(p.to)} ${p.to.slice(0, 4)}`;
 const baseHref = (p: Period) => `${SCORECARDS_HREF}?from=${p.from}&to=${p.to}`;
@@ -73,7 +74,7 @@ function NoCarrierFiles({ scoped }: { scoped: boolean }) {
     <EmptyState
       title="No carrier files yet"
       hint="Scorecards are built from your carriers' policy files. Bring one in under Book of business › Carrier files."
-      action={scoped ? undefined : <Link href="/app/carrier-files" className={buttonVariants({ variant: "outline" })}>Open Carrier files</Link>}
+      action={scoped ? undefined : <Link href="/app/carrier-files" className={buttonVariants({ variant: "outline" })}>Open Carrier Files</Link>}
     />
   );
 }

@@ -21,8 +21,9 @@ export function HoverPeek({ trigger, children, className }: { trigger: ReactNode
           align="start"
           sideOffset={10}
           className={cn(
-            "z-50 grid w-[320px] gap-1.5 rounded-menu border border-[var(--border)] bg-[var(--surface)] p-3 text-xs text-[var(--body)] shadow-[var(--shadow-overlay)] outline-none",
-            "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+            "z-50 grid w-[320px] origin-(--radix-hover-card-content-transform-origin) gap-1.5 rounded-menu border border-[var(--border)] bg-[var(--surface)] p-3 text-xs text-[var(--body)] shadow-[var(--shadow-overlay)] outline-none",
+            // Wave D (plan item 17): the info tip's and the dropdown's fade and zoom, from the row it peeks at.
+            "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
             className,
           )}
         >

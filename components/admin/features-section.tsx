@@ -1,125 +1,180 @@
 "use client";
 
-import { useCallback, useId, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-import { FeatureCatalog } from "@/components/admin/feature-catalog";
+import { FeatureSheet } from "@/components/admin/catalog/feature-sheet";
+import { FeatureCatalog, type CatalogFilters } from "@/components/admin/feature-catalog";
 import { FeatureDialog } from "@/components/admin/feature-dialog";
-import { FeatureSwitchesPanel, type SwitchableFeature } from "@/components/admin/feature-switches-panel";
-import { Callout } from "@/components/app/settings/primitives";
+import { FeatureSwitchesPanel, type SwitchableFeature, type SwitchFilters } from "@/components/admin/feature-switches-panel";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
-import { StatStrip, StatTile } from "@/components/ui/stat";
+import { setParamsInPlace } from "@/components/ui/nav-pending";
 import { UnderlineTabs } from "@/components/ui/view-tabs";
-import type { FeatureModuleGroup, FeatureModuleRow } from "@/lib/features/constants";
-import { switchSummaryTitle, type FeatureSwitch, type SwitchReason } from "@/lib/features/killSwitchRules";
+import type { CatalogAuditItem } from "@/lib/adminCatalog/audit";
+import type { FeatureModuleGroup, FeatureModuleRow, FeatureRow } from "@/lib/features/constants";
+import type { FeatureGrant } from "@/lib/features/grants";
+import { SWITCH_STATES, type FeatureSwitch, type SwitchReason, type SwitchState } from "@/lib/features/killSwitchRules";
 
 type Tab = "catalog" | "switches";
 
+/** The tab in the address, or the page's default (Switches when one is off or in beta). */
+function useTab(defaultTab: Tab): Tab {
+  const value = useSearchParams().get("tab");
+  return value === "catalog" || value === "switches" ? value : defaultTab;
+}
+
 /**
- * The Features page (board p-adm-features): header, the platform-wide headline, and two tabs.
+ * Catalog | Switches on the title line (catalog.html screen 4), in the address (`?tab=`) so a link lands on the right
+ * one; the page opens on Switches when one is off or in beta, the reason anyone opens it during an incident.
+ */
+export function FeatureTabs({ defaultTab, catalogCount, notOn }: { defaultTab: Tab; catalogCount: number; notOn: number }) {
+  const tab = useTab(defaultTab);
+  return (
+    <UnderlineTabs
+      label="Features"
+      value={tab}
+      onChange={(next) => setParamsInPlace({ tab: next, feature: null })}
+      idPrefix="features-tab"
+      controls="features-panel"
+      tabs={[
+        { key: "catalog", label: "Catalog", count: catalogCount },
+        { key: "switches", label: "Switches", count: notOn > 0 ? notOn : null, tone: "danger" },
+      ]}
+    />
+  );
+}
+
+/** New feature on the title line: the create dialog, then the page re-reads. */
+export function FeatureNewButton({ modules }: { modules: FeatureModuleRow[] }) {
+  const router = useRouter();
+  const [creating, setCreating] = useState(false);
+  return (
+    <>
+      <Button type="button" onClick={() => setCreating(true)}>New feature</Button>
+      <FeatureDialog mode="create" open={creating} modules={modules} onClose={() => setCreating(false)} onSaved={() => router.refresh()} />
+    </>
+  );
+}
+
+/**
+ * The Features page's body (admin round 1, catalog.html screen 4): the tab the address names, and the feature sheet.
+ * Every filter lives in the address, written in place; a feature opens its sheet (`?feature=<key>`) at once with its
+ * switch and what grants it, and its history arrives with the server's read.
  *
- * Two genuinely separate jobs on one route, so they get tabs rather than a stack. Stacked, the kill
- * switches sat below eight module tables — twenty-seven rows of scrolling before the control you
- * open this page for during an incident. Tabs also stop the page implying the switches are part of
- * editing the catalog: naming a feature and taking it away from every paying customer are not the
- * same kind of act, and they do not have the same permission.
+ * Naming a feature and taking it away from every paying customer are not the same act and do not share a permission:
+ * the switch is changed by a super admin only, and platform config reads it.
  */
 export function FeaturesSection({
-  groups: initialGroups,
+  groups,
   modules,
   switchable,
   switches,
   reasons,
-  counts,
+  grants,
+  history,
   canToggle,
+  canOpenPlans,
+  defaultTab,
 }: {
   groups: FeatureModuleGroup[];
   modules: FeatureModuleRow[];
   switchable: SwitchableFeature[];
   switches: FeatureSwitch[];
   reasons: Record<string, SwitchReason>;
-  counts: { off: number; beta: number };
+  /** Null when the grants could not be read. */
+  grants: Record<string, FeatureGrant[]> | null;
+  /** The open feature's history, read on the server; items null when the read failed. */
+  history: { key: string; items: CatalogAuditItem[] | null } | null;
   canToggle: boolean;
+  canOpenPlans: boolean;
+  defaultTab: Tab;
 }) {
   const router = useRouter();
-  const baseId = useId();
-  // A switch that is not fully on is the reason anyone opens this page during an incident.
-  const [tab, setTab] = useState<Tab>(counts.off + counts.beta > 0 ? "switches" : "catalog");
-  const [groups, setGroups] = useState(initialGroups);
-  const [creating, setCreating] = useState(false);
+  const params = useSearchParams();
+  const tab = useTab(defaultTab);
+  const [editing, setEditing] = useState<FeatureRow | null>(null);
 
-  const refresh = useCallback(async () => {
-    const res = await fetch("/api/admin/features");
-    if (res.ok) {
-      const body = await res.json();
-      setGroups(body.groups);
+  const refresh = useCallback(() => router.refresh(), [router]);
+  const byKey = useMemo(() => new Map(switches.map((s) => [s.feature_key, s])), [switches]);
+  const states = useMemo(() => Object.fromEntries(switches.map((s) => [s.feature_key, s.state])) as Record<string, SwitchState>, [switches]);
+  const features = useMemo(() => new Map(groups.flatMap((group) => group.features.map((feature) => [feature.feature_key, feature] as const))), [groups]);
+  const switchInfo = useMemo(() => new Map(switchable.map((item) => [item.featureKey, item])), [switchable]);
+
+  const stateParam = params.get("state");
+  const switchFilters: SwitchFilters = {
+    q: params.get("q") ?? "",
+    module: params.get("module") ?? "all",
+    state: stateParam && (SWITCH_STATES as readonly string[]).includes(stateParam) ? (stateParam as SwitchState) : "all",
+  };
+  const catalogFilters: CatalogFilters = {
+    q: switchFilters.q,
+    module: switchFilters.module,
+    archived: params.get("archived") === "1",
+    sold: params.get("sold") === "none" ? "none" : "all",
+  };
+  const write = (patch: Record<string, string | boolean | undefined>) => {
+    const out: Record<string, string | null> = {};
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === undefined) continue;
+      out[key] = value === true ? "1" : value === false || value === "" || value === "all" ? null : value;
     }
-    // The switch list and the override counts are read on the server.
-    router.refresh();
-  }, [router]);
+    setParamsInPlace(out);
+  };
 
-  const title = switchSummaryTitle(counts);
-  const tabs: { id: Tab; label: string }[] = [
-    { id: "catalog", label: "Catalog" },
-    { id: "switches", label: "Switches" },
-  ];
+  // The sheet opens (and closes) at once; the address follows. A local choice holds only while the address is still
+  // the one it was made against, so Back and Forward always win. The history is a server read.
+  const urlOpen = params.get("feature");
+  const [asked, setAsked] = useState<{ key: string | null; against: string | null } | null>(null);
+  const openKey = asked && asked.against === urlOpen ? asked.key : urlOpen;
+  const openFeature = openKey ? features.get(openKey) ?? null : null;
+  const open = (key: string) => {
+    setAsked({ key, against: urlOpen });
+    const next = new URLSearchParams(window.location.search);
+    next.set("feature", key);
+    router.replace(`?${next.toString()}`, { scroll: false });
+  };
+  const close = () => {
+    setAsked({ key: null, against: urlOpen });
+    setParamsInPlace({ feature: null });
+  };
 
   return (
-    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <PageHeader
-        title="Features"
-        // The page's sub-pages: the sub-page bar on the title's line (UI-CONSISTENCY §8b).
-        tabs={<UnderlineTabs label="Features" tabs={tabs.map((t) => ({ key: t.id, label: t.label }))} value={tab} onChange={setTab} idPrefix={`${baseId}-tab`} controls={(key) => `${baseId}-panel-${key}`} />}
-        actions={
-          <Button type="button" onClick={() => setCreating(true)}>
-            New feature
-          </Button>
-        }
-      />
-
-      {(() => {
-        const all = groups.flatMap((group) => group.features);
-        const live = all.filter((feature) => !feature.is_archived);
-        const unsold = live.filter((feature) => feature.plan_reference_count + feature.addon_reference_count === 0).length;
-        return (
-          <StatStrip label="Features">
-            <StatTile label="Features" value={live.length.toLocaleString("en-US")} footnote={`${(all.length - live.length).toLocaleString("en-US")} archived`} />
-            <StatTile label="Modules" value={modules.length.toLocaleString("en-US")} footnote="groups in the catalog" />
-            <StatTile label="In no plan or add-on" value={unsold.toLocaleString("en-US")} valueTone={unsold > 0 ? "warning" : undefined} footnote="not sold anywhere" />
-            <StatTile label="Switched off" value={counts.off.toLocaleString("en-US")} valueTone={counts.off > 0 ? "danger" : undefined} footnote="for every customer" />
-            <StatTile label="In beta" value={counts.beta.toLocaleString("en-US")} footnote={`of ${switchable.length.toLocaleString("en-US")} switchable`} />
-          </StatStrip>
-        );
-      })()}
-
-      {title && <Callout tone="warning" title={title} />}
-
-      <div
-        role="tabpanel"
-        id={`${baseId}-panel-${tab}`}
-        aria-labelledby={`${baseId}-tab-${tab}`}
-        className="flex min-w-0 flex-col"
-      >
+    <>
+      <div role="tabpanel" id="features-panel" aria-labelledby={`features-tab-${tab}`} className="flex min-w-0 flex-col">
         {tab === "catalog" ? (
-          <FeatureCatalog groups={groups} modules={modules} onRefresh={refresh} />
+          <FeatureCatalog groups={groups} modules={modules} states={states} filters={catalogFilters} onFilters={write} onOpen={open} openKey={openKey} onRefresh={refresh} />
         ) : (
-          <FeatureSwitchesPanel
-            features={switchable}
-            initialSwitches={switches}
-            initialReasons={reasons}
-            canToggle={canToggle}
-          />
+          <FeatureSwitchesPanel features={switchable} switches={Object.fromEntries(byKey)} reasons={reasons} modules={modules} canToggle={canToggle} filters={switchFilters} onFilters={write} onOpen={open} openKey={openKey} />
         )}
       </div>
 
+      {openFeature && (
+        <FeatureSheet
+          key={openFeature.feature_key}
+          feature={openFeature}
+          moduleLabel={switchInfo.get(openFeature.feature_key)?.moduleLabel ?? openFeature.module}
+          overrideCount={switchInfo.get(openFeature.feature_key)?.overrideCount ?? 0}
+          featureSwitch={byKey.get(openFeature.feature_key)}
+          reason={reasons[openFeature.feature_key]}
+          grants={grants ? grants[openFeature.feature_key] ?? [] : null}
+          canToggle={canToggle}
+          canOpenPlans={canOpenPlans}
+          history={history?.key === openFeature.feature_key ? history.items : undefined}
+          historyLoading={urlOpen !== openKey}
+          onEdit={() => setEditing(openFeature)}
+          onClose={close}
+        />
+      )}
+
       <FeatureDialog
-        mode="create"
-        open={creating}
+        key={`edit-${editing?.id ?? "none"}`}
+        mode="edit"
+        open={editing !== null}
+        feature={editing}
         modules={modules}
-        onClose={() => setCreating(false)}
+        onClose={() => setEditing(null)}
         onSaved={refresh}
       />
-    </div>
+    </>
   );
 }

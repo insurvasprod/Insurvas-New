@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 
 import { writersIn, type Writer } from "./model";
 
+import { CheckBox } from "@/components/ui/check-box";
 type Step = 1 | 2 | 3;
 const STEPS: { n: Step; label: string }[] = [{ n: 1, label: "Carrier" }, { n: 2, label: "Contract" }, { n: 3, label: "States and writers" }];
 
@@ -37,7 +38,12 @@ export function StepTrack({ step, steps }: { step: number; steps: { n: number; l
             </span>
             {item.label}
           </span>
-          {index < steps.length - 1 && <span aria-hidden="true" className="h-px min-w-4 flex-1 bg-[var(--border)]" />}
+          {index < steps.length - 1 && (
+            // The line to a step you have passed draws in green from the left, once (`.m-track`, Wave D).
+            <span aria-hidden="true" className="h-px min-w-4 flex-1 overflow-hidden bg-[var(--border)]">
+              {item.n < step && <span className="m-track block size-full bg-[var(--primary)]" />}
+            </span>
+          )}
         </li>
       ))}
     </ol>
@@ -138,7 +144,7 @@ export function AddCarrierDialog({ choices, writers, defaultStates, onClose, onA
                     const count = writers ? writersIn(writers, code).length : null;
                     return (
                       <label key={code} className={cn("flex min-w-0 cursor-pointer items-center gap-2 rounded-[8px] border px-2.5 py-1.5 text-sm text-[var(--body)]", states.has(code) ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)]")}>
-                        <input type="checkbox" className="size-4 shrink-0 accent-[var(--primary)]" checked={states.has(code)} onChange={() => toggle(code)} />
+                        <CheckBox checked={states.has(code)} onChange={() => toggle(code)} />
                         <span className="min-w-0 flex-1 truncate" title={name}>{name}</span>
                         {count !== null && <span className="shrink-0 text-xs text-[var(--muted)]" title="Licensed writers there">{count}</span>}
                       </label>

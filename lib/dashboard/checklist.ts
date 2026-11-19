@@ -102,6 +102,11 @@ const SETUP_STEPS = [
   { key: "lead-sources", module: "inbound", label: "Add your publishers", path: "/app/publishers", action: "Add publishers", target: "publisher-add",
     instruction: "Add each company that sends you leads or transfers calls to you, and how you pay them.",
     why: "Cost per sale and publisher scorecards are worked out per publisher." },
+  // Owner 2026-11-16 (found walking Ready to sell): import refuses every lead until the agency sells a product, and
+  // nothing in Get set up said so. It comes before the campaign, which also offers only the products sold.
+  { key: "products", module: "account", label: "Choose your products", path: "/app/settings#products", action: "Choose products", target: "products-list",
+    instruction: "Switch on each product your agency sells: final expense, term, Medicare and so on.",
+    why: "Imports, campaigns and quotes only offer the products you sell, so leads can't come in until one is on." },
   { key: "campaign", module: "outbound", label: "Create a campaign", path: "/app/campaigns", action: "Create campaign",
     instruction: "Add the company selling you leads, then create a campaign for the leads you plan to import.",
     why: "Every imported lead needs a campaign so Insurvas can track its source and cost." },
@@ -175,6 +180,7 @@ const STEP_FEATURES: Record<SetupStepKey, readonly string[]> = {
   states: ["appointment_vault"],
   statement: ["statement_ingestion"],
   "lead-sources": ["publisher_records"],
+  products: ["lead_import"],
   phone: [],
   team: [],
   book: ["statement_ingestion"],
@@ -399,6 +405,8 @@ export type SetupProgress = {
   appointmentsConfirmed?: boolean;
   /** A lead source on the Partners screen that is not offboarded (partners.status). */
   leadSourcesAdded?: boolean;
+  /** Settings › Products · at least one product switched on (tenant_products.is_enabled). */
+  productsChosen?: boolean;
   /** A campaign exists for the agency's lead imports. */
   campaignAdded?: boolean;
   /** The agency's phone on the agency profile tab (tenants.support_phone). */
@@ -451,6 +459,7 @@ export type SetupProgress = {
  */
 const STEP_MINUTES: Partial<Record<string, number>> = {
   carriers: 5,
+  products: 1,
   states: 5,
   statement: 3,
   book: 10,
@@ -480,6 +489,7 @@ const PROGRESS_FIELD: Record<string, keyof SetupProgress> = {
   states: "appointmentsConfirmed",
   statement: "statementImported",
   "lead-sources": "leadSourcesAdded",
+  products: "productsChosen",
   campaign: "campaignAdded",
   phone: "phoneAdded",
   book: "bookImported",

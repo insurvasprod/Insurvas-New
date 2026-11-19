@@ -1,11 +1,13 @@
-// Wording and filters for the staff Login activity page (p-adm-activity). Plain module — no imports,
+// Wording and filters for the staff Login activity page (p-adm-activity). Plain module — only plain imports,
 // no `server-only` — so the client feed, the API route and the tests all read the same rules.
+
+import { csvCellMinimal } from "../csv/cell.ts";
 
 /* ── filters ─────────────────────────────────────────────────────────────── */
 
 export type ActivityOutcome = "all" | "success" | "failure";
 export type ActivityActor = "all" | "user" | "admin";
-export type ActivityRange = "today" | "7d" | "all";
+export type ActivityRange = "today" | "7d" | "30d" | "all";
 
 export type ActivityFilters = {
   outcome: ActivityOutcome;
@@ -32,8 +34,61 @@ export const ACTOR_OPTIONS: { value: ActivityActor; label: string; chip: string 
 export const RANGE_OPTIONS: { value: ActivityRange; label: string; phrase: string }[] = [
   { value: "today", label: "Today (UTC)", phrase: "today" },
   { value: "7d", label: "Last 7 days", phrase: "in the last 7 days" },
+  { value: "30d", label: "Last 30 days", phrase: "in the last 30 days" },
   { value: "all", label: "All time", phrase: "recorded" },
 ];
+
+/**
+ * The lenses on Login activity's title line (admin round 1, monitoring.html screen 2): every attempt, the failed
+ * ones (the Outcome filter set to failed), and "Repeated failures" — failed attempts from an address that failed
+ * at least REPEATED_FAILURE_MIN times in the range. The lens lives in the address (`?lens=repeated`); "Failed" is
+ * `?outcome=failure`, so the Outcome filter and the tab can never disagree.
+ */
+export type ActivityLens = "all" | "failed" | "repeated";
+
+export const REPEATED_FAILURE_MIN = 3;
+
+export function parseActivityLens(params: { get(name: string): string | null }): ActivityLens {
+  if (params.get("lens") === "repeated") return "repeated";
+  return params.get("outcome") === "failure" ? "failed" : "all";
+}
+
+/** The query string for a view of the feed: only what differs from the defaults, so a shared link stays short. */
+export function activityQuery(filters: ActivityFilters, extra: { lens?: ActivityLens; page?: number } = {}): string {
+  const params = new URLSearchParams();
+  if (extra.lens === "repeated") params.set("lens", "repeated");
+  if (filters.outcome !== "all") params.set("outcome", filters.outcome);
+  if (filters.actor !== "all") params.set("actor", filters.actor);
+  if (filters.range !== DEFAULT_ACTIVITY_FILTERS.range) params.set("range", filters.range);
+  if (filters.q) params.set("q", filters.q);
+  if (extra.page && extra.page > 1) params.set("page", String(extra.page));
+  return params.toString();
+}
+
+export type RepeatedFailure = { ip: string; attempts: number; accounts: number; lastAt: string };
+
+/**
+ * Addresses with at least `min` failed attempts among `events`, worst first: how many attempts and on how many
+ * accounts. Attempts with no recorded IP are left out — "no address" is not one address.
+ */
+export function repeatedFailures(
+  events: ReadonlyArray<{ ip: string | null; email: string; success: boolean; ts: string }>,
+  min = REPEATED_FAILURE_MIN,
+): RepeatedFailure[] {
+  const byIp = new Map<string, { attempts: number; accounts: Set<string>; lastAt: string }>();
+  for (const event of events) {
+    if (event.success || !event.ip) continue;
+    const entry = byIp.get(event.ip) ?? { attempts: 0, accounts: new Set<string>(), lastAt: event.ts };
+    entry.attempts += 1;
+    entry.accounts.add(event.email.toLowerCase());
+    if (event.ts > entry.lastAt) entry.lastAt = event.ts;
+    byIp.set(event.ip, entry);
+  }
+  return [...byIp.entries()]
+    .filter(([, entry]) => entry.attempts >= min)
+    .map(([ip, entry]) => ({ ip, attempts: entry.attempts, accounts: entry.accounts.size, lastAt: entry.lastAt }))
+    .sort((a, b) => b.attempts - a.attempts || b.lastAt.localeCompare(a.lastAt));
+}
 
 export const ACTIVITY_SEARCH_MAX = 100;
 
@@ -46,7 +101,7 @@ export function parseActivityFilters(params: { get(name: string): string | null 
   return {
     outcome: oneOf(params.get("outcome"), ["all", "success", "failure"] as const, "all"),
     actor: oneOf(params.get("actor"), ["all", "user", "admin"] as const, "all"),
-    range: oneOf(params.get("range"), ["today", "7d", "all"] as const, DEFAULT_ACTIVITY_FILTERS.range),
+    range: oneOf(params.get("range"), ["today", "7d", "30d", "all"] as const, DEFAULT_ACTIVITY_FILTERS.range),
     q: (params.get("q") ?? "").trim().slice(0, ACTIVITY_SEARCH_MAX),
   };
 }
@@ -60,6 +115,7 @@ export function popoverFilterCount(filters: ActivityFilters): number {
 export function rangeStart(range: ActivityRange, now: number): Date | null {
   if (range === "all") return null;
   if (range === "7d") return new Date(now - 7 * 24 * 60 * 60 * 1000);
+  if (range === "30d") return new Date(now - 30 * 24 * 60 * 60 * 1000);
   const day = new Date(now);
   day.setUTCHours(0, 0, 0, 0);
   return day;
@@ -162,6 +218,36 @@ export function summariseUserAgent(ua: string | null | undefined): string | null
     return token.length > 40 ? `${token.slice(0, 40)}…` : token;
   }
   return [browser, system].filter(Boolean).join(" · ");
+}
+
+/**
+ * "Chrome on Windows", the Device column (monitoring.html screen 2): the browser and system without version
+ * numbers, for scanning. summariseUserAgent keeps the versions for the hover and the sheet; null when unknown.
+ */
+export function deviceLabel(ua: string | null | undefined): string | null {
+  const summary = summariseUserAgent(ua);
+  if (!summary) return null;
+  const [browser, system] = summary.split(" · ");
+  if (!system) return browser.replace(/ \d+$/, "");
+  return `${browser.replace(/ \d+$/, "")} on ${system}`;
+}
+
+/** One CSV cell: the product's one escaper (lib/csv/cell.ts, itself a plain module), quoting only when needed. */
+export const csvCell: (value: string | number | boolean | null | undefined) => string = csvCellMinimal;
+
+/** Login attempts as CSV, the columns the table shows plus the raw user agent. */
+export function loginEventsCsv(events: ReadonlyArray<{ ts: string; email: string; actor_type: "user" | "admin"; success: boolean; failure_reason: string | null; ip: string | null; user_agent: string | null }>): string {
+  const head = ["When (UTC)", "Actor", "Actor type", "Outcome", "IP", "Device", "User agent"];
+  const lines = events.map((event) => [
+    event.ts,
+    event.email,
+    event.actor_type === "admin" ? "staff" : "customer",
+    loginOutcomeLabel(event),
+    event.ip,
+    deviceLabel(event.user_agent),
+    event.user_agent,
+  ].map(csvCell).join(","));
+  return [head.join(","), ...lines].join("\r\n");
 }
 
 /* ── tiles ───────────────────────────────────────────────────────────────── */

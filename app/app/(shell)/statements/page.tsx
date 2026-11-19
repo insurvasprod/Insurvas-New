@@ -1,7 +1,11 @@
+import { Suspense } from "react";
+
 import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ViewTabs } from "@/components/ui/view-tabs";
+import { StreamSection } from "@/components/ui/stream-section";
+import { Part, startParts } from "@/components/app/commissions/frame-parts";
 import { StatementImportButton } from "@/components/app/statement-import";
 import { StatementsTable } from "@/components/app/statements-table";
 import { UnmatchedLinesTable } from "@/components/app/unmatched-lines-table";
@@ -50,57 +54,57 @@ export default async function StatementsPage({ searchParams }: { searchParams: P
 
   const readOnly = guard.entitlement.access === "read_only";
   const tenantId = guard.context.tenantId;
-  const [{ available, statements }, { import: importParam, view: viewParam, carrier }] = await Promise.all([listStatements(tenantId), searchParams]);
+  const { import: importParam, view: viewParam, carrier } = await searchParams;
   const view = parseStatementsView(viewParam);
-  const blocked = !available ? STATEMENT_SCHEMA_PENDING_MESSAGE : readOnly ? "Importing is paused while the account is read-only." : null;
-  const [unmatched, waitingCents, carriers, savedMappings]: [Awaited<ReturnType<typeof listUnmatchedLines>> | null, Record<string, number>, StatementCarrierOption[], Record<string, StatementMapping>] = await Promise.all([
-    view === "unmatched" && available ? listUnmatchedLines(tenantId) : Promise.resolve(null),
-    view !== "unmatched" && available ? listWaitingCents(tenantId) : Promise.resolve({}),
-    blocked ? Promise.resolve([]) : listStatementCarriers(tenantId),
-    blocked ? Promise.resolve({}) : getSavedStatementMappings(tenantId),
-  ]);
-  // A blocked import says why on hover only (board 1·4): no notice on the page.
-  const importControl = blocked ? (
-    <Button type="button" disabled title={blocked}>Import a statement</Button>
-  ) : (
-    <StatementImportButton carriers={carriers} savedMappings={savedMappings} autoOpen={importParam === "1"} />
+  const tabsOf = (counts: ReturnType<typeof statementViewCounts> | null, toType: number) => (
+    <ViewTabs
+      label="Statements"
+      value={view}
+      tabs={STATEMENT_VIEWS.map((item) => ({
+        key: item.key,
+        label: item.label,
+        count: counts ? counts[item.key] : null,
+        href: statementsViewHref(item.key),
+        srSuffix: item.key === "review" && toType ? `(${toType} ${toType === 1 ? "PDF" : "PDFs"} to type in)` : undefined,
+      }))}
+    />
   );
 
-  const counts = statementViewCounts(statements);
-  // LA-4.2: PDFs stored and waiting for a person to type their lines in sit on To review.
-  const toType = statements.filter((statement) => statement.status === "awaiting_entry").length;
-  const leftUnmatchedCount = statements.filter((statement) => statement.status !== "voided").reduce((total, statement) => total + statement.counts.leftUnmatched, 0);
-  const shown = view === "unmatched" ? [] : statementsOn(statements, view);
-  const empty = !available
-    ? { title: "Statements are not available yet", hint: STATEMENT_SCHEMA_PENDING_MESSAGE }
-    : statements.length === 0
-      ? { title: "No statement imported yet", hint: "Import a carrier's commission statement as CSV, Excel or PDF to review its lines." }
-      : view === "review"
-        ? { title: "Nothing to review", hint: "Every line on every statement is decided. Import the next carrier statement when it arrives." }
-        : view === "reviewed"
-          ? { title: "No statement reviewed yet", hint: "A statement moves here once no line on it waits for a person." }
-          : { title: "No statement voided", hint: "A voided statement is kept here with its reason; its lines no longer post." };
-
-  return (
-    <CommissionsPage
-      step="statements"
-      info={INFO}
-      actions={importControl}
-      tabs={
-        <ViewTabs
-          label="Statements"
-          value={view}
-          tabs={STATEMENT_VIEWS.map((item) => ({
-            key: item.key,
-            label: item.label,
-            count: counts[item.key],
-            href: statementsViewHref(item.key),
-            srSuffix: item.key === "review" && toType ? `(${toType} ${toType === 1 ? "PDF" : "PDFs"} to type in)` : undefined,
-          }))}
-        />
-      }
-    >
-      {view === "unmatched" ? (
+  // Frame first (§7a): the title, the tabs and the import button draw at once; the counts, the import's carriers
+  // and the list stream in. Until they land the button is drawn disabled, never hidden.
+  const read = startParts((async () => {
+    const { available, statements } = await listStatements(tenantId);
+    const blocked = !available ? STATEMENT_SCHEMA_PENDING_MESSAGE : readOnly ? "Importing is paused while the account is read-only." : null;
+    const [unmatched, waitingCents, carriers, savedMappings]: [Awaited<ReturnType<typeof listUnmatchedLines>> | null, Record<string, number>, StatementCarrierOption[], Record<string, StatementMapping>] = await Promise.all([
+      view === "unmatched" && available ? listUnmatchedLines(tenantId) : Promise.resolve(null),
+      view !== "unmatched" && available ? listWaitingCents(tenantId) : Promise.resolve({}),
+      blocked ? Promise.resolve([]) : listStatementCarriers(tenantId),
+      blocked ? Promise.resolve({}) : getSavedStatementMappings(tenantId),
+    ]);
+    // A blocked import says why on hover only (board 1·4): no notice on the page.
+    const importControl = blocked ? (
+      <Button type="button" disabled title={blocked}>Import a statement</Button>
+    ) : (
+      <StatementImportButton carriers={carriers} savedMappings={savedMappings} autoOpen={importParam === "1"} />
+    );
+    const counts = statementViewCounts(statements);
+    // LA-4.2: PDFs stored and waiting for a person to type their lines in sit on To review.
+    const toType = statements.filter((statement) => statement.status === "awaiting_entry").length;
+    const leftUnmatchedCount = statements.filter((statement) => statement.status !== "voided").reduce((total, statement) => total + statement.counts.leftUnmatched, 0);
+    const shown = view === "unmatched" ? [] : statementsOn(statements, view);
+    const empty = !available
+      ? { title: "Statements are not available yet", hint: STATEMENT_SCHEMA_PENDING_MESSAGE }
+      : statements.length === 0
+        ? { title: "No statement imported yet", hint: "Import a carrier's commission statement as CSV, Excel or PDF to review its lines." }
+        : view === "review"
+          ? { title: "Nothing to review", hint: "Every line on every statement is decided. Import the next carrier statement when it arrives." }
+          : view === "reviewed"
+            ? { title: "No statement reviewed yet", hint: "A statement moves here once no line on it waits for a person." }
+            : { title: "No statement voided", hint: "A voided statement is kept here with its reason; its lines no longer post." };
+    return {
+      tabs: tabsOf(counts, toType),
+      actions: importControl,
+      body: view === "unmatched" ? (
         <UnmatchedLinesTable lines={unmatched?.lines ?? []} leftUnmatchedCount={leftUnmatchedCount} canWrite={!readOnly} writeBlockedReason={readOnly ? "Re-matching is paused while the account is read-only." : null} />
       ) : (
         <StatementsTable
@@ -114,7 +118,18 @@ export default async function StatementsPage({ searchParams }: { searchParams: P
           emptyHint={empty.hint}
           emptyAction={view === "review" && !blocked ? <StatementImportButton carriers={carriers} savedMappings={savedMappings} /> : undefined}
         />
-      )}
+      ),
+    };
+  })());
+
+  return (
+    <CommissionsPage
+      step="statements"
+      info={INFO}
+      actions={<Suspense fallback={<Button type="button" disabled>Import a statement</Button>}><Part read={read} part="actions" /></Suspense>}
+      tabs={<Suspense fallback={tabsOf(null, 0)}><Part read={read} part="tabs" /></Suspense>}
+    >
+      <StreamSection shape="table"><Part read={read} part="body" /></StreamSection>
     </CommissionsPage>
   );
 }

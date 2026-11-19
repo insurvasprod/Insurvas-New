@@ -61,11 +61,15 @@ const DIALOG_SIZE = {
   "2xl": "sm:max-w-[960px]",
 } as const
 
+/** The setup guide's bar and coach sit outside every dialog; touching them must not close the dialog it is guiding. */
+const fromSetupGuide = (event: Event) => event.target instanceof Element && event.target.closest("[data-setup-coach]") !== null
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
   size = "md",
+  onInteractOutside,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
@@ -81,6 +85,10 @@ function DialogContent({
           DIALOG_SIZE[size],
           className
         )}
+        onInteractOutside={(event) => {
+          if (fromSetupGuide(event)) event.preventDefault()
+          onInteractOutside?.(event)
+        }}
         {...props}
       >
         {/* A notice raised in a dialog stays in it: the bell is behind the overlay (page-notices.tsx). */}

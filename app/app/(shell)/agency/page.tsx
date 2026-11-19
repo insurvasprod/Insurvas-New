@@ -8,6 +8,7 @@ import { applyKillSwitches } from "@/lib/features/killSwitchRules";
 import { scopeFor } from "@/lib/agency/visibility";
 import { isSoloWorkspace } from "@/lib/tenantTeam/solo";
 import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
+import { heldRoles, menuGate, seesMoney } from "@/lib/dashboard/access";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { AgencyPage } from "@/components/app/agency/agency-page";
@@ -22,7 +23,8 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
  * AG-0.11 · the agency dashboard, Home › Agency, drawn as round 2 screens 1–2 of the canvas "Dashboards · by role"
  * (owner 2026-11-06: "exactly how the mockups are"). The month is kept in ?period=; the cards are
  * components/app/home/views/agency-view. Owner, admin, bookkeeper; a manager sees his reports and no agency money;
- * a producer never. Full width; a little scroll below the fold is fine (owner, second pass).
+ * a producer never. Full width, and from lg up exactly the screen's height (roles r1, owner 2026-11-18: no page
+ * scroll). Money only with the money permission (lib/dashboard/access seesMoney).
  */
 export default async function AgencyDashboardPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
   const guard = await guardPage("agency_dashboard");
@@ -46,11 +48,12 @@ export default async function AgencyDashboardPage({ searchParams }: { searchPara
   const canInvite = guard.role === "owner" && guard.entitlement.access !== "read_only";
   // eslint-disable-next-line react-hooks/purity -- a server render: "today" is as of this request.
   const now = Date.now();
-  const props: DashViewProps = { context, available: [...available], scope, solo, zone: zone ?? "America/New_York", now, noMoney: manager };
+  // Money from the permission, never the role name (roles r1): a manager holds none of the agency's money.
+  const props: DashViewProps = { context, available: [...available], scope, solo, zone: zone ?? "America/New_York", now, noMoney: !seesMoney(heldRoles(context)), gate: menuGate(context, scope) };
 
   return (
-    // Owner 2026-11-06 (second pass): "a bit of scroll" is fine here, so each card has room to say more.
-    <div className="flex w-full min-w-0 flex-col">
+    // Roles r1 (owner 2026-11-18): no page scroll from lg up, like the dashboard; the cards share the screen's height.
+    <div className="flex w-full min-w-0 flex-col lg:h-[calc(100dvh-var(--top-bar-h)-56px)] lg:overflow-hidden">
       <AgencyPage
         step="overview"
         info={manager ? "Your reports: what they wrote, what it is worth, and what is at risk." : "Which of your producers is actually making the agency money."}

@@ -6,6 +6,7 @@ import { scopeFor } from "@/lib/agency/visibility";
 import { getPlanAudience } from "@/lib/agency/audience";
 import { StepFrame } from "@/components/app/step-frame/step-frame";
 import { InfoTip } from "@/components/ui/info-tip";
+import { DocsGuideLink } from "@/components/app/docs/docs-guide-link";
 import type { RailStep } from "@/components/app/step-frame/step-rail";
 import { ACCOUNTING_RAIL_COOKIE, ACCOUNTING_SETTINGS_FOOT, ACCOUNTING_STEPS, ACCOUNTING_WAITING, MY_BALANCE, accountingStepLabel, type AccountingStep } from "@/lib/accounting/steps";
 
@@ -66,7 +67,8 @@ async function openSteps(): Promise<RailStep[]> {
 export async function AccountingPage({ step, pathname, title, info, chip, tabs, actions, stepper, children }: {
   step: AccountingStep;
   pathname?: string;
-  title?: string;
+  /** A record's name; a node when it streams in behind a TitleShape (frame first, UI-CONSISTENCY §7a). */
+  title?: ReactNode;
   info?: ReactNode;
   chip?: ReactNode;
   /** Drawn nowhere since round 7 (the title stands alone); kept so older callers still compile. */
@@ -87,10 +89,11 @@ export async function AccountingPage({ step, pathname, title, info, chip, tabs, 
   }
   // Accounting settings at the rail's foot, for whoever may open it (owner, bookkeeper: the To do step's rule).
   const foot = steps.some((item) => item.key === "todo") ? ACCOUNTING_SETTINGS_FOOT : null;
+  const label = typeof title === "string" ? title : accountingStepLabel(step, pathname);
   return (
     <StepFrame
-      title={title ?? accountingStepLabel(step, pathname)}
-      titleInfo={info || chip ? <>{info ? <InfoTip label={`About ${title ?? accountingStepLabel(step, pathname)}`} side="right">{info}</InfoTip> : null}{chip}</> : undefined}
+      title={title ?? label}
+      titleInfo={info || chip ? <>{info ? <InfoTip label={`About ${label}`} side="right">{info}<DocsGuideLink /></InfoTip> : null}{chip}</> : undefined}
       // Round 7 (owner 2026-11-10): the title stands alone; nothing is drawn under it. A record's facts belong in its
       // strip. `facts` is still read from older callers and drawn nowhere.
       tabs={tabs}

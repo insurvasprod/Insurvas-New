@@ -102,6 +102,38 @@ export type ViewerSetup = {
 };
 
 /**
+ * The walkthrough's reads, started from the signed session's two ids before the membership read comes back
+ * (speed pass 2026-11-18: /api/app/setup made four trips in a row, 0.8 s, and now makes one). Every read is
+ * filtered by the tenant and, where it is the person's own, the user; nothing is returned to anyone until the
+ * caller has checked the membership. `audience` unknown (the route, before the role is read) starts both sets:
+ * the owner's set is thirty `limit 1` probes, about the cost of one round trip together. Each set starts once.
+ */
+export type ViewerSetupReads = {
+  owner: () => Promise<[Awaited<ReturnType<typeof loadSetupProgress>>, Awaited<ReturnType<typeof loadSetupProfile>>, boolean]>;
+  member: () => Promise<Awaited<ReturnType<typeof loadMemberSetupProgress>>>;
+  guide: Promise<SetupGuideState>;
+};
+
+export function startViewerSetupReads(tenantId: string, userId: string, audience?: SetupAudience): ViewerSetupReads {
+  let owner: ReturnType<ViewerSetupReads["owner"]> | null = null;
+  let member: ReturnType<ViewerSetupReads["member"]> | null = null;
+  const reads: ViewerSetupReads = {
+    owner: () => (owner ??= Promise.all([
+      loadSetupProgress(tenantId),
+      loadSetupProfile(tenantId),
+      // Solo mode: no "Assign leads to your agents" step for an agent working alone.
+      isSoloWorkspace(tenantId),
+    ])),
+    member: () => (member ??= loadMemberSetupProgress(tenantId, userId)),
+    guide: loadSetupGuideState(tenantId, userId),
+  };
+  // Started now; a set the caller turns out not to need is left unobserved, so its failure must not surface.
+  if (audience !== "member") reads.owner().catch(() => undefined);
+  if (audience !== "owner") reads.member().catch(() => undefined);
+  return reads;
+}
+
+/**
  * The walkthrough for the person reading: the owner (an agency admin counts — their base role is
  * owner) gets the agency's setup, gated by the plan; anyone else gets their own short list, gated by
  * plan, role and hidden pages. `available` is the plan's features after kill switches, as the menu
@@ -114,16 +146,13 @@ export async function loadViewerSetup(
   context: TenantContext,
   available: readonly string[],
   seats: number | null | undefined,
+  /** Reads started earlier from the session (startViewerSetupReads), so they ran beside the caller's own. */
+  started?: ViewerSetupReads,
 ): Promise<ViewerSetup & { needsStamp: boolean; stamp: () => Promise<void> }> {
   const audience: SetupAudience = context.role === "owner" ? "owner" : "member";
+  const reads = started ?? startViewerSetupReads(context.tenantId, context.userId, audience);
   if (audience === "owner") {
-    const [progress, profile, guide, solo] = await Promise.all([
-      loadSetupProgress(context.tenantId),
-      loadSetupProfile(context.tenantId),
-      loadSetupGuideState(context.tenantId, context.userId),
-      // Solo mode: no "Assign leads to your agents" step for an agent working alone.
-      isSoloWorkspace(context.tenantId),
-    ]);
+    const [[progress, profile, solo], guide] = await Promise.all([reads.owner(), reads.guide]);
     const checklist = setupChecklistForState("", progress, { features: available, profile, seats, marks: guide, solo });
     const finished = progress.finished === true;
     return {
@@ -135,10 +164,7 @@ export async function loadViewerSetup(
       stamp: () => recordSetupFinished(context.tenantId),
     };
   }
-  const [progress, guide] = await Promise.all([
-    loadMemberSetupProgress(context.tenantId, context.userId),
-    loadSetupGuideState(context.tenantId, context.userId),
-  ]);
+  const [progress, guide] = await Promise.all([reads.member(), reads.guide]);
   const finished = guide.finishedAt !== null;
   const checklist = setupChecklistForState("", { ...progress, finished }, {
     features: available,

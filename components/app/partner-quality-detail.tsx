@@ -11,6 +11,7 @@ import { MoreMenu } from "@/components/ui/more-menu";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { FramedLoading } from "@/components/app/reports/reports-slot";
+import { TitleShape } from "@/components/ui/stream-section";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
@@ -182,7 +183,13 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
   // The way back is the trail above the title (owner 2026-10-30), keeping the period.
   const trail = (current: string) => [{ label: "Reports" }, { label: "Partner quality", href: backHref }, { label: current }];
 
-  if (loading && !data) return framed ? <FramedLoading /> : <PageLoading />;
+  // Frame first (UI-CONSISTENCY §7a): standalone, the trail and the name's shape draw at once; the report loads under them.
+  if (loading && !data) return framed ? <FramedLoading /> : (
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      {!embedded && <PageHeader title={<TitleShape />} breadcrumbs={trail("Partner")} />}
+      <PageLoading header={false} />
+    </div>
+  );
   if (!data) return <div className="flex flex-col gap-6">{!framed && <PageHeader title="Partner" breadcrumbs={trail("Partner")} />}<ErrorState detail={error || "Could not load this partner"} action={<Button variant="outline" onClick={() => void load(period)}>Try again</Button>} /></div>;
 
   const active: Period = { from: data.from, to: data.to };

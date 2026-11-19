@@ -9,6 +9,8 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { fillLine } from "@/components/ui/table-card-layout";
 import { MAX_ROWS } from "@/components/ui/use-fitting-page-size";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 /** One row of a file as the table shows it: every word already chosen on the server. */
 export type FileRowLine = {
@@ -113,9 +115,9 @@ export function FileRowsTable({ rows: all, toolbar, empty, pageKey = "" }: { row
             {moved && <td className="whitespace-nowrap">{row.card === "—" ? <span className="text-muted-foreground">—</span> : row.card}</td>}
             <td className="whitespace-nowrap">
               {row.reviewHref ? (
-                <Link href={row.reviewHref} onClick={(event) => event.stopPropagation()} className="hover:underline">Review ›</Link>
+                <Link href={row.reviewHref} onClick={(event) => event.stopPropagation()} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Review</Link>
               ) : (
-                <Link href={row.rowHref} aria-label={`Open row ${row.rowNumber}`} onClick={(event) => event.stopPropagation()} className="hover:underline">Open ›</Link>
+                <Link href={row.rowHref} aria-label={`Open row ${row.rowNumber}`} onClick={(event) => event.stopPropagation()} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Open</Link>
               )}
             </td>
           </tr>

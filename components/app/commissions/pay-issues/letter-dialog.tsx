@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Field, checkboxControl, textareaControl } from "@/components/ui/field";
+import { Field, textareaControl } from "@/components/ui/field";
 import { refreshStepCounts } from "@/components/app/step-frame/step-rail";
 import { notify } from "@/lib/notify";
 import { payIssueLetterHref, payIssueMoney as money } from "@/lib/commissions/payIssueGroups";
@@ -13,6 +13,7 @@ import { payIssueLetterHref, payIssueMoney as money } from "@/lib/commissions/pa
 import { READ_ONLY_HINT, postPayIssue } from "./check-now";
 import { handLetterHref } from "./decide-dialog";
 
+import { CheckBox } from "@/components/ui/check-box";
 export type LetterCandidate = { id: string; policyNumber: string | null; clientName: string | null; owedCents: number; withinLag: boolean; unpriced: boolean };
 
 type Draft = { body: string; totalCents: number; recipient: string | null } | null;
@@ -108,7 +109,7 @@ export function GroupLetterButton({ carrierId, carrierName, carrierItems, handIt
   const unpriced = carrierItems.filter((i) => i.unpriced).length;
   const row = (item: LetterCandidate, checked: boolean, onChange: (on: boolean) => void) => (
     <li key={item.id} className="flex h-9 items-center gap-3 border-b border-border px-3 last:border-b-0">
-      <input type="checkbox" className={checkboxControl} checked={checked} disabled={busy} onChange={(e) => onChange(e.target.checked)} aria-label={`Put ${item.policyNumber ?? "this item"} on the letter`} />
+      <CheckBox checked={checked} disabled={busy} onChange={(e) => onChange(e.target.checked)} aria-label={`Put ${item.policyNumber ?? "this item"} on the letter`} />
       <span className={`min-w-0 flex-1 truncate text-sm ${checked ? "text-foreground" : "text-muted-foreground"}`}>
         <span className="tabular-nums">{item.policyNumber ?? "Whole account"}</span>{" · "}{item.withinLag ? "within the lag" : item.unpriced ? "no rate to price it" : item.clientName ?? "client not known"}
       </span>
@@ -134,7 +135,7 @@ export function GroupLetterButton({ carrierId, carrierName, carrierItems, handIt
                 <textarea id="letter-to" rows={4} maxLength={600} className={textareaControl} value={recipient} disabled={busy} onChange={(e) => setRecipient(e.target.value)} onBlur={() => void preview(ticked, recipient.trim() || null)} />
                 {carrierId && (
                   <label className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
-                    <input type="checkbox" className={checkboxControl} checked={saveAddress} disabled={busy} onChange={(e) => setSaveAddress(e.target.checked)} />
+                    <CheckBox checked={saveAddress} disabled={busy} onChange={(e) => setSaveAddress(e.target.checked)} />
                     Save as {carrierName}&apos;s address
                   </label>
                 )}

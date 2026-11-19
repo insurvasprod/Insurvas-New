@@ -229,7 +229,7 @@ export function ProductsSettings() {
             )}
             footer={<span>A switch saves at once and offers Undo · turning one off asks first · &ldquo;+&rdquo; links open the page that fixes it</span>}
           >
-            <div id="products-list" className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <div id="products-list" data-guide="products-list" className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {live.length === 0 ? (
                 <EmptyState title="Your plan has no products yet" hint="See plans to find the plan that adds the products you sell." />
               ) : visible.length === 0 ? (

@@ -1,11 +1,14 @@
 import { redirect } from "next/navigation";
 
+import { CatalogPage } from "@/components/admin/catalog/catalog-page";
+import { FmapProposeButton } from "@/components/admin/catalog/fmap-propose-button";
 import { FieldMapsReview } from "@/components/admin/field-maps-review";
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
-import { db, rows, SchemaPendingError } from "@/lib/applications/db";
+import { SchemaPendingError } from "@/lib/applications/db";
 import { FIELD_MAP_CARRIERS, FIXTURE_FIELD_MAPS } from "@/lib/applications/listFixtures";
 import { canAccessConfigurationSection } from "@/lib/configuration/sections";
 import { carrierOptions, listMaps } from "@/lib/extension/maps";
+import { fieldMapExtras } from "@/lib/extension/mapsAdmin";
 import type { FieldMapCarrierOption, FieldMapView } from "@/lib/extension/types";
 
 /** The design fixtures in the API's shape (`?preview=sample`, outside production). */
@@ -20,36 +23,43 @@ function sampleMaps(): FieldMapView[] {
 
 const SAMPLE_CARRIERS: FieldMapCarrierOption[] = FIELD_MAP_CARRIERS.map((name) => ({ id: name, name, portalOrigin: null, products: [] }));
 
-/**
- * "Last filled" on the board: the newest fill_rate event per platform map, across every agency
- * (a platform map is filled for all of them). Only the time is read — no tenant or application.
- */
-async function lastFilledByMap(mapIds: string[]): Promise<Record<string, string>> {
-  if (!mapIds.length) return {};
-  const { data, error } = await db().from("carrier_field_map_events").select("map_id, at").eq("kind", "fill_rate").in("map_id", mapIds).order("at", { ascending: false }).limit(2000);
-  if (error) return {};
-  const out: Record<string, string> = {};
-  for (const r of rows<{ map_id: string; at: string }>(data)) if (!out[r.map_id]) out[r.map_id] = r.at;
-  return out;
-}
+const INFO = "Where each carrier's application form keeps each of our fields, for the browser extension. One published map per carrier and product; a draft never fills anything, and publishing waits until every sensitive field is verified.";
 
+/**
+ * Admin › Catalog › Field maps (LA-3.13; admin round 1, catalog screen 12): the platform-default maps (tenant_id is
+ * null), inside the Catalog frame. Field maps belong to the carrier library, so they follow its access rule. Beside
+ * each map: when it last filled and its misses in the last 30 days, read across agencies (lib/extension/mapsAdmin.ts).
+ */
 export default async function FieldMapsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const admin = await getCurrentAdmin();
   if (!admin) redirect("/admin/login");
-  // Field maps belong to the carrier library, so they follow its access rule.
   if (!canAccessConfigurationSection(admin.role, "carriers")) redirect("/admin");
 
   const query = await searchParams;
   if (query.preview === "sample" && process.env.NODE_ENV !== "production") {
-    return <FieldMapsReview initialMaps={sampleMaps()} carriers={SAMPLE_CARRIERS} sample />;
+    return (
+      <CatalogPage step="fields" info={INFO} actions={<FmapProposeButton />}>
+        <FieldMapsReview initialMaps={sampleMaps()} carriers={SAMPLE_CARRIERS} sample />
+      </CatalogPage>
+    );
   }
-  // The platform-default maps (tenant_id is null) and their map_miss events.
   const scope = { plane: "admin" as const, adminId: admin.id };
   const loaded = await Promise.all([listMaps(scope), carrierOptions(scope)]).catch((error: unknown) => {
     if (error instanceof SchemaPendingError) return null;
     throw error;
   });
-  if (!loaded) return <FieldMapsReview initialMaps={[]} carriers={[]} sample={false} notice="Field maps aren't set up yet. Apply the latest database migrations to review them." />;
-  const lastFilled = await lastFilledByMap(loaded[0].map((m) => m.id));
-  return <FieldMapsReview initialMaps={loaded[0]} carriers={loaded[1]} lastFilled={lastFilled} sample={false} />;
+  if (!loaded) {
+    return (
+      <CatalogPage step="fields" info={INFO} actions={<FmapProposeButton disabledReason="Field maps aren't set up yet." />}>
+        <FieldMapsReview initialMaps={[]} carriers={[]} sample={false} pending />
+      </CatalogPage>
+    );
+  }
+  const [maps, carriers] = loaded;
+  const extras = await fieldMapExtras(maps.map((m) => m.id), [...new Set([...maps.map((m) => m.carrierId), ...carriers.map((c) => c.id)])]);
+  return (
+    <CatalogPage step="fields" info={INFO} actions={<FmapProposeButton />}>
+      <FieldMapsReview initialMaps={maps} carriers={carriers} sample={false} lastFilled={extras.lastFilled} misses30={extras.misses30} carrierCodes={extras.carrierCodes} />
+    </CatalogPage>
+  );
 }

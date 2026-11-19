@@ -30,7 +30,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { Check, GripVertical, House, Radio, RotateCw, TriangleAlert } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Sheet } from "@/components/ui/sheet";
 import { PageLoading } from "@/components/ui/page-loading";
@@ -46,6 +46,8 @@ import { Field, KeyValues, LockIcon, PlusIcon, control, pillTone } from "@/compo
 import { MATCH_LABEL, MATCH_OPERATOR, RULE_STRATEGIES, SCHEMA_PENDING_MESSAGE, WEEKDAY_NAMES, daysUntil, lapseDay, nobodySentence, shortDate, shortName, stateName, type AssignmentMember, type LicenceExpiry, type PreviewRow, type RouteStats, type RuleStrategy } from "@/lib/assignment/constants";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
+import { useFlip } from "@/components/ui/use-flip";
+import { useDragLift } from "@/components/ui/use-drag-lift";
 import { draftFromRule, pinFallbacks, roleLabel, serialise, titleCase, type RuleDraft } from "@/components/app/assignment/model";
 import { PreviewWhy, RuleEditor } from "@/components/app/assignment/rule-editor";
 import { useAssignmentWorkspace } from "@/components/app/assignment/use-assignment-workspace";
@@ -71,7 +73,7 @@ const APPOINTMENTS_HREF = "/app/settings#carriers/carriers-states";
 const addLicenceHref = (state?: string) => `/app/appointments?tab=licences${state ? `&state=${state}` : ""}`;
 /** "a TX licence", "an NY licence": the article the letter's name takes. */
 const article = (code: string) => (/^[AEFHILMNORSX]/.test(code) ? "an" : "a");
-const linkAction = "shrink-0 text-xs font-semibold text-[var(--accent-ink)] hover:underline";
+const linkAction = `${buttonVariants({ variant: "outline", size: "sm" })} no-underline`;
 /** The most leads one press of "Hand out N now" gives, one router call each. */
 const HAND_OUT_CAP = 2000;
 
@@ -107,6 +109,12 @@ export function AssignmentWorkspace({ canManage, pool = false }: { canManage: bo
   const { workspace, loading, busy, preview, drafts, setDrafts, openKey, setOpenKey, dragKey, setDragKey, publishError, moveNotice, campaignFilter, setCampaignFilter, editingMember, setEditingMember, memberForm, setMemberForm, memberError, setMemberError, editingRest, setEditingRest, restForm, setRestForm, restError, restCardRef, restInputRef, workItemId, setWorkItemId, returnReason, setReturnReason, reassignWorkItemId, setReassignWorkItemId, reassignTargetUserId, setReassignTargetUserId, reassignReason, setReassignReason, adopt, loadPreview, refresh, members, memberById, publishedOrder, dirty, problems, sinceLabel, post, publish, saveMember, saveRest, saveAutoRoute, openRestEditor, updateDraft, moveDraft, dropOn, handleKeys, addCondition, restore, routedFor, topCapacitySkip, ruleSkipLine, personSkipLine, warnable, ceilingChip, valueChip, assigneeSummary } = useAssignmentWorkspace(canManage);
 
   const [reassignOpen, setReassignOpen] = useState(false);
+  // Wave C (plan item 12): a rule picked up lifts and follows the pointer, its slot stays open as a gap that moves to
+  // where it would drop, and the other rules slide aside (useFlip); the arrow keys' moves glide the same way.
+  const [overAt, setOverAt] = useState<number | null>(null);
+  const rulesRef = useRef<HTMLOListElement>(null);
+  const ruleFlip = useFlip(rulesRef);
+  const ruleLift = useDragLift();
   // Edit rules: the sheet with the whole chain editor and the household settings.
   const [rulesOpen, setRulesOpen] = useState(false);
   const [detailsFor, setDetailsFor] = useState<string | null>(null);
@@ -547,9 +555,17 @@ export function AssignmentWorkspace({ canManage, pool = false }: { canManage: bo
       {publishError && <p role="alert" className="m-0 text-xs leading-[1.5] text-[var(--error-ink)]">{publishError}</p>}
 
       <p className="sr-only" aria-live="polite">{moveNotice}</p>
-      <ol aria-label="Rules, first match wins" className="m-0 flex list-none flex-col gap-1.5 p-0">
-        {drafts.map((draft, index) => {
+      <ol ref={rulesRef} aria-label="Rules, first match wins" className="m-0 flex list-none flex-col gap-1.5 p-0">
+        {(() => {
+          // While a rule is held, the list shows it at the slot it would drop into.
+          const held = dragKey && overAt !== null ? drafts.find((draft) => draft.key === dragKey) : undefined;
+          if (!held || overAt === null) return drafts;
+          const rest = drafts.filter((draft) => draft !== held);
+          rest.splice(overAt, 0, held);
+          return rest;
+        })().map((draft, at) => {
           if (draft.matchType === "fallback") return null;
+          const index = drafts.indexOf(draft);
           const open = openKey === draft.key;
           const routed = routedFor(draft.id);
           const problem = problems[index];
@@ -559,12 +575,13 @@ export function AssignmentWorkspace({ canManage, pool = false }: { canManage: bo
           return (
             <li
               key={draft.key}
-              className={cn(cardInset, "min-w-0 transition-[opacity,border-color] duration-[var(--t-micro)]", dragKey === draft.key && "opacity-60", open && "border-[var(--primary)]")}
+              data-flip-key={draft.key}
+              className={cn(cardInset, "min-w-0 transition-[opacity,border-color] duration-[var(--t-micro)]", dragKey === draft.key && "m-drop-gap", open && "border-[var(--primary)]")}
               draggable={canManage && !open}
-              onDragStart={() => setDragKey(draft.key)}
-              onDragOver={(event) => { if (dragKey) event.preventDefault(); }}
-              onDrop={() => dropOn(draft.key)}
-              onDragEnd={() => setDragKey(null)}
+              onDragStart={(event) => { ruleLift.lift(event); setDragKey(draft.key); }}
+              onDragOver={(event) => { if (!dragKey) return; event.preventDefault(); if (draft.key !== dragKey && at !== overAt) setOverAt(at); }}
+              onDrop={() => { const from = ruleLift.rect(); if (from && dragKey) ruleFlip.place(dragKey, from); dropOn(overAt !== null ? drafts[overAt]?.key ?? draft.key : draft.key); setOverAt(null); }}
+              onDragEnd={() => { setDragKey(null); setOverAt(null); }}
             >
               <div className="flex items-center gap-3 px-3 py-2">
                 <span className="grid size-6 shrink-0 place-items-center rounded-md bg-[var(--surface-alt)] text-xs font-bold text-[var(--ink)]">{index + 1}</span>

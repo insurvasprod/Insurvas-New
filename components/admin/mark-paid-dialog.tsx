@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
+import { DoneStamp } from "@/components/ui/done-stamp";
+import { afterStamp } from "@/components/ui/use-done-stamps";
 import {
   Dialog,
   DialogContent,
@@ -17,20 +19,32 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCents } from "@/lib/money";
 
+/**
+ * Record a payment against an invoice. Paid in full, "Paid" stamps in where the button was (Wave D, 2026-11-18,
+ * DoneStamp) and the page refreshes once the stamp has played; a partial payment refreshes at once. `onPaid` hands
+ * that refresh to a list instead (the reconciliation table stamps its row, then lets it leave).
+ */
 export function MarkPaidDialog({
   invoiceId,
   number,
   remainingCents,
+  trigger,
+  onPaid,
 }: {
   invoiceId: string;
   number: string;
   remainingCents: number;
+  /** The trigger, when it is not the full-width outline button of the detail page (the invoice sheet's footer). */
+  trigger?: { label?: string; variant?: "default" | "outline" | "ghost" | "secondary" | "destructive"; className?: string };
+  /** Paid in full: the caller stamps its own row and runs `refresh` after its stamp. */
+  onPaid?: (refresh: () => void) => void;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState(formatCents(remainingCents));
   const [reference, setReference] = useState("");
   const [busy, setBusy] = useState(false);
+  const [stamped, setStamped] = useState(false);
 
   async function submit() {
     setBusy(true);
@@ -54,14 +68,23 @@ export function MarkPaidDialog({
     );
     setOpen(false);
     setReference("");
-    router.refresh();
+    if (!body.settled) {
+      router.refresh();
+      return;
+    }
+    setStamped(true);
+    const refresh = () => router.refresh();
+    if (onPaid) onPaid(refresh);
+    else afterStamp(refresh);
   }
 
   return (
     <>
-      <Button variant="outline" className="w-full" onClick={() => setOpen(true)}>
-        Mark paid
-      </Button>
+      {stamped ? <DoneStamp label="Paid" className="self-center" /> : (
+        <Button variant={trigger?.variant ?? "outline"} className={trigger?.className ?? "w-full"} onClick={() => setOpen(true)}>
+          {trigger?.label ?? "Mark paid"}
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>

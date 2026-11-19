@@ -33,6 +33,7 @@ import {
 import type { SubscriptionRow } from "@/lib/subscriptions/queries";
 import { inputControl } from "@/components/ui/field";
 
+import { CheckBox } from "@/components/ui/check-box";
 /** SA-2.7: every subscription change is audit-logged with a reason; the server refuses one under 5 characters. */
 const REASON_MIN = 5;
 const reasonOk = (reason: string) => reason.trim().length >= REASON_MIN;
@@ -554,11 +555,9 @@ export function CancelDialog({
           </div>
 
           <label className="flex items-start gap-2 text-sm">
-            <input
-              type="checkbox"
+            <CheckBox
               checked={immediate}
-              onChange={(e) => setImmediate(e.target.checked)}
-              className="mt-0.5 size-4 accent-[var(--color-danger)]"
+              onChange={(e) => setImmediate(e.target.checked)} className="mt-0.5"
             />
             <span>
               Cancel immediately instead of{" "}

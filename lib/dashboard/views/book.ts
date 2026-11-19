@@ -282,7 +282,7 @@ export async function loadBookView(props: DashViewProps): Promise<BookViewData> 
   // The Overview draws no files, changes or standing: those reads are its own view's.
   const full = !forOverview;
   const db = (): Loose => getSupabaseServiceClient();
-  const open = (key: string) => firstOpenable([key], available, role, solo);
+  const open = (key: string) => firstOpenable([key], available, role, solo, props.gate);
   const wide = scope === null;
   const keeper = role === "owner" || role === "bookkeeper";
 

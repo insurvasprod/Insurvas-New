@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, control } from "@/components/ui/field";
@@ -180,7 +180,7 @@ function WindowForm({ item, asOf, readOnly, position, onNext, onClose }: { item:
     if (ok && await post({ action: "verify", rule_id: row.rule.id }, `${windowLabel(row.type)} window verified.`)) onClose();
   }
 
-  const history = <Link href={windowHistoryHref(carrierId, row.type)} onClick={onClose} className="text-xs font-medium text-[var(--accent-ink)] hover:underline">History of this window ›</Link>;
+  const history = <Link href={windowHistoryHref(carrierId, row.type)} onClick={onClose} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>History of This Window</Link>;
 
   return (
     <>

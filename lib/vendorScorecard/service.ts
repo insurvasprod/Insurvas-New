@@ -1,6 +1,8 @@
 import "server-only";
+import { forgetPrecounted } from "@/lib/supabase/precount";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { precounted } from "@/lib/supabase/precount";
 import { scorecardCsv } from "./format";
 import { vendorReturnCsv, type EvidenceContext } from "./returnFormat";
 import { normalizeScorecard } from "./normalize";
@@ -70,7 +72,7 @@ export function defaultScorecardPeriod(today = new Date()) {
   return { from: isoDay(from), to: isoDay(today) };
 }
 
-export async function getVendorScorecard(tenantId: string, filters: { from?: unknown; to?: unknown; vendorId?: unknown; campaignId?: unknown; productCode?: unknown; persistDays?: unknown }, readOnly: boolean): Promise<VendorScorecardReport> {
+export async function getVendorScorecard(tenantId: string, filters: { from?: unknown; to?: unknown; vendorId?: unknown; campaignId?: unknown; productCode?: unknown; persistDays?: unknown }, readOnly: boolean, options: { kept?: boolean } = {}): Promise<VendorScorecardReport> {
   const parsed = dates(filters);
   const fallback = defaultScorecardPeriod();
   const from = parsed.from ?? fallback.from;
@@ -88,7 +90,11 @@ export async function getVendorScorecard(tenantId: string, filters: { from?: unk
   // both run in parallel as before, so a page before the migration is no slower than it was.
   const metricsCall = reportCarriesReturns ? Promise.resolve(null) : client.rpc("vendor_return_metrics", args);
   const [first, metricsFirst] = await Promise.all([
-    client.rpc("tenant_vendor_scorecard_report", { ...args, p_persist_days: persistDays }),
+    // `kept`: the all-time report behind the vendor cards is read from its pre-counted copy (20261118100000),
+    // refreshed every minute while in use, instead of recounting every lead on each open.
+    options.kept
+      ? precounted(tenantId, "vendor_scorecard_report", { from, to, vendor_id: vendorId, campaign_id: campaignId, product_code: productCode, persist_days: persistDays }, () => client.rpc("tenant_vendor_scorecard_report", { ...args, p_persist_days: persistDays }))
+      : client.rpc("tenant_vendor_scorecard_report", { ...args, p_persist_days: persistDays }),
     metricsCall,
   ]);
   // Before 20260925708200 the report has six arguments. Fall back to it and say so on the page;
@@ -118,7 +124,7 @@ let reportCarriesReturns = false;
  * any other failure is thrown for the caller to handle.
  */
 export async function getVendorCostPerPolicy(tenantId: string, filters: { from?: unknown; to?: unknown; vendorId?: unknown; persistDays?: unknown } = {}): Promise<{ available: boolean; from: string; to: string; persistDays: number | null; rows: VendorScorecardVendorRow[] }> {
-  const report = await getVendorScorecard(tenantId, filters, true);
+  const report = await getVendorScorecard(tenantId, filters, true, { kept: true });
   return { available: report.upgraded, from: report.from, to: report.to, persistDays: report.persist_days, rows: report.vendor_rows };
 }
 
@@ -269,6 +275,7 @@ export async function createVendorReturnClaim(tenantId: string, campaignId: unkn
   if (!parsedCampaign) throw new Error("Choose a campaign for the claim");
   const { data, error } = await rpcClient().rpc("create_vendor_return_claim", { p_tenant_id: tenantId, p_campaign_id: parsedCampaign, p_created_by: createdBy });
   if (error) throw new Error(`Could not create vendor return claim: ${error.message}`);
+  await forgetPrecounted(tenantId, ["vendor_returns_summary", "vendor_scorecard_report"]).catch(() => undefined);
   if (typeof data !== "string") throw new Error("The vendor return claim did not return an id");
   return data;
 }
@@ -278,6 +285,7 @@ export async function updateVendorReturnClaim(tenantId: string, claimId: unknown
   if (!parsedClaim) throw new Error("Invalid claim");
   const { data, error } = await rpcClient().rpc("update_vendor_return_claim", { p_tenant_id: tenantId, p_claim_id: parsedClaim, p_action: input.action, p_status: input.status ?? null, p_amount_credited_cents: input.amountCreditedCents ?? 0, p_replacement_leads_count: input.replacementLeadsCount ?? 0, p_rejection_reason: input.rejectionReason ?? null, p_notes: input.notes ?? null });
   if (error) throw new Error(`Could not update vendor return claim: ${error.message}`);
+  await forgetPrecounted(tenantId, ["vendor_returns_summary", "vendor_scorecard_report"]).catch(() => undefined);
   if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("The updated claim was invalid");
   return data as VendorReturnClaim;
 }

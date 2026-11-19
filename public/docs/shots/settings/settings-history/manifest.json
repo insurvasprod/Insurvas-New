@@ -1,0 +1,56 @@
+[
+  {
+    "src": "/docs/shots/settings/settings-history/1.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Find a setting",
+    "focus": {
+      "x": 157,
+      "y": 16,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/settings-history/2.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Narrow by Section or Person",
+    "focus": {
+      "x": 555,
+      "y": 16,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/settings-history/3.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Read the list of changes"
+  },
+  {
+    "src": "/docs/shots/settings/settings-history/4.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click a row to see the change",
+    "focus": {
+      "x": 720,
+      "y": 141,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/settings-history/5.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Export CSV to keep a copy",
+    "focus": {
+      "x": 720,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  }
+]

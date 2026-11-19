@@ -6,11 +6,15 @@ import { useEffect, useMemo, useRef, useState, useTransition, type DragEvent, ty
 import { createPortal } from "react-dom";
 import { ChevronRight, FileText } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cardSurface } from "@/components/ui/card";
 import { ConfirmDialog, confirmAction } from "@/components/ui/confirm-dialog";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DoneStamp } from "@/components/ui/done-stamp";
+import { UploadProgress } from "@/components/ui/upload-progress";
+import { sendWithProgress } from "@/components/ui/upload-request";
+import { afterStamp } from "@/components/ui/use-done-stamps";
 import { FactTable } from "@/components/ui/fact-table";
 import { Field, control } from "@/components/ui/field";
 import { LeaveGuard } from "@/components/ui/leave-guard";
@@ -40,7 +44,9 @@ import {
 import { BILL_FORM_ACTIONS, billDate, billDiffers, billHref, billMonth, billNextStep, billPeriod, onBillTab, ourCents, sourceHref, type BillTab } from "@/lib/accounting/billTabs";
 import type { InvoiceDetail, InvoiceListRow } from "@/lib/accounting/invoiceStore";
 import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
+import { useDenyShake } from "@/components/ui/use-deny-shake";
 import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 
 /**
  * LA-7.2 · what the agency paid for leads, one bill at a time. Each line carries its campaign; before approving,
@@ -137,6 +143,7 @@ function InvoiceForm({ sources, initial }: { sources: Sources; initial?: Invoice
   const [lines, setLines] = useState<LineDraft[]>(startLines);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ field: "source" | "number" | "period" | "lines" | "tax" | null; message: string } | null>(null);
+  const refusal = useDenyShake();
   const [editing, setEditing] = useState<number | "new" | "tax" | null>(null);
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   useEffect(() => { setSlot(document.getElementById(BILL_FORM_ACTIONS)); }, []); // eslint-disable-line react-hooks/set-state-in-effect
@@ -152,12 +159,14 @@ function InvoiceForm({ sources, initial }: { sources: Sources; initial?: Invoice
   const periodWrong = Boolean(f.periodStart && f.periodEnd && f.periodEnd < f.periodStart);
 
   // "Save as draft" keeps it to finish later; "Save bill" means it arrived and is ready to check and approve.
+  // A save refused for a missing or wrong field shakes the title-line Save once (Wave B, 2026-11-18).
+  const refuse = (found: NonNullable<typeof error>) => { setError(found); refusal.deny(); return false; };
   const save = async (as: "draft" | "received" = "received"): Promise<boolean> => {
-    if (!f.source) { setError({ field: "source", message: "Choose who sent the bill." }); return false; }
-    if (!f.number.trim()) { setError({ field: "number", message: "Enter the bill number, as printed on the bill." }); return false; }
-    if (periodWrong) { setError({ field: "period", message: "“Leads to” is before “Leads from”." }); return false; }
-    if (!lines.length) { setError({ field: "lines", message: "Add at least one line." }); return false; }
-    if (!totals || taxCents === null) { setError({ field: "tax", message: "Dollars and cents only." }); return false; }
+    if (!f.source) return refuse({ field: "source", message: "Choose who sent the bill." });
+    if (!f.number.trim()) return refuse({ field: "number", message: "Enter the bill number, as printed on the bill." });
+    if (periodWrong) return refuse({ field: "period", message: "“Leads to” is before “Leads from”." });
+    if (!lines.length) return refuse({ field: "lines", message: "Add at least one line." });
+    if (!totals || taxCents === null) return refuse({ field: "tax", message: "Dollars and cents only." });
     const [kind, id] = f.source.split(":");
     setBusy(true);
     setError(null);
@@ -195,7 +204,7 @@ function InvoiceForm({ sources, initial }: { sources: Sources; initial?: Invoice
     <>
       <Button type="button" variant="ghost" disabled={busy} onClick={leave}>Discard</Button>
       <Button type="button" variant="outline" disabled={busy} onClick={() => void save("draft")}>Save as draft</Button>
-      <Button type="submit" form="bill-form" disabled={busy}>{busy ? "Saving…" : initial ? "Save changes" : "Save bill"}</Button>
+      <Button type="submit" form="bill-form" disabled={busy} className={refusal.className}>{busy ? "Saving…" : initial ? "Save changes" : "Save bill"}</Button>
     </>
   );
 
@@ -471,10 +480,14 @@ export function InvoiceActions({ inv, readOnly, next }: { inv: Head; readOnly: b
   const [busy, setBusy] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
   const editable = EDITABLE.includes(inv.status);
+  // Approved or marked paid: the word stamps in where the button was, once (Tier 2 motion, 2026-11-18), and stays on
+  // the title line beside whatever primary the bill's new status brings.
+  const [stamped, setStamped] = useState<{ label: string; from: InvoiceStatus } | null>(null);
   const act = async (payload: Record<string, unknown>, done: (r: unknown) => string, after?: { label: string; onClick: () => void }) => {
     setBusy(true);
     try {
       const body = await send(`/api/app/accounting/invoices/${inv.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (payload.action === "approve" || payload.action === "paid") setStamped({ label: payload.action === "paid" ? "Paid" : "Approved", from: inv.status });
       notify.done(done(body.result), after ? { action: after } : undefined);
       setAsking(null);
       router.refresh();
@@ -505,6 +518,9 @@ export function InvoiceActions({ inv, readOnly, next }: { inv: Head; readOnly: b
   };
   const documentItem = inv.hasDocument ? { label: "Open the document", href: `/api/app/accounting/invoices/${inv.id}/document` } : null;
   const gap = inv.differenceCents == null ? 0 : Math.abs(inv.differenceCents);
+  // The stamp takes the button's place until the refresh lands, then stays beside the next primary (Approved · Mark paid).
+  const stamp = stamped?.label ?? null;
+  const landing = stamped !== null && stamped.from === inv.status;
   const primaryLabel = inv.status === "draft" ? "Finish" : inv.status === "received" ? "Approve" : inv.status === "approved" ? "Mark paid" : inv.status === "disputed" ? "Close the dispute" : null;
   if (readOnly) return <><MoreMenu items={[documentItem]} />{primaryLabel ? <OffButton reason={READ_ONLY_REASON}>{primaryLabel}</OffButton> : null}</>;
   return (
@@ -516,10 +532,14 @@ export function InvoiceActions({ inv, readOnly, next }: { inv: Head; readOnly: b
         inv.hasDocument ? documentItem : { label: "Attach the bill", onSelect: () => picker.current?.click() },
         inv.status !== "void" && { label: "Void", onSelect: () => setAsking({ kind: "void", reason: "", tried: false }) },
       ]} />
+      {stamp ? <DoneStamp key={stamp} label={stamp} className="self-center" /> : null}
+      {/* While the stamp lands, it holds the primary's place; then the new status's primary returns beside it. */}
+      {landing ? null : <>
       {inv.status === "draft" ? <Button asChild><Link href={`/app/vendor-bills/new?edit=${inv.id}`}>Finish</Link></Button> : null}
       {inv.status === "received" ? <Button disabled={busy} onClick={() => (inv.flagged ? setAsking({ kind: "approve" }) : void approve())}>Approve</Button> : null}
       {inv.status === "approved" ? <Button disabled={busy} onClick={() => setAsking({ kind: "paid", on: today(), method: "ach", reference: "" })}>Mark paid</Button> : null}
       {inv.status === "disputed" ? <Button disabled={busy} onClick={() => setAsking({ kind: "undispute" })}>Close the dispute</Button> : null}
+      </>}
       <input ref={picker} type="file" className="sr-only" tabIndex={-1} aria-hidden="true" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => { const file = e.target.files?.[0]; if (file) void upload(file); e.target.value = ""; }} />
       {asking?.kind === "approve" ? (
         <ConfirmDialog
@@ -581,17 +601,32 @@ export function InvoiceActions({ inv, readOnly, next }: { inv: Head; readOnly: b
   );
 }
 
-/** Attach the bill's document (a PDF or a photo); the page refreshes to show it. */
-function useUpload(id: string) {
+/**
+ * Attach the bill's document (a PDF or a photo); the page refreshes to show it. `onProgress` (the Document tab): the
+ * file goes up with a real bar, which ends on its check before the refresh (Tier 2 motion, 2026-11-18); null clears it.
+ */
+function useUpload(id: string, onProgress?: (sending: { name: string; value: number } | null) => void) {
   const router = useRouter();
   return async (file: File) => {
     const form = new FormData();
     form.set("file", file);
+    const url = `/api/app/accounting/invoices/${id}/document`;
     try {
-      await send(`/api/app/accounting/invoices/${id}/document`, { method: "POST", body: form });
+      if (onProgress) {
+        // send()'s handling, on a request that reports its progress.
+        const res = await sendWithProgress(url, form, (value) => onProgress({ name: file.name, value }));
+        const body = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(body?.error ?? "That didn't save");
+      } else await send(url, { method: "POST", body: form });
       notify.done("Bill attached");
+      if (onProgress) {
+        onProgress({ name: file.name, value: 1 });
+        await new Promise<void>((done) => afterStamp(done));
+        onProgress(null);
+      }
       router.refresh();
     } catch (err) {
+      onProgress?.(null);
       notify.fail(err instanceof Error ? err.message : "The file didn't upload");
     }
   };
@@ -697,7 +732,7 @@ export function BillCompare({ rows, lines, campaigns, frozen, invoicedCents, our
               ["Difference", <span key="d" className={r.differenceCents < 0 ? "font-semibold text-[var(--error-ink)]" : undefined}>{gap(r)}</span>],
             ] : [["Invoiced", invoiced(r)], ["Our figure", "Not something we can count: the bill's figure is used."]]} />
             <DialogFooter className="items-center sm:justify-between">
-              {r.campaignId ? <Link className="text-xs font-semibold text-[var(--accent-ink)] hover:underline" href={campaignHref(r.campaignId)}>Open those leads ›</Link> : <span />}
+              {r.campaignId ? <Link className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")} href={campaignHref(r.campaignId)}>Open Those Leads</Link> : <span />}
               <Button type="button" variant="outline" onClick={() => setOpen(null)}>Close</Button>
             </DialogFooter>
           </> : null}
@@ -709,9 +744,11 @@ export function BillCompare({ rows, lines, campaigns, frozen, invoicedCents, our
 
 /** Document (2·2): the file, or a drop zone for the vendor's PDF or a photo. */
 export function BillDocument({ id, name, readOnly }: { id: string; name: string | null; readOnly: boolean }) {
-  const upload = useUpload(id);
+  const [sending, setSending] = useState<{ name: string; value: number } | null>(null);
+  const upload = useUpload(id, setSending);
   const picker = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
+  const bar = sending ? <UploadProgress name={sending.name} value={sending.value} className="mx-4 mb-4" /> : null;
   const [busy, startBusy] = useTransition();
   const take = (file: File | undefined) => { if (file) startBusy(() => upload(file)); };
   const drop = (e: DragEvent) => { e.preventDefault(); setOver(false); if (!readOnly) take(e.dataTransfer.files?.[0]); };
@@ -726,13 +763,15 @@ export function BillDocument({ id, name, readOnly }: { id: string; name: string 
           {readOnly ? null : <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => picker.current?.click()}>Replace the document</Button>}
           {input}
         </div>
+        {bar}
       </TableCard>
     );
   }
   return (
     <TableCard>
       <div
-        className={`m-4 flex flex-col items-center gap-1 rounded-lg border border-dashed p-8 text-center text-sm ${over ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-border"}`}
+        data-drag-over={over ? "" : undefined}
+        className={`m-dropzone m-4 flex flex-col items-center gap-1 rounded-lg border border-dashed p-8 text-center text-sm ${over ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-border"}`}
         onDragOver={(e) => { e.preventDefault(); if (!readOnly) setOver(true); }}
         onDragLeave={() => setOver(false)}
         onDrop={drop}
@@ -743,6 +782,7 @@ export function BillDocument({ id, name, readOnly }: { id: string; name: string 
         )}
         {input}
       </div>
+      {bar}
     </TableCard>
   );
 }

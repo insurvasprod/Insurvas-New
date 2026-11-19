@@ -12,6 +12,7 @@ import { CONDITION_TYPES, MATCH_LABEL, MATCH_TYPES, MAX_EXTRA_CONDITIONS, RULE_S
 import { cn } from "@/lib/utils";
 import { type ConditionDraft, type RuleDraft, conditionProblem, roleLabel } from "./model";
 
+import { CheckBox } from "@/components/ui/check-box";
 export function PreviewWhy({ row, ruleNumber, memberName }: { row: PreviewRow; ruleNumber: number | null; memberName: (id: string) => string }) {
   if (row.outcome === "taken") return <StatusChip dot={false}>Already taken</StatusChip>;
   if (row.outcome === "error") return <StatusChip dot={false} tone="danger">{row.error ?? "Could not route"}</StatusChip>;
@@ -97,7 +98,7 @@ export function RuleEditor({
           )}
           {draft.matchType === "product" && (
             <label className="mt-2 flex items-center gap-2 text-sm text-[var(--body)]">
-              <input type="checkbox" checked={draft.licensedOnly} disabled={!canManage} onChange={(event) => onChange({ licensedOnly: event.target.checked })} />
+              <CheckBox checked={draft.licensedOnly} disabled={!canManage} onChange={(event) => onChange({ licensedOnly: event.target.checked })} />
               Licensed agents only
             </label>
           )}
@@ -110,7 +111,7 @@ export function RuleEditor({
                 <div className="mt-2 flex max-h-44 flex-wrap gap-x-4 gap-y-2 overflow-y-auto">
                   {campaigns.map((campaign) => (
                     <label key={campaign.id} className="flex items-center gap-1.5 text-sm text-[var(--body)]">
-                      <input type="checkbox" checked={draft.campaignIds.includes(campaign.id)} disabled={!canManage} onChange={(event) => onChange({ campaignIds: event.target.checked ? [...draft.campaignIds, campaign.id] : draft.campaignIds.filter((value) => value !== campaign.id) })} />
+                      <CheckBox checked={draft.campaignIds.includes(campaign.id)} disabled={!canManage} onChange={(event) => onChange({ campaignIds: event.target.checked ? [...draft.campaignIds, campaign.id] : draft.campaignIds.filter((value) => value !== campaign.id) })} />
                       {campaign.name}
                     </label>
                   ))}
@@ -153,7 +154,7 @@ export function RuleEditor({
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
           {members.map((member) => (
             <label key={member.id} className="flex items-center gap-1.5 text-sm text-[var(--body)]">
-              <input type="checkbox" checked={draft.assigneeIds.includes(member.id)} disabled={!canManage} onChange={(event) => onChange({ assigneeIds: event.target.checked ? [...draft.assigneeIds, member.id] : draft.assigneeIds.filter((value) => value !== member.id) })} />
+              <CheckBox checked={draft.assigneeIds.includes(member.id)} disabled={!canManage} onChange={(event) => onChange({ assigneeIds: event.target.checked ? [...draft.assigneeIds, member.id] : draft.assigneeIds.filter((value) => value !== member.id) })} />
               {member.name} <span className="text-[var(--muted)]">· {roleLabel(member.role)}</span>
             </label>
           ))}
@@ -209,7 +210,7 @@ export function ConditionsEditor({
                   <div className="flex max-h-32 flex-wrap gap-x-4 gap-y-2 overflow-y-auto" role="group" aria-label={`Condition ${position + 2} campaigns`}>
                     {campaigns.map((campaign) => (
                       <label key={campaign.id} className="flex items-center gap-1.5 text-sm text-[var(--body)]">
-                        <input type="checkbox" checked={condition.campaignIds.includes(campaign.id)} disabled={!canManage} onChange={(event) => update(condition.key, { campaignIds: event.target.checked ? [...condition.campaignIds, campaign.id] : condition.campaignIds.filter((value) => value !== campaign.id) })} />
+                        <CheckBox checked={condition.campaignIds.includes(campaign.id)} disabled={!canManage} onChange={(event) => update(condition.key, { campaignIds: event.target.checked ? [...condition.campaignIds, campaign.id] : condition.campaignIds.filter((value) => value !== campaign.id) })} />
                         {campaign.name}
                       </label>
                     ))}
@@ -232,7 +233,7 @@ export function ConditionsEditor({
                   )}
                   {condition.type === "product" && (
                     <label className="mt-2 flex items-center gap-2 text-sm text-[var(--body)]">
-                      <input type="checkbox" checked={condition.licensedOnly} disabled={!canManage} onChange={(event) => update(condition.key, { licensedOnly: event.target.checked })} />
+                      <CheckBox checked={condition.licensedOnly} disabled={!canManage} onChange={(event) => update(condition.key, { licensedOnly: event.target.checked })} />
                       Licensed agents only
                     </label>
                   )}

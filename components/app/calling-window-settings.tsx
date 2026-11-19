@@ -8,6 +8,7 @@ import { cardSurface } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/field";
 import { LeaveGuard } from "@/components/ui/leave-guard";
+import { useSavedFlash } from "@/components/ui/use-saved-flash";
 import { EmptyState, ErrorState } from "@/components/ui/page-states";
 import { SWITCH_FRAME, switchOption } from "@/components/ui/view-tabs";
 import { SettingsSectionHeader, SettingsStack } from "@/components/app/settings/primitives";
@@ -87,6 +88,8 @@ export function CallingWindowSettingsPanel() {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
+  // The week, or the campaign, that just saved glows once beside the toast (Wave B, 2026-11-18).
+  const saved = useSavedFlash();
   const [saveError, setSaveError] = useState("");
   const [notice, setNotice] = useState("");
   const [state, setState] = useState<string | null>(null);
@@ -117,6 +120,8 @@ export function CallingWindowSettingsPanel() {
 
   const baseline = useMemo(() => (loaded ? draftFrom(loaded) : null), [loaded]);
   const dirty = Boolean(draft && baseline && !same(draft, baseline));
+  // No agency hours saved yet: the defaults on screen can be saved as they are (Get set up's calling-hours step).
+  const firstSave = Boolean(loaded && (!loaded.tenant || loaded.tenantIsDefault));
 
   // The states listed beside the grid: the ones the agency works in, else the ones whose rule bites.
   const listing = useMemo(() => {
@@ -153,6 +158,7 @@ export function CallingWindowSettingsPanel() {
       setLoaded(next);
       setDraft(draftFrom(next));
       notify.done("Calling hours saved");
+      saved.flash("week");
       return true;
     } catch (cause) {
       setSaveError(cause instanceof Error ? cause.message : "Could not save your calling hours");
@@ -379,7 +385,7 @@ export function CallingWindowSettingsPanel() {
                 saving={busy}
                 onDiscard={() => { setDraft(baseline); setSaveError(""); setNotice(""); }}
                 save={
-                  <Button data-guide="calling-windows-save" type="button" size="sm" disabled={!dirty || busy || Boolean(problem)} onClick={() => void save()}>
+                  <Button data-guide="calling-windows-save" type="button" size="sm" disabled={(!dirty && !firstSave) || busy || Boolean(problem)} onClick={() => void save()}>
                     {busy ? "Saving…" : "Save hours"}
                   </Button>
                 }
@@ -410,7 +416,7 @@ export function CallingWindowSettingsPanel() {
             )}
             <span className="ml-auto"><GridLegend items={["call", "state", "off"]} /></span>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-4" {...saved.props("week")}>
             <WeekGrid
               week={draft.week}
               noSunday={draft.options.noSunday}
@@ -464,7 +470,7 @@ export function CallingWindowSettingsPanel() {
               ) : (
                 <ul className="m-0 list-none p-0">
                   {narrowed.map((campaign) => (
-                    <li key={campaign.id}>
+                    <li key={campaign.id} {...saved.props(campaign.id)}>
                       <button
                         type="button"
                         disabled={readOnly}
@@ -501,6 +507,7 @@ export function CallingWindowSettingsPanel() {
             // A campaign saves itself: the agency draft (if any) stays as it is.
             setLoaded((current) => (current ? { ...next, week: current.week } : next));
             notify.done(window ? "Campaign hours saved" : "That campaign uses your agency's hours again");
+            if (window) saved.flash(campaignId);
             setSheet(null);
           }}
         />

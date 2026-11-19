@@ -9,8 +9,9 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { SaveQueueBoard } from "@/components/app/save-queue-board";
 import { EmptyState } from "@/components/ui/page-states";
+import { StreamSection } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
-import { RetentionPage } from "@/components/app/retention/retention-page";
+import { Await, RetentionPage } from "@/components/app/retention/retention-page";
 import { Callout } from "@/components/app/settings/primitives";
 
 /**
@@ -36,23 +37,34 @@ export default async function SaveQueuePage({ searchParams }: { searchParams: Pr
   // No sort in the address: the agency's default (LA-5.11).
   const asked: QueueSort | undefined = (SORTS as readonly string[]).includes(sortParam ?? "") ? (sortParam as QueueSort) : undefined;
   // "Start the fix" opens an LA-5.4 servicing request, which is the `payment_repair` feature (`servicing`).
-  const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope: await scopeFor(guard.context) };
   // LA-5.6: a reinstatement window about to close is pinned above everything else here (`reinstatement`).
-  const [queue, closing] = await Promise.all([loadSaveQueue(viewer, asked), reinstatement.entitled ? closingSoon(viewer).catch(() => null) : Promise.resolve(null)]);
+  // Frame first (UI-CONSISTENCY §7a): the title and the rail draw at once; the two reads start here, together as
+  // before, and the queue streams in under the title.
+  const read = scopeFor(guard.context).then(async (scope) => {
+    const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope };
+    const [queue, closing] = await Promise.all([loadSaveQueue(viewer, asked), reinstatement.entitled ? closingSoon(viewer).catch(() => null) : Promise.resolve(null)]);
+    return { queue, closing };
+  });
 
   return (
     <RetentionPage step="save">
-    <>
-      {/* A closing reinstatement window is urgent, so it goes to the bell (no notice on the page, owner 2026-11-02). */}
-      {closing ? <Callout tone="error" title={<>{closing === 1 ? "1 reinstatement window closes" : `${closing} reinstatement windows close`} within days. <Link href="/app/reinstatement" className="font-semibold underline">Work it now</Link></>} /> : null}
-      {queue.available ? (
-        <SaveQueueBoard queue={queue} sort={asked ?? queue.settings.queueDefaultSort} readOnly={guard.entitlement.access === "read_only"} canStartFix={servicing.entitled && servicing.entitlement.access !== "read_only"} />
-      ) : (
-        <TableCard>
-          <EmptyState title="Not switched on yet" hint={RADAR_PENDING_MESSAGE} />
-        </TableCard>
-      )}
-    </>
+      <StreamSection shape="strip+table">
+        <Await read={read}>
+          {({ queue, closing }) => (
+            <>
+              {/* A closing reinstatement window is urgent, so it goes to the bell (no notice on the page, owner 2026-11-02). */}
+              {closing ? <Callout tone="error" title={<>{closing === 1 ? "1 reinstatement window closes" : `${closing} reinstatement windows close`} within days. <Link href="/app/reinstatement" className="font-semibold underline">Work it now</Link></>} /> : null}
+              {queue.available ? (
+                <SaveQueueBoard queue={queue} sort={asked ?? queue.settings.queueDefaultSort} readOnly={guard.entitlement.access === "read_only"} canStartFix={servicing.entitled && servicing.entitlement.access !== "read_only"} />
+              ) : (
+                <TableCard>
+                  <EmptyState title="Not switched on yet" hint={RADAR_PENDING_MESSAGE} />
+                </TableCard>
+              )}
+            </>
+          )}
+        </Await>
+      </StreamSection>
     </RetentionPage>
   );
 }

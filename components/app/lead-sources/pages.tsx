@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { redirect } from "next/navigation";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
@@ -16,6 +16,7 @@ import { LeadsInPage } from "@/components/app/lead-sources/leads-in";
 import { Callout } from "@/components/app/settings/primitives";
 import { AccountingPage } from "@/components/app/accounting/accounting-page";
 import { EmptyState } from "@/components/ui/page-states";
+import { StreamSection } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs } from "@/components/ui/view-tabs";
 
@@ -94,8 +95,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * template, a dialog; `?template=` opens it) and Enter a bill; on Returns, Review a claim (the workspace fills
  * the slot). No read-only card: the buttons say why they are off.
  */
-export async function VendorBillsPage({ tab, open, vendor, status, differs, template, guards }: { tab: VendorBillsTab; open?: string; vendor?: string; status?: string; differs?: string; template?: string; guards?: { money: Guard; returns: Guard } }) {
-  const [money, returns] = guards ? [guards.money, guards.returns] : await Promise.all([guardPage("profit_and_loss"), guardPage("true_cpa")]);
+export async function VendorBillsPage({ tab, open, vendor, status, differs, template, guards }: { tab: VendorBillsTab; open?: string; vendor?: string; status?: string; differs?: string; template?: string; guards?: { money: Guard | Promise<Guard>; returns: Guard | Promise<Guard> } }) {
+  const [money, returns] = await Promise.all(guards ? [guards.money, guards.returns] : [guardPage("profit_and_loss"), guardPage("true_cpa")]);
   const canInvoices = money.entitled && actAsPage(money, ["owner", "bookkeeper"]);
   const returnsContext = returns.entitled ? returns.context : null;
   const agencyNarrow = returnsContext ? (await scopeFor(returnsContext)) !== null : false;
@@ -114,41 +115,36 @@ export async function VendorBillsPage({ tab, open, vendor, status, differs, temp
   const moneyReadOnly = money.entitled && money.entitlement.access === "read_only";
   const picked = billTabFor(status);
 
-  let panel: ReactNode = null;
-  let actions: ReactNode = undefined;
-  let bills: InvoiceListRow[] | null = null;
-  if (canInvoices) {
-    const tenantId = money.context.tenantId;
-    // The list compares the bills still waiting live (listBills); the Returns tab only needs the tab counts.
-    const loaded = await Promise.all([shown === "invoices" ? listBills(tenantId) : listInvoices(tenantId), shown === "invoices" ? listTemplates(tenantId) : Promise.resolve([])]).then(
+  // Frame first (UI-CONSISTENCY §7a): the bills are read now and awaited by the blocks below; the title, the status
+  // tabs and Enter a bill draw at once, the counts when the list lands.
+  // The list compares the bills still waiting live (listBills); the Returns tab only needs the tab counts.
+  const read: BillsRead | null = canInvoices
+    ? Promise.all([shown === "invoices" ? listBills(money.context.tenantId) : listInvoices(money.context.tenantId), shown === "invoices" ? listTemplates(money.context.tenantId) : Promise.resolve([])]).then(
       ([invoices, templates]) => ({ invoices, templates, problem: null }),
       (error: unknown) => {
         if (!(error instanceof InvoiceError)) throw error;
         return { invoices: null, templates: null, problem: error.message };
       },
-    );
-    bills = loaded.invoices;
-    if (shown === "invoices") {
-      panel = loaded.invoices
-        ? <InvoicesBoard key={picked.tab} invoices={loaded.invoices} readOnly={moneyReadOnly} tab={picked.tab} differs={picked.differs || differs === "1"} />
-        : <TableCard><EmptyState title="Not switched on yet" hint={loaded.problem ?? ""} /></TableCard>;
-      if (loaded.invoices) actions = <InvoiceListActions templates={loaded.templates ?? []} readOnly={moneyReadOnly} openTemplate={template} />;
-    }
-  }
-  if (shown === "returns") {
-    panel = <VendorReturnsWorkspace embedded initialVendorId={vendor && UUID.test(vendor) ? vendor : undefined} />;
+    )
+    : null;
+  const panel = shown === "returns"
+    ? <VendorReturnsWorkspace embedded initialVendorId={vendor && UUID.test(vendor) ? vendor : undefined} />
+    : read ? <StreamSection shape="table"><BillsPanel read={read} tab={picked.tab} differs={picked.differs || differs === "1"} readOnly={moneyReadOnly} /></StreamSection> : null;
+  const actions = shown === "returns"
     // Review a claim: the workspace portals the title line's primary into this slot (2·6).
-    actions = <span id="vendor-returns-actions" className="contents" />;
-  }
-
-  const count = (key: BillTab) => (bills ? bills.filter((b) => onBillTab(b.status, key)).length || null : null);
-  const differsOn = (key: BillTab) => Boolean(bills?.some((b) => onBillTab(b.status, key) && billDiffers(b)));
-  const tabs = canInvoices
-    ? <ViewTabs label="Vendor bills" value={shown === "returns" ? "returns" : picked.tab} tabs={[
-        ...BILL_TABS.map((t) => ({ key: t.key, label: t.label, count: count(t.key), tone: t.key !== "all" && t.key !== "paid" && differsOn(t.key) ? ("danger" as const) : undefined, href: t.key === "approve" ? "/app/vendor-bills" : `/app/vendor-bills?status=${t.key}` })),
-        ...(canReturns ? [{ key: "returns" as const, label: "Returns", href: "/app/vendor-bills?tab=returns" }] : []),
-      ]} />
-    : undefined;
+    ? <span id="vendor-returns-actions" className="contents" />
+    : read ? <Suspense fallback={<InvoiceListActions templates={[]} readOnly={moneyReadOnly} />}><BillsActions read={read} readOnly={moneyReadOnly} template={template} /></Suspense> : undefined;
+  const tabsOf = (bills: InvoiceListRow[] | null) => {
+    const count = (key: BillTab) => (bills ? bills.filter((b) => onBillTab(b.status, key)).length || null : null);
+    const differsOn = (key: BillTab) => Boolean(bills?.some((b) => onBillTab(b.status, key) && billDiffers(b)));
+    return canInvoices
+      ? <ViewTabs label="Vendor bills" value={shown === "returns" ? "returns" : picked.tab} tabs={[
+          ...BILL_TABS.map((t) => ({ key: t.key, label: t.label, count: count(t.key), tone: t.key !== "all" && t.key !== "paid" && differsOn(t.key) ? ("danger" as const) : undefined, href: t.key === "approve" ? "/app/vendor-bills" : `/app/vendor-bills?status=${t.key}` })),
+          ...(canReturns ? [{ key: "returns" as const, label: "Returns", href: "/app/vendor-bills?tab=returns" }] : []),
+        ]} />
+      : undefined;
+  };
+  const tabs = read ? <Suspense fallback={tabsOf(null)}><BillsTabs read={read} tabsOf={tabsOf} /></Suspense> : undefined;
 
   return (
     // Accounting › Vendor bills (owner 2026-11-02): a step of the one Accounting page; its tabs on the title line.
@@ -161,4 +157,24 @@ export async function VendorBillsPage({ tab, open, vendor, status, differs, temp
       {panel}
     </AccountingPage>
   );
+}
+
+type BillsRead = Promise<{ invoices: InvoiceListRow[] | null; templates: Awaited<ReturnType<typeof listTemplates>> | null; problem: string | null }>;
+
+/** The status tabs with their counts, once the bills are read (the fallback draws the same tabs without counts). */
+async function BillsTabs({ read, tabsOf }: { read: BillsRead; tabsOf: (bills: InvoiceListRow[] | null) => ReactNode }) {
+  const { invoices } = await read;
+  return tabsOf(invoices);
+}
+
+async function BillsActions({ read, readOnly, template }: { read: BillsRead; readOnly: boolean; template?: string }) {
+  const { invoices, templates } = await read;
+  return invoices ? <InvoiceListActions templates={templates ?? []} readOnly={readOnly} openTemplate={template} /> : null;
+}
+
+async function BillsPanel({ read, tab, differs, readOnly }: { read: BillsRead; tab: BillTab; differs: boolean; readOnly: boolean }) {
+  const { invoices, problem } = await read;
+  return invoices
+    ? <InvoicesBoard key={tab} invoices={invoices} readOnly={readOnly} tab={tab} differs={differs} />
+    : <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>;
 }

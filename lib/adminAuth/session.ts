@@ -29,6 +29,12 @@ export type AdminSessionPayload = {
   sub: string;
   role: AdminRole;
   stage: "authenticated";
+  /**
+   * admin_users.session_version when this session was issued (M-2). A request whose token carries
+   * any other version is refused, so raising the column ends the session. Absent on tokens issued
+   * before the claim existed; those count as 0 (tokenSessionVersion).
+   */
+  ver?: number;
 };
 
 export type AdminPending2faPayload = {
@@ -36,8 +42,8 @@ export type AdminPending2faPayload = {
   stage: "pending_2fa";
 };
 
-export async function signAdminSessionToken(adminId: string, role: AdminRole): Promise<string> {
-  return new SignJWT({ role, stage: "authenticated" } satisfies Omit<AdminSessionPayload, "sub">)
+export async function signAdminSessionToken(adminId: string, role: AdminRole, sessionVersion = 0): Promise<string> {
+  return new SignJWT({ role, stage: "authenticated", ver: sessionVersion } satisfies Omit<AdminSessionPayload, "sub">)
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(adminId)
     .setIssuedAt()
@@ -118,13 +124,10 @@ export async function verifyPending2faToken(token: string): Promise<AdminPending
  * holds regardless.)
  */
 /**
- * ADMIN_COOKIE_DOMAIN MUST be set in production (e.g. `admin.insurvas.com`).
- *
- * Left unset, the cookie is host-only on whichever host served /admin/login. That is safe only while
- * the admin plane has a host of its own. If the agent app and the admin plane share a parent domain
- * and AGENT_COOKIE_DOMAIN is set to that parent (`.insurvas.com`), the two planes' cookies must not
- * overlap: pin this one to the admin host, never to the shared parent. See also ADMIN_HOST in
- * proxy.ts, which keeps /admin off the agent host altogether, and .env.example.
+ * ADMIN_COOKIE_DOMAIN is optional (security review 2026-11, H-2). Left unset, the cookie is
+ * host-only on the host that served /admin/login, which with ADMIN_HOST set is the admin host alone.
+ * If set, pin it to the admin host, never to the shared parent (`.insurvas.com`), or the planes'
+ * cookies overlap. See ADMIN_HOST in proxy.ts and .env.example.
  */
 export const sessionCookieOptions = {
   httpOnly: true as const,

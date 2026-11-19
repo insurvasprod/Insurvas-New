@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * Settings round 8, wave 3 (docs/design/settings-r8/team-carriers.html): the small parts Team & access,
  * Carriers and the Browser extension share. Tokens only; text 12 / 14 / 16.
@@ -120,7 +121,7 @@ export function ChoiceCard({ selected, onSelect, title, help, end, disabled, nam
 export function CheckLine({ checked, onChange, title, help, disabled }: { checked: boolean; onChange?: (next: boolean) => void; title: ReactNode; help?: ReactNode; disabled?: boolean }) {
   return (
     <label className={cn("flex items-start gap-3 border-b border-[var(--border)] py-2 last:border-b-0", disabled ? "cursor-default" : "cursor-pointer")}>
-      <input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]" checked={checked} disabled={disabled} onChange={(event) => onChange?.(event.target.checked)} />
+      <CheckBox className="mt-0.5" checked={checked} disabled={disabled} onChange={(event) => onChange?.(event.target.checked)} />
       <span className="min-w-0">
         <span className="block text-sm font-semibold text-[var(--ink)]">{title}</span>
         {help && <span className="block text-xs text-[var(--muted)]">{help}</span>}

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
-import { createAgentLead, filterAgentLeads, getAgentTemplate, visibleLeadIds, withSubmitterNames } from "@/lib/agentTemplates/service";
+import { countAgentLeadsByPipeline, createAgentLead, filterAgentLeadsPage, getAgentTemplate, LEADS_PAGE_SIZE, visibleLeadIds, withSubmitterNames } from "@/lib/agentTemplates/service";
 import { listPipelines } from "@/lib/pipelines/service";
 import { audit } from "@/lib/audit/log";
 import { leadWorkFacts } from "@/lib/agentTemplates/leadWorkFacts";
@@ -26,32 +26,50 @@ export async function GET(request: NextRequest) {
     // (which need no template) are read beside the template rather than after it.
     const scope = await scopeFor(auth.context);
     const visible = scope === null ? undefined : visibleLeadIds(auth.context.tenantId, scope);
-    // Awaited inside filterAgentLeads; this only keeps a template failure from leaving it unobserved.
+    // Awaited inside filterAgentLeadsPage; this only keeps a template failure from leaving it unobserved.
     visible?.catch(() => undefined);
+    const params = request.nextUrl.searchParams;
+    // The board loads one pipeline in pages, newest first (2026-11-12): ?pipeline=<id>&page=<n>. Page 0 (the default)
+    // also carries the template, the pipelines and each pipeline's count (the board's tabs); with no pipeline asked it
+    // opens on the one the board would choose, the marketing pipeline, else the first. A later page carries its leads.
+    // A narrowed agency session reads its producers' leads whole, every pipeline, as before.
+    const page = Math.max(0, Math.min(1_000, Number.parseInt(params.get("page") ?? "0", 10) || 0));
+    const asked = params.get("pipeline");
+    const askedPipeline = asked && /^[0-9a-f-]{36}$/i.test(asked) ? asked : null;
     const [template, pipelines] = await Promise.all([
       getAgentTemplate(auth.context.tenantId, auth.context.userId),
-      listPipelines(auth.context.tenantId),
+      page === 0 ? listPipelines(auth.context.tenantId) : Promise.resolve([]),
     ]);
-    const params = request.nextUrl.searchParams;
+    const pipelineId = scope !== null ? null : page === 0
+      ? (pipelines.find((item) => item.id === askedPipeline) ?? pipelines.find((item) => item.partner_type === "marketing") ?? pipelines[0])?.id ?? null
+      : askedPipeline;
+    const search = params.get("q")?.trim() ?? "";
+    // The tabs' counts, beside the page (whole-book reads only; a narrowed session counts what it was sent).
+    const totalsRead = scope === null && page === 0 && pipelines.length ? countAgentLeadsByPipeline(auth.context.tenantId, template, pipelines.map((item) => item.id), search) : Promise.resolve(null);
+    totalsRead.catch(() => undefined);
     const direction = params.get("direction") === "desc" ? "desc" : "asc";
-    const found = await filterAgentLeads(
+    const { leads: found, hasMore } = await filterAgentLeadsPage(
       auth.context.tenantId,
       template,
-      params.get("q")?.trim() ?? "",
+      search,
       params.get("filter_field") ?? "",
       params.get("filter_value") ?? "",
       params.get("sort") ?? "",
       direction,
       scope,
       visible,
+      scope === null ? page : null,
+      pipelineId,
     );
     // Who holds each lead, and — for roles that may see money — what it was quoted at. The board's
     // Unassigned and annualised figures are counted from these, not stored. Read beside the submitter
     // names: both need only the lead ids.
     const money = anyRoleHasPermission(contextRoles(auth.context), "money.view");
-    const [leads, facts] = await Promise.all([
+    const [leads, facts, totals] = await Promise.all([
       withSubmitterNames(found),
-      leadWorkFacts(auth.context.tenantId, found.map((lead) => lead.id), money),
+      // When each lead entered its stage came with the leads themselves (speed pass 2026-11-12: 7 fewer reads).
+      leadWorkFacts(auth.context.tenantId, found.map((lead) => lead.id), money, new Map(found.map((lead) => [lead.id, (lead as { stage_entered_at?: string | null }).stage_entered_at ?? null]))),
+      totalsRead.catch(() => null),
     ]);
     const enriched = leads.map((lead) => {
       const fact = facts.get(lead.id);
@@ -61,7 +79,7 @@ export async function GET(request: NextRequest) {
     // allow. Stage and pipeline editing is owner-only (LA-1.9 criterion 1), and a producer shown an
     // "Edit stages" button would get a 403 from a control that looked available — the same dead-end
     // this audit has been removing elsewhere. The API remains the enforcement; this is the label.
-    return NextResponse.json({ template, leads: enriched, pipelines, role: auth.context.role, currentUserId: auth.context.userId, money, readOnly: auth.entitlement.access === "read_only" });
+    return NextResponse.json({ template, leads: enriched, page, pageSize: LEADS_PAGE_SIZE, hasMore, pipelineId, totals, pipelines, role: auth.context.role, currentUserId: auth.context.userId, money, readOnly: auth.entitlement.access === "read_only" });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load leads" }, { status: 500 });
   }

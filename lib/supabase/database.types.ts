@@ -6356,6 +6356,7 @@ export type Database = {
           p_closer_id?: string | null;
           p_date_from?: string | null;
           p_date_to?: string | null;
+          p_include_link_referrals?: boolean;
           p_limit?: number;
           p_offset?: number;
           p_outcome?: string | null;

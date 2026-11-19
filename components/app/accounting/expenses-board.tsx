@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
-import { Field, checkboxControl, control, textareaControl } from "@/components/ui/field";
+import { DoneStamp } from "@/components/ui/done-stamp";
+import { Field, control, textareaControl } from "@/components/ui/field";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 import { MoreMenu } from "@/components/ui/more-menu";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
@@ -20,6 +21,8 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
+import { useDenyShake } from "@/components/ui/use-deny-shake";
+import { useSavedFlash } from "@/components/ui/use-saved-flash";
 import {
   ACQUISITION_CONSEQUENCE,
   EXPENSE_BUCKET_COPY,
@@ -45,6 +48,7 @@ import { PAID_METHOD_LABELS, PAID_METHODS, type PaidMethod } from "@/lib/account
 import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
 import { notify } from "@/lib/notify";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * LA-7.3 · everything spent that is not a lead invoice. Recurring ones arrive each month unconfirmed and
  * book nothing until OK'd — a cancelled subscription must not keep costing money in the P&L because nobody
@@ -82,13 +86,15 @@ function StateChip({ e }: { e: Pick<ExpenseRow, "status" | "paidOn"> }) {
 
 type Draft = { bucket: ExpenseBucket; what: string; amount: string; monthly: boolean; category: ExpenseCategory; on: string; end: string; acq: string; paidOn: string; method: string; note: string };
 const blankDraft = (): Draft => ({ bucket: "subscriptions", what: "", amount: "", monthly: true, category: defaultCategoryFor("subscriptions"), on: today(), end: "", acq: "default", paidOn: today(), method: "card", note: "" });
-const DraftContext = createContext<{ f: Draft; setF: (next: Draft | ((cur: Draft) => Draft)) => void; busy: boolean; setBusy: (busy: boolean) => void } | null>(null);
+const DraftContext = createContext<{ f: Draft; setF: (next: Draft | ((cur: Draft) => Draft)) => void; busy: boolean; setBusy: (busy: boolean) => void; refusal: ReturnType<typeof useDenyShake> } | null>(null);
 
 /** Holds the add form's draft, so its Save and Discard can sit on the title line (the frame's `actions`). */
 export function ExpenseDraftProvider({ children }: { children: ReactNode }) {
   const [f, setF] = useState<Draft>(blankDraft);
   const [busy, setBusy] = useState(false);
-  return <DraftContext.Provider value={{ f, setF, busy, setBusy }}>{children}</DraftContext.Provider>;
+  // A save refused for its errors shakes the title-line Save once (Wave B, 2026-11-18).
+  const refusal = useDenyShake();
+  return <DraftContext.Provider value={{ f, setF, busy, setBusy, refusal }}>{children}</DraftContext.Provider>;
 }
 const useDraft = () => {
   const draft = useContext(DraftContext);
@@ -99,11 +105,11 @@ const useDraft = () => {
 /** The add page's title-line buttons: Discard, and Save named for what it does. */
 export function ExpenseFormActions() {
   const router = useRouter();
-  const { f, setF, busy } = useDraft();
+  const { f, setF, busy, refusal } = useDraft();
   return (
     <>
       <Button type="button" variant="ghost" disabled={busy} onClick={() => { setF(blankDraft()); router.push("/app/expenses"); }}>Discard</Button>
-      <Button type="submit" form="expense-form" disabled={busy}>{f.monthly ? "Set up monthly bill" : "Add expense"}</Button>
+      <Button type="submit" form="expense-form" disabled={busy} className={refusal.className}>{f.monthly ? "Set up monthly bill" : "Add expense"}</Button>
     </>
   );
 }
@@ -115,7 +121,7 @@ export function ExpenseFormActions() {
  */
 export function ExpenseForm({ defaults }: { defaults: Record<ExpenseCategory, boolean> }) {
   const router = useRouter();
-  const { f, setF, busy, setBusy } = useDraft();
+  const { f, setF, busy, setBusy, refusal } = useDraft();
   const [errors, setErrors] = useState<{ what?: string; amount?: string }>({});
   const scope = useRef<HTMLFormElement>(null);
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setF((cur) => ({ ...cur, [k]: v }));
@@ -129,7 +135,7 @@ export function ExpenseForm({ defaults }: { defaults: Record<ExpenseCategory, bo
       amount: cents !== null && cents > 0 ? undefined : "Enter how much, in dollars and cents.",
     };
     setErrors(found);
-    if (found.what || found.amount || cents === null) return false;
+    if (found.what || found.amount || cents === null) { refusal.deny(); return false; }
     setBusy(true);
     try {
       const body = await sendExpense("/api/app/accounting/expenses", {
@@ -185,7 +191,7 @@ export function ExpenseForm({ defaults }: { defaults: Record<ExpenseCategory, bo
               : <Field label="Paid on (empty if not paid yet)" htmlFor="exp-paid"><input id="exp-paid" type="date" className={control} value={f.paidOn} onChange={(e) => set("paidOn", e.target.value)} /></Field>}
             {!f.monthly && f.paidOn ? <Field label="Paid by" htmlFor="exp-method"><select id="exp-method" className={control} value={f.method} onChange={(e) => set("method", e.target.value)}>{PAID_METHODS.map((m) => <option key={m} value={m}>{PAID_METHOD_LABELS[m]}</option>)}</select></Field> : null}
           </div>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" className={checkboxControl} checked={f.monthly} onChange={(e) => set("monthly", e.target.checked)} />Comes back every month</label>
+          <label className="flex items-center gap-2 text-sm"><CheckBox checked={f.monthly} onChange={(e) => set("monthly", e.target.checked)} />Comes back every month</label>
         </CardContent>
       </Card>
       <Card>
@@ -375,12 +381,15 @@ function useAsk() {
   const router = useRouter();
   const [asking, setAsking] = useState<Asking | null>(null);
   const [busy, setBusy] = useState(false);
+  // Marked paid: the expense stamps "Paid" where its button was (Tier 2 motion, 2026-11-18); `stamped` is its id.
+  const [stamped, setStamped] = useState<string | null>(null);
   const ask = (kind: Asking["kind"], row: ExpenseRow) => setAsking({ kind, row, reason: "", on: today(), method: "card", reference: "" });
   const act = async (payload: Record<string, unknown>, done: string) => {
     if (!asking) return;
     setBusy(true);
     try {
       await sendExpense(`/api/app/accounting/expenses/${asking.row.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (payload.action === "paid") setStamped(asking.row.id);
       notify.done(done);
       setAsking(null);
       router.refresh();
@@ -420,7 +429,7 @@ function useAsk() {
       ) : undefined}
     />
   ) : null;
-  return { ask, node };
+  return { ask, node, stamped };
 }
 
 /**
@@ -429,10 +438,11 @@ function useAsk() {
  * void, a monthly bill).
  */
 export function ExpenseRecordActions({ row, readOnly, receiptHref }: { row: ExpenseRow; readOnly: boolean; receiptHref: string }) {
-  const { ask, node } = useAsk();
+  const { ask, node, stamped } = useAsk();
   const [oking, setOking] = useState(false);
   const state = expenseState(row);
-  const primary = state === "waiting" ? "OK it" : state === "unpaid" ? "Mark paid" : null;
+  const paidHere = stamped === row.id;
+  const primary = state === "waiting" ? "OK it" : state === "unpaid" && !paidHere ? "Mark paid" : null;
   return (
     <>
       <MoreMenu items={[
@@ -441,6 +451,7 @@ export function ExpenseRecordActions({ row, readOnly, receiptHref }: { row: Expe
         row.hasReceipt && { label: "Open the receipt", href: `/api/app/accounting/expenses/${row.id}` },
         !readOnly && state !== "template" && state !== "void" && { label: row.hasReceipt ? "Replace the receipt" : "Attach the receipt", href: receiptHref },
       ]} />
+      {paidHere ? <DoneStamp label="Paid" className="self-center" /> : null}
       {primary ? (readOnly
         ? <Off reason={READ_ONLY}><Button disabled>{primary}</Button></Off>
         : <Button onClick={() => (state === "waiting" ? setOking(true) : ask("paid", row))}>{primary}</Button>) : null}
@@ -463,6 +474,8 @@ export function ExpenseFacts({ row, defaults, readOnly, template, pnlHref }: { r
   const [oking, setOking] = useState(false);
   const [open, setOpen] = useState<FactKind | null>(null);
   const [busy, setBusy] = useState(false);
+  // The fact that just saved glows once beside the toast (Wave B, 2026-11-18).
+  const saved = useSavedFlash();
   const [amount, setAmount] = useState(plain(row.amountCents));
   const [end, setEnd] = useState(row.recurrenceEndOn ?? "");
   const [acq, setAcq] = useState(row.isAcquisitionCost);
@@ -479,10 +492,12 @@ export function ExpenseFacts({ row, defaults, readOnly, template, pnlHref }: { r
     setOpen(kind);
   };
   const save = async (url: string, init: RequestInit, done: string) => {
+    const kind = open;
     setBusy(true);
     try {
       await sendExpense(url, init);
       notify.done(done);
+      if (kind) saved.flash(kind === "amount" && state === "template" ? ["amount", "repeats"] : kind);
       setOpen(null);
       router.refresh();
     } catch (err) {
@@ -548,7 +563,7 @@ export function ExpenseFacts({ row, defaults, readOnly, template, pnlHref }: { r
               return (
                 <tr key={fact.key} className={live ? "group cursor-pointer" : undefined} onClick={(ev) => { if ((ev.target as HTMLElement).closest("a, button")) return; if (run) run(); else if (live && "href" in action) router.push(action.href); }}>
                   <td className="whitespace-nowrap font-medium text-foreground">{fact.label}</td>
-                  <td className="whitespace-nowrap">{fact.value}</td>
+                  <td className="whitespace-nowrap" {...saved.props(fact.key)}>{fact.value}</td>
                   <td className="whitespace-nowrap">{fact.usedBy === "—" ? <span className="text-muted-foreground">—</span> : fact.usedBy}</td>
                   <td className="whitespace-nowrap text-right">
                     {!action ? null

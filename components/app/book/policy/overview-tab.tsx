@@ -12,7 +12,10 @@ import { riskFootnote } from "@/lib/ingestion/policyCurrent";
 import { paymentsBehind } from "@/lib/ingestion/policyMoney";
 import { carrierPolicyHref, nextDateThatMatters } from "@/lib/ingestion/policyPage";
 import { fileHref, rowHref } from "@/lib/ingestion/trace";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
+import { titleCaseNode } from "@/components/ui/title-case";
 export type PolicyView = NonNullable<Awaited<ReturnType<typeof loadPolicy>>>;
 
 const MODE: Record<string, string> = { monthly: "/mo", quarterly: "/qtr", semiannual: "/6 mo", annual: "/yr" };
@@ -43,7 +46,7 @@ function provenanceLinks(field: SourceField | undefined): ReactNode {
   return (
     <span className="flex flex-col gap-1.5">
       <span>{said}</span>
-      {field.readFrom && <Link href={field.readFrom.rowNumber ? rowHref(field.readFrom.fileId, field.readFrom.rowNumber) : fileHref(field.readFrom.fileId)} className={LINK}>Open {field.readFrom.rowNumber ? `row ${field.readFrom.rowNumber}` : "the file"} ›</Link>}
+      {field.readFrom && <Link href={field.readFrom.rowNumber ? rowHref(field.readFrom.fileId, field.readFrom.rowNumber) : fileHref(field.readFrom.fileId)} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>{titleCaseNode(<>Open {field.readFrom.rowNumber ? `row ${field.readFrom.rowNumber}` : "the file"}</>)}</Link>}
       {changed && (changed.fileId !== read?.fileId || changed.rowNumber !== read?.rowNumber) && <Link href={changed.rowNumber ? rowHref(changed.fileId, changed.rowNumber) : fileHref(changed.fileId)} className={LINK}>Open the row that changed it ›</Link>}
     </span>
   );

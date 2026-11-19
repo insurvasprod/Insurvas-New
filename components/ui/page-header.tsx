@@ -6,6 +6,7 @@ import { Breadcrumbs, type Crumb } from "./breadcrumbs";
 import { PageTrail } from "./page-trail";
 import { InfoTip } from "@/components/ui/info-tip";
 import { PageAlertSlot } from "@/components/ui/page-alerts";
+import { DocsGuideLink } from "@/components/app/docs/docs-guide-link";
 import { GuideMe } from "@/components/app/setup/guide-me";
 
 /**
@@ -25,7 +26,7 @@ import { GuideMe } from "@/components/app/setup/guide-me";
  * `size`, `eyebrow` and `visible` are kept so no caller has to change.
  */
 export function PageHeader({
-  title,
+  title: titleNode,
   titleInfo,
   description,
   actions,
@@ -51,7 +52,13 @@ export function PageHeader({
   meta?: ReactNode;
   /** Accepted and ignored (2026-09-28 review): one title per page. */
   eyebrow?: string;
-  title: string;
+  /**
+   * The page's name. Text wherever the page knows it without a read. A record page whose name comes from its data
+   * (a lead, a policy, a file) passes `<Suspense fallback={<TitleShape />}>…</Suspense>` (stream-section.tsx) instead, so the trail, tabs
+   * and buttons draw at once and only the name waits (UI-CONSISTENCY §7, frame first). The trail and the (i) read
+   * the text; a title that is not text leaves the trail to the menu.
+   */
+  title: ReactNode;
   /** A help tip or chip right beside the title (owner 2026-11-02: never out by the actions). */
   titleInfo?: ReactNode;
   /** Something that belongs on the title's line: a record's status, a call's step bar. Never the page's
@@ -69,6 +76,8 @@ export function PageHeader({
   size?: "page" | "hero";
   className?: string;
 }) {
+  // The text the trail and the (i) read; a streamed title (a node) leaves the trail to the menu.
+  const title = typeof titleNode === "string" ? titleNode : "";
   if (hideTitle) {
     return (
       <header data-page-header="visible" className={cn("flex shrink-0 flex-col gap-1", className)}>
@@ -76,7 +85,7 @@ export function PageHeader({
           <div className={cn("flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1", tabs && "shrink-0")}>
             <div className="flex items-center gap-1.5">
               {breadcrumbs ? <Breadcrumbs crumbs={breadcrumbs} /> : <PageTrail title={title} />}
-              {description && <InfoTip label={`About ${title}`} side="right">{description}</InfoTip>}
+              {description && <InfoTip label={title ? `About ${title}` : "About this page"} side="right">{description}<DocsGuideLink /></InfoTip>}
               <Suspense fallback={null}><GuideMe /></Suspense>
             </div>
             <PageAlertSlot />
@@ -89,7 +98,7 @@ export function PageHeader({
             (titleInfo || actions) && <div data-page-actions className="ml-auto flex max-w-full shrink-0 flex-wrap items-center gap-2 max-sm:w-full">{titleInfo}{actions}</div>
           )}
         </div>
-        <h1 data-page-title data-size={size} className="sr-only">{title}</h1>
+        <h1 data-page-title data-size={size} className="sr-only">{titleNode}</h1>
       </header>
     );
   }
@@ -109,10 +118,10 @@ export function PageHeader({
         <div className={cn("min-w-0", inline ? "shrink-0 lg:max-w-[45%]" : "flex-1")}>
           <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-2">
             <div className="flex min-w-0 items-center gap-1.5">
-              <h1 data-page-title data-size={size} className="m-0 min-w-0 font-[family-name:var(--font-display)] text-page text-[var(--ink)]">{title}</h1>
+              <h1 data-page-title data-size={size} className="m-0 min-w-0 font-[family-name:var(--font-display)] text-page text-[var(--ink)]">{titleNode}</h1>
               {/* To the right of the (i), not under it (owner, 2026-10-29): below the title it spills back across
                   the heading and the trail. */}
-              {description && <InfoTip label={`About ${title}`} side="right">{description}</InfoTip>}
+              {description && <InfoTip label={title ? `About ${title}` : "About this page"} side="right">{description}<DocsGuideLink /></InfoTip>}
               {titleInfo}
               {/* Guided setup (owner 2026-11-13): "Guide me" beside the (i) on a page that holds one of the reader's setup steps. */}
               <Suspense fallback={null}><GuideMe /></Suspense>
@@ -173,3 +182,4 @@ function TabsCell({ alerts = false, children }: { alerts?: boolean; children: Re
     </div>
   );
 }
+

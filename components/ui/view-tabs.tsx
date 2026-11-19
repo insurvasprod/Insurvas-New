@@ -1,6 +1,8 @@
 import type { KeyboardEvent, ReactNode } from "react";
 import { LayoutGrid, List } from "lucide-react";
 
+import { CountUp } from "@/components/ui/count-up";
+import { ROLL_MS } from "@/components/ui/motion-tokens";
 import { cn } from "@/lib/utils";
 
 import { IntentLink } from "./nav-pending";
@@ -39,7 +41,10 @@ export type ViewTab<K extends string> = {
 };
 
 /** The row: full width where it stands alone (a hairline across the page), content-wide inside a toolbar row. */
-const TRACK = "flex min-w-0 max-w-full gap-5 overflow-x-auto overflow-y-hidden";
+// No scrollbar: on a phone the row scrolls sideways, and the global green scrollbar thumb drew a second
+// underline under the tabs (QA pass 2026-11). The cut-off last tab says there is more. Important (!) because
+// the unlayered `* { scrollbar-width: thin }` in globals.css beats a layered utility.
+const TRACK = "flex min-w-0 max-w-full gap-5 overflow-x-auto overflow-y-hidden [scrollbar-width:none]! [&::-webkit-scrollbar]:hidden";
 const RULE = "border-b border-border";
 
 const item = (selected: boolean) =>
@@ -48,11 +53,14 @@ const item = (selected: boolean) =>
     selected ? "border-[var(--primary)] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
   );
 
+// A tab's count rolls to its new value when it changes under the page (a row decided, a refresh), never on the first
+// paint: the calm cascade brings the page in (CountUp `changesOnly`, Tier 1 motion Wave A 2026-11-17). A 0 stays, as a
+// tab's count says what is in it, not whether it waits on someone.
 function Count({ value, tone }: { value: number | null | undefined; tone?: "danger" }) {
   if (value == null) return null;
   return (
     <span className={cn("rounded-badge px-1.5 text-xs tabular-nums", tone === "danger" && value > 0 ? "bg-[var(--error-surface)] text-[var(--error-ink)]" : "bg-[var(--surface-alt)] text-muted-foreground")}>
-      {value.toLocaleString("en-US")}
+      <CountUp text={value.toLocaleString("en-US")} changesOnly duration={ROLL_MS} />
     </span>
   );
 }

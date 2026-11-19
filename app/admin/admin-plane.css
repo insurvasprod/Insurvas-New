@@ -8,3 +8,16 @@
  * screen with them. The `.admin-plane` marker in app/admin/layout.tsx stays, so a console-only
  * token can be added here later without touching the layout.
  */
+
+/*
+ * Motion (Wave D, plan item 15, 2026-11-18). Page arrivals come from the shared layer (PortalPageTransition in the
+ * admin layout, globals.css 5c and 5k); the console's own pieces here only ease, on the kit's tokens, what the shared
+ * parts do not already: a clickable row's hover tint, and the user record's hand-drawn tab underline gliding between
+ * colours. The reduce block in globals.css stills both.
+ */
+.admin-plane tbody tr.cursor-pointer {
+  transition: background-color var(--t-micro) var(--e);
+}
+.admin-plane nav[aria-label="User record"] a {
+  transition: color var(--t-micro) var(--e), border-color var(--t-panel) var(--e-out), outline-color var(--t-micro) var(--e);
+}

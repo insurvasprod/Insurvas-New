@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { Callout } from "@/components/app/settings/primitives";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
@@ -17,6 +18,7 @@ import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
+import { StreamSection } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
 import { ACCOUNTS_PENDING_MESSAGE, loadAccounts } from "@/lib/ingestion/carrierAccountsStore";
 import { LEDGER_PENDING_MESSAGE, loadLedger, statementLinesAsLedger } from "@/lib/ingestion/commissionLedgerStore";
@@ -82,22 +84,15 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   );
 
   // LA-4.14: each carrier's running account, statement by statement, and unattributed lines.
+  // Frame first (UI-CONSISTENCY §7a): the title line and its views draw at once; each view streams in under them.
   if (view === "accounts") {
-    const accounts = await loadAccounts(guard.context.tenantId);
     return (
       <DataInPage step="ledger" tabs={sourceTabs}>
-        {accounts.available
-          ? <CarrierAccounts orphanDays={accounts.orphanDays} statements={accounts.statements} orphans={accounts.orphans} files={accounts.files} carriers={accounts.carriers} readOnly={readOnly || (guard.role !== "owner" && guard.role !== "bookkeeper")} today={new Date().toISOString().slice(0, 10)} />
-          : <Callout tone="warning" title={<>{ACCOUNTS_PENDING_MESSAGE}</>} />}
+        <StreamSection shape="table"><Accounts read={loadAccounts(guard.context.tenantId)} readOnly={readOnly || (guard.role !== "owner" && guard.role !== "bookkeeper")} /></StreamSection>
       </DataInPage>
     );
   }
 
-  // Producers see their own policies only (LA-0.2 criterion 3); owners and bookkeepers see all. The
-  // same rule scopes the statement lines: a line shows only when its matched policy does.
-  // AG-0.5: the role rule (a producer sees his own) AND the session's producer scope — in an agency both must hold.
-  const scope = await scopeFor(guard.context);
-  const canView = (producerUserId: string | undefined) => roleCanViewCommission(guard.role, guard.context.userId, producerUserId) && rowVisible(scope, producerUserId);
   const importParam = params.import;
   // Who may import, and when not, the reason — printed, never only a tooltip.
   const handlesStatements = hasTenantPermission(guard.role, "statements.view");
@@ -113,26 +108,87 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
         : readOnly
           ? "Importing is paused while the account is read-only."
           : null;
-  // What waits on the statement lines (the import picker's carriers and mappings, the hand lines as ledger
-  // rows) starts as soon as they are in, beside the other two reads, rather than after all three.
-  const statementsRead = getStatementLedger({ tenantId: guard.context.tenantId, canView });
-  const [ledger, statements, book, [carriers, savedMappings], handLines] = await Promise.all([
-    getCommissionLedger({ tenantId: guard.context.tenantId, canView }),
-    statementsRead,
-    view === "lines" ? loadLedger({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role }) : null,
-    statementsRead.then((read): Promise<[StatementCarrierOption[], Record<string, StatementMapping>]> | [StatementCarrierOption[], Record<string, StatementMapping>] => importBlockedFor(read.available)
-      ? [[], {}]
-      : Promise.all([listStatementCarriers(guard.context.tenantId), getSavedStatementMappings(guard.context.tenantId)])),
-    view === "lines" ? statementsRead.then((read) => statementLinesAsLedger(read.entries)) : null,
-  ]);
-  const { totals, entries, gaps } = ledger;
-  const isOwner = guard.role === "owner";
+  // The lines and the expected view stream in under the title line; their reads start here, before it returns.
+  const data = (async () => {
+    // Producers see their own policies only (LA-0.2 criterion 3); owners and bookkeepers see all. The
+    // same rule scopes the statement lines: a line shows only when its matched policy does.
+    // AG-0.5: the role rule (a producer sees his own) AND the session's producer scope — in an agency both must hold.
+    const scope = await scopeFor(guard.context);
+    const canView = (producerUserId: string | undefined) => roleCanViewCommission(guard.role, guard.context.userId, producerUserId) && rowVisible(scope, producerUserId);
+    // What waits on the statement lines (the import picker's carriers and mappings, the hand lines as ledger
+    // rows) starts as soon as they are in, beside the other two reads, rather than after all three.
+    const statementsRead = getStatementLedger({ tenantId: guard.context.tenantId, canView });
+    const [ledger, statements, book, [carriers, savedMappings], handLines] = await Promise.all([
+      getCommissionLedger({ tenantId: guard.context.tenantId, canView }),
+      statementsRead,
+      view === "lines" ? loadLedger({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role }) : null,
+      statementsRead.then((read): Promise<[StatementCarrierOption[], Record<string, StatementMapping>]> | [StatementCarrierOption[], Record<string, StatementMapping>] => importBlockedFor(read.available)
+        ? [[], {}]
+        : Promise.all([listStatementCarriers(guard.context.tenantId), getSavedStatementMappings(guard.context.tenantId)])),
+      view === "lines" ? statementsRead.then((read) => statementLinesAsLedger(read.entries)) : null,
+    ]);
+    return { ledger, statements, book, carriers, savedMappings, handLines };
+  })();
+  const headerActions = (
+    // Statements is the step before on the rail (2026-11-02), so only the import stays here. Board 12 (2026-11-03):
+    // More (Export CSV; the lines fill it through LEDGER_SLOT), then the one primary. The views are tabs.
+    <>
+      {view === "lines" ? <StepSlotTarget id={LEDGER_SLOT} /> : null}
+      <Suspense fallback={<Button type="button" disabled>Import a statement</Button>}><ImportControl read={data} importBlockedFor={importBlockedFor} autoOpen={importParam === "1"} /></Suspense>
+    </>
+  );
+
+  return (
+    <DataInPage step="ledger" tabs={sourceTabs} actions={headerActions}>
+      <StreamSection shape={view === "lines" ? "table" : "strip+table"}>
+        <LedgerBody read={data} view={view} params={params} role={guard.role} tenantId={guard.context.tenantId} readOnly={readOnly} handlesStatements={handlesStatements} statementsOnPlan={statementsOnPlan} importBlockedFor={importBlockedFor} />
+      </StreamSection>
+    </DataInPage>
+  );
+}
+
+type Data = Promise<{
+  ledger: Awaited<ReturnType<typeof getCommissionLedger>>;
+  statements: Awaited<ReturnType<typeof getStatementLedger>>;
+  book: Awaited<ReturnType<typeof loadLedger>> | null;
+  carriers: StatementCarrierOption[];
+  savedMappings: Record<string, StatementMapping>;
+  handLines: Awaited<ReturnType<typeof statementLinesAsLedger>> | null;
+}>;
+
+async function Accounts({ read, readOnly }: { read: ReturnType<typeof loadAccounts>; readOnly: boolean }) {
+  const accounts = await read;
+  return accounts.available
+    ? <CarrierAccounts orphanDays={accounts.orphanDays} statements={accounts.statements} orphans={accounts.orphans} files={accounts.files} carriers={accounts.carriers} readOnly={readOnly} today={new Date().toISOString().slice(0, 10)} />
+    : <Callout tone="warning" title={<>{ACCOUNTS_PENDING_MESSAGE}</>} />;
+}
+
+/** Import a statement, or why not (the button's title; the notices print it too). */
+async function ImportControl({ read, importBlockedFor, autoOpen }: { read: Data; importBlockedFor: (statementsAvailable: boolean) => string | null; autoOpen: boolean }) {
+  const { statements, carriers, savedMappings } = await read;
   const importBlocked = importBlockedFor(statements.available);
-  const importControl = importBlocked ? (
+  return importBlocked ? (
     <Button type="button" disabled title={importBlocked}>Import a statement</Button>
   ) : (
-    <StatementImportButton carriers={carriers} savedMappings={savedMappings} autoOpen={importParam === "1"} />
+    <StatementImportButton carriers={carriers} savedMappings={savedMappings} autoOpen={autoOpen} />
   );
+}
+
+async function LedgerBody({ read, view, params, role, tenantId, readOnly, handlesStatements, statementsOnPlan, importBlockedFor }: {
+  read: Data;
+  view: "lines" | "expected";
+  params: { import?: string; view?: string; source?: string; type?: string };
+  role: string;
+  tenantId: string;
+  readOnly: boolean;
+  handlesStatements: boolean;
+  statementsOnPlan: boolean;
+  importBlockedFor: (statementsAvailable: boolean) => string | null;
+}) {
+  const { ledger, statements, book, handLines } = await read;
+  const { totals, entries, gaps } = ledger;
+  const isOwner = role === "owner";
+  const importBlocked = importBlockedFor(statements.available);
 
   const reported = statements.entries;
   const reportedTotals = statementTotals(reported);
@@ -148,12 +204,6 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   for (const entry of entries) if (policyLabels[entry.policyId]) policyLabels[entry.policyId] = { policyNumber: entry.policyNumber, insuredName: entry.insuredName, carrierName: entry.carrierName };
 
   const expectedSummary = `${wholeMoney(totals.grossCents)} gross · ${wholeMoney(totals.advancesCents)} advanced · ${wholeMoney(totals.chargebacksCents)} charged back · ${totals.exposureCents > 0 ? `${wholeMoney(totals.exposureCents)} still exposed` : "nothing exposed"} · derived from ${plural(ledger.policiesRead, "policy", "policies")}`;
-
-  const headerActions = (
-    // Statements is the step before on the rail (2026-11-02), so only the import stays here. Board 12 (2026-11-03):
-    // More (Export CSV; the lines fill it through LEDGER_SLOT), then the one primary. The views are tabs.
-    <>{view === "lines" ? <StepSlotTarget id={LEDGER_SLOT} /> : null}{importControl}</>
-  );
 
   const notices = (
     <>
@@ -173,7 +223,7 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
     // Newest statement first, whichever source a line came from.
     const sorted = [...(book?.available ? book.entries : []), ...(handLines ?? [])].sort((a, b) => String(b.statementDate ?? b.transactionDate ?? "").localeCompare(String(a.statementDate ?? a.transactionDate ?? "")));
     // Board 12: the Client and Agent of each line, when the data has them (a column empty on every row is not drawn).
-    const names = await ledgerNames(guard.context.tenantId, sorted);
+    const names = await ledgerNames(tenantId, sorted);
     const insured = new Map(reported.map((entry) => [`hand:${entry.id}`, entry.insuredName]));
     const lines: LedgerLine[] = sorted.map((row) => ({
       ...row,
@@ -181,12 +231,12 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
       agentName: row.account ? null : names.agentOf(row.carrierId, row.policyNumber, row.agentUserId),
     }));
     return (
-      <DataInPage step="ledger" tabs={sourceTabs} actions={headerActions}>
+      <>
         {notices}
         {book && !book.available && <Callout tone="warning" title={<>{LEDGER_PENDING_MESSAGE}</>} />}
         {book?.available && book.truncated && <Callout tone="warning" title={<>Showing the newest {book.cap.toLocaleString("en-US")} lines from carrier files; older lines, and their amounts, are left out of the list and the figures here.</>} />}
-        <CarrierLedger key={`${params.type ?? ""}|${params.source ?? ""}|${params.view ?? ""}`} entries={lines} scoped={guard.role === "producer"} initialSource={params.view === "statements" ? "hand" : params.source ?? ""} initialType={params.type ?? ""} />
-      </DataInPage>
+        <CarrierLedger key={`${params.type ?? ""}|${params.source ?? ""}|${params.view ?? ""}`} entries={lines} scoped={role === "producer"} initialSource={params.view === "statements" ? "hand" : params.source ?? ""} initialType={params.type ?? ""} />
+      </>
     );
   }
 
@@ -210,7 +260,7 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   );
 
   return (
-    <DataInPage step="ledger" tabs={sourceTabs} actions={headerActions}>
+    <>
       {!showExpected ? (
         <>
           {notices}
@@ -235,6 +285,6 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
           {expectedNotices}
         </LedgerViews>
       )}
-    </DataInPage>
+    </>
   );
 }

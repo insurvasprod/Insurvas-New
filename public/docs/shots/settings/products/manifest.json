@@ -1,0 +1,80 @@
+[
+  {
+    "src": "/docs/shots/settings/products/1.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Stay on the In your plan tab",
+    "focus": {
+      "x": 200,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/products/2.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Turn Sell on for each product you sell",
+    "focus": {
+      "x": 157,
+      "y": 165,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/products/3.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check What it needs",
+    "focus": {
+      "x": 664,
+      "y": 80,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/products/4.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click a product to open its sheet",
+    "focus": {
+      "x": 215,
+      "y": 166,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/products/5.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Finish what Ready to quote lists",
+    "focus": {
+      "x": 701,
+      "y": 100,
+      "w": 739,
+      "h": 462
+    }
+  },
+  {
+    "src": "/docs/shots/settings/products/6.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Not in your plan tab",
+    "focus": {
+      "x": 327,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/products/7.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "See which plan adds each one"
+  }
+]

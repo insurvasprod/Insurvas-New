@@ -25,6 +25,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { Callout } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -32,6 +33,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
 import { StatStrip, StatTile } from "@/components/ui/stat";
+import { UploadProgress } from "@/components/ui/upload-progress";
+import { sendWithProgress } from "@/components/ui/upload-request";
+import { afterStamp } from "@/components/ui/use-done-stamps";
 import { isXlsxFile, readXlsxAsCsv } from "@/lib/agentTemplates/xlsx";
 import { STATEMENT_FILE_ACCEPT, statementFileKind, statementFileProblem } from "@/lib/ledger/statementFile";
 import {
@@ -77,8 +81,9 @@ async function sha256Hex(file: File): Promise<string | undefined> {
   }
 }
 
-async function postForm<T>(url: string, form: FormData): Promise<T> {
-  const response = await fetch(url, { method: "POST", body: form });
+/** `onProgress`: the upload reports how far it has gone (sendWithProgress), for the dialog's UploadProgress. */
+async function postForm<T>(url: string, form: FormData, onProgress?: (fraction: number) => void): Promise<T> {
+  const response = onProgress ? await sendWithProgress(url, form, onProgress) : await fetch(url, { method: "POST", body: form });
   const data = (await response.json().catch(() => ({}))) as T & { error?: string };
   if (!response.ok) throw new Error(data.error ?? "Something went wrong; nothing was imported.");
   return data;
@@ -146,6 +151,8 @@ export function StatementImportButton({
   const [preview, setPreview] = useState<StatementPreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // How far the file has gone up (Tier 2 motion, 2026-11-18): a real bar while it uploads, then its check.
+  const [progress, setProgress] = useState<number | null>(null);
 
   const carrier = carriers.find((option) => option.id === carrierId) ?? null;
   const mappingProblem = useMemo(() => (headers.length ? statementMappingProblem(mapping, headers) : "Choose a file first."), [mapping, headers]);
@@ -153,7 +160,7 @@ export function StatementImportButton({
 
   function reset() {
     setStep("file"); setFileName(""); setFile(null); setFileKind(null); setSheetName(null); setCsvText(""); setFileSha256(undefined); setHeaders([]); setCarrierId(""); setPeriod(lastMonth());
-    setMapping({}); setMappingSource(null); setPreview(null); setBusy(false); setError(null);
+    setMapping({}); setMappingSource(null); setPreview(null); setBusy(false); setError(null); setProgress(null);
   }
 
   /** The carrier's remembered mapping when it fits this file; otherwise a guess from the headers. */
@@ -229,16 +236,20 @@ export function StatementImportButton({
       // One toast from the upload to the statement (2026-10-28): the dialog closes on success, so the
       // toast is what says it landed. A refusal stays in the dialog, where it can be fixed.
       const lines = preview?.totalLines;
-      const data = await notify.promise(postForm<{ statementId: string }>("/api/app/statements", form), {
+      const data = await notify.promise(postForm<{ statementId: string }>("/api/app/statements", form, setProgress), {
         loading: fileKind === "pdf" ? `Storing ${fileName}…` : `Importing ${fileName}…`,
         done: fileKind === "pdf" || lines === undefined
           ? { title: "Statement stored", detail: "Enter its lines on the statement." }
           : { title: `Statement imported: ${lines.toLocaleString("en-US")} ${lines === 1 ? "line" : "lines"}`, detail: "Nothing posts until a match is accepted." },
         fail: null,
       });
+      // The bar fills and its check draws, then the dialog closes.
+      setProgress(1);
+      await new Promise<void>((done) => afterStamp(done));
       setOpen(false); reset();
       router.push(`/app/statements/${data.statementId}`);
     } catch (reason) {
+      setProgress(null);
       setError(reason instanceof Error ? reason.message : "The statement was not imported.");
       setBusy(false);
     }
@@ -300,12 +311,9 @@ export function StatementImportButton({
           {step === "preview" && preview && (
             <div className="grid gap-4 text-sm">
               {preview.duplicate && (
-                <div className="rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-3">
-                  <p className="font-semibold text-[var(--error-ink)]">This statement is already imported</p>
-                  <p className="mt-1 text-[var(--body)]">
-                    The same file for {carrier?.name ?? "this carrier"} and this period was imported on {statementDay(preview.duplicate.uploadedAt)}{preview.duplicate.uploadedByName ? ` by ${preview.duplicate.uploadedByName}` : ""}. It will not be imported twice. If that import was wrong, void it on the statement first.
-                  </p>
-                </div>
+                <Callout tone="error" title="This statement is already imported.">
+                  The same file for {carrier?.name ?? "this carrier"} and this period was imported on {statementDay(preview.duplicate.uploadedAt)}{preview.duplicate.uploadedByName ? ` by ${preview.duplicate.uploadedByName}` : ""}. It will not be imported twice. If that import was wrong, void it on the statement first.
+                </Callout>
               )}
               <StatStrip label="What the file holds">
                 <StatTile label="Lines" value={preview.totalLines.toLocaleString("en-US")} footnote={`${statementMoney(preview.netCents)} net on statement`} />
@@ -369,6 +377,7 @@ export function StatementImportButton({
           )}
 
           {error && <p role="alert" className="rounded-md bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p>}
+          {progress !== null ? <UploadProgress name={fileName} value={progress} /> : null}
 
           <DialogFooter>
             {step !== "file" && (
@@ -382,7 +391,7 @@ export function StatementImportButton({
               </Button>
             )}
             {step === "file" && fileKind === "pdf" && (
-              <Button type="button" disabled={Boolean(fileProblem) || busy} title={fileProblem ?? undefined} onClick={() => void runImport()}>
+              <Button type="button" data-guide="statement-import" disabled={Boolean(fileProblem) || busy} title={fileProblem ?? undefined} onClick={() => void runImport()}>
                 {busy ? "Storing…" : "Store PDF and enter its lines"}
               </Button>
             )}

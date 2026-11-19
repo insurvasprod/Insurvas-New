@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
+import { IntentLink } from "@/components/ui/nav-pending";
 
 /** One side of the stepper: the neighbouring record's address and the name it is known by ("Bayview Data · BVD-2026-0930"). */
 export type RecordNeighbour = { href: string; label: string } | null | undefined;
@@ -17,16 +17,16 @@ export function RecordStepper({ previous, next, noun }: { previous?: RecordNeigh
   return (
     <>
       {previous && (
-        <Link href={previous.href} className={buttonVariants({ variant: "outline" })} title={`Previous ${noun}: ${previous.label}`}>
+        <IntentLink transitionTypes={["nav-back"]} href={previous.href} className={buttonVariants({ variant: "outline" })} title={`Previous ${noun}: ${previous.label}`}>
           <ChevronLeft aria-hidden="true" />
           <span className="max-w-56 truncate">{previous.label}</span>
-        </Link>
+        </IntentLink>
       )}
       {next && (
-        <Link href={next.href} className={buttonVariants({ variant: "outline" })} title={`Next ${noun}: ${next.label}`}>
+        <IntentLink transitionTypes={["nav-forward"]} href={next.href} className={buttonVariants({ variant: "outline" })} title={`Next ${noun}: ${next.label}`}>
           <span className="max-w-56 truncate">{next.label}</span>
           <ChevronRight aria-hidden="true" />
-        </Link>
+        </IntentLink>
       )}
     </>
   );

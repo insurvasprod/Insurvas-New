@@ -25,7 +25,7 @@ export const lastDay = (key: string) => new Date(Date.UTC(Number(key.slice(0, 4)
 const pctText = (pct: number) => `${pct < 10 && pct % 1 ? pct.toFixed(1) : Math.round(pct)}%`;
 
 /** "Premium · submitted and issued": this year by month, hover for each month's figures, and the year's facts. */
-export function premiumCard({ rows, apps, today, zone, policiesHref }: { rows: readonly PolicyLite[]; apps: readonly AppLite[]; today: string; zone: string; policiesHref: string | null }) {
+export function premiumCard({ rows, apps, today, zone, policiesHref, facts: withFacts = true }: { rows: readonly PolicyLite[]; apps: readonly AppLite[]; today: string; zone: string; policiesHref: string | null; /** The year's four facts under the chart; the compact Home leaves them to My numbers. */ facts?: boolean }) {
   const year = today.slice(0, 4);
   const months = premiumByMonth(rows, apps, today, zone);
   if (months.length < 2) return null;
@@ -59,14 +59,14 @@ export function premiumCard({ rows, apps, today, zone, policiesHref }: { rows: r
         unit="issued"
         hrefFor={policiesHref ? (point) => `${policiesHref}?from=${point.key}-01&to=${lastDay(point.key)}` : undefined}
       />
-      <dl className="m-0 mt-2 grid shrink-0 grid-cols-2 gap-2 2xl:grid-cols-4 @container">
+      {withFacts && <dl className="m-0 mt-2 grid shrink-0 grid-cols-2 gap-2 2xl:grid-cols-4 @container">
         {facts.map((fact) => (
           <div key={fact.label} title={`${fact.label}: ${fact.value}`} className="min-w-0 overflow-hidden rounded-xl bg-[var(--surface-tile)] shadow-[inset_0_0_0_1px_var(--tile-edge)] px-3 py-2">
             <dt className="truncate text-[0.6875rem] text-muted-foreground">{fact.label}</dt>
             <dd className="m-0 truncate text-[0.8125rem] font-semibold tabular-nums text-foreground">{fact.value}</dd>
           </div>
         ))}
-      </dl>
+      </dl>}
     </DashChart>
   );
 }

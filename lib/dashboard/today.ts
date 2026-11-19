@@ -89,7 +89,13 @@ export type DashboardToday = {
    * and how many of the closeable ones were closed out — decision 12 shows the show rate only with
    * its coverage. Null unless the home asks for it, or when the read fails.
    */
-  setterWeek: { booked: number; showed: number; noShow: number; closedOut: number; closeable: number } | null;
+  setterWeek: { booked: number; showed: number; noShow: number; closedOut: number; closeable: number; /** Booked per scorecard day, oldest first (roles r1: the setter's chart). */ days: Array<{ day: string; booked: number }> } | null;
+  /**
+   * Partner transfers that came in today, by the agency's hour (roles r1: the assistant's "Inbound per hour"), under
+   * the same visibility as the waiting count. Null unless the home asks for it (`reads.inboundToday`), or when the
+   * read fails. At most INBOUND_TODAY_LIMIT rows are read; `sampled` says the day held more.
+   */
+  inboundToday: { total: number; byHour: Array<{ hour: number; count: number }>; sampled: boolean } | null;
   /**
    * The reader's own close-out (Sixteen #12): of the appointments on their own calendar that have
    * started in the last 30 days and need an outcome (showed, no-show, or awaiting one), how many
@@ -103,7 +109,9 @@ export type DashboardToday = {
  * this function did before; the dashboard passes only what the reader's home shows, so a
  * bookkeeper's page does not count dials and an assistant's does not read the diary.
  */
-export type TodayReadsInput = Partial<{ dialing: boolean; policies: boolean; inbound: boolean; callbacks: boolean; lapse: boolean; licences: boolean; setterWeek: boolean; closeOut: boolean }>;
+export type TodayReadsInput = Partial<{ dialing: boolean; policies: boolean; inbound: boolean; callbacks: boolean; lapse: boolean; licences: boolean; setterWeek: boolean; closeOut: boolean; inboundToday: boolean }>;
+
+const INBOUND_TODAY_LIMIT = 2000;
 
 const SAMPLE_LIMIT = 5000;
 
@@ -269,12 +277,13 @@ export async function getDashboardToday(input: { tenantId: string; userId: strin
   // Asked for explicitly only (the default is off), since nothing else on this screen shows it.
   const setterWeekRead = dialing && input.reads?.setterWeek === true ? (async () => {
     const since = days[days.length - 7].key;
-    const result = await db().from("tenant_setter_scorecard").select("booked, showed, no_show, closed_out, closeable")
+    const result = await db().from("tenant_setter_scorecard").select("day, booked, showed, no_show, closed_out, closeable")
       .eq("tenant_id", input.tenantId).eq("user_id", input.userId).gte("day", since).limit(7);
     if (result.error) return null;
-    const rows = (result.data ?? []) as Array<{ booked: number | null; showed: number | null; no_show: number | null; closed_out: number | null; closeable: number | null }>;
+    const rows = (result.data ?? []) as Array<{ day: string; booked: number | null; showed: number | null; no_show: number | null; closed_out: number | null; closeable: number | null }>;
     const total = (pick: (row: (typeof rows)[number]) => number | null) => rows.reduce((all, row) => all + Number(pick(row) ?? 0), 0);
-    return { booked: total((row) => row.booked), showed: total((row) => row.showed), noShow: total((row) => row.no_show), closedOut: total((row) => row.closed_out), closeable: total((row) => row.closeable) };
+    const perDay = rows.map((row) => ({ day: String(row.day).slice(0, 10), booked: Number(row.booked ?? 0) })).sort((a, b) => a.day.localeCompare(b.day));
+    return { booked: total((row) => row.booked), showed: total((row) => row.showed), noShow: total((row) => row.no_show), closedOut: total((row) => row.closed_out), closeable: total((row) => row.closeable), days: perDay };
   })().catch(() => null) : Promise.resolve(null);
 
   // The reader's own close-out: three head counts on their own calendar, past starts only. Asked for
@@ -285,6 +294,26 @@ export async function getDashboardToday(input: { tenantId: string; userId: strin
       .eq("tenant_id", input.tenantId).eq("agent_user_id", input.userId).eq("status", status).gte("starts_at_utc", since).lt("starts_at_utc", new Date(now).toISOString()));
     const [showed, noShow, awaiting] = await Promise.all([mine("showed"), mine("no_show"), mine("pending")]);
     return showed === null || noShow === null || awaiting === null ? null : { showed, noShow, awaiting };
+  })().catch(() => null) : Promise.resolve(null);
+
+  // Today's partner transfers by the agency's hour, under the waiting count's visibility. Asked for explicitly only.
+  const inboundTodayRead = has("inbound_transfers") && input.reads?.inboundToday === true ? (async () => {
+    let query = db().from("lead_queue").select("queued_at").eq("tenant_id", input.tenantId).not("partner_id", "is", null).gte("queued_at", today.start).lt("queued_at", todayEnd);
+    if (heldBy !== null) query = query.or(waitingTransferOr(heldBy));
+    const result = await query.order("queued_at", { ascending: true }).limit(INBOUND_TODAY_LIMIT);
+    if (result.error) return null;
+    const rows = (result.data ?? []) as Array<{ queued_at: string }>;
+    const hourOf = new Intl.DateTimeFormat("en-US", { timeZone: zone, hour: "numeric", hourCycle: "h23" });
+    const counts = new Map<number, number>();
+    for (const row of rows) {
+      const hour = Number(hourOf.format(new Date(row.queued_at))) % 24;
+      counts.set(hour, (counts.get(hour) ?? 0) + 1);
+    }
+    const nowHour = Number(hourOf.format(new Date(now))) % 24;
+    const first = Math.min(8, ...counts.keys());
+    const last = Math.max(nowHour, ...counts.keys());
+    const byHour = Array.from({ length: Math.max(0, last - first + 1) }, (_, index) => ({ hour: first + index, count: counts.get(first + index) ?? 0 }));
+    return { total: rows.length, byHour, sampled: rows.length >= INBOUND_TODAY_LIMIT };
   })().catch(() => null) : Promise.resolve(null);
 
   const [person, series, dialsYesterday, appointmentsToday, queueReady, nextCallback, due, slaBlock, lapsing, licences, insights, appointmentsWeek, policies30, setterWeek, closeOut] = await Promise.all([
@@ -344,6 +373,7 @@ export async function getDashboardToday(input: { tenantId: string; userId: strin
     setterWeekRead,
     closeOutRead,
   ]);
+  const inboundToday = await inboundTodayRead;
 
   const todayPair = series[series.length - 1];
   const dialsToday = todayPair ? todayPair[0] : null;
@@ -381,5 +411,6 @@ export async function getDashboardToday(input: { tenantId: string; userId: strin
     policies30,
     setterWeek,
     closeOut,
+    inboundToday,
   };
 }

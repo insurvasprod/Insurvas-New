@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Suspense, type ReactNode } from "react";
 
 import { scopeFor } from "@/lib/agency/visibility";
 import { ladderAvailable } from "@/lib/retention/cases/store";
@@ -13,6 +14,7 @@ import { RetentionBoard } from "@/components/app/retention-board";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { RecordLapseSignal } from "@/components/app/record-lapse-signal";
+import { StreamSection } from "@/components/ui/stream-section";
 
 /**
  * Book of business › Needs you › Lapse risk (owner 2026-11-02: it was in the Book group; it is what the
@@ -57,15 +59,14 @@ export default async function LapseRiskPage({ searchParams }: { searchParams: Pr
   // Round 7 (owner pick 4·A, 2026-11-10; docs/la4/mockups-r7/retention.html): signals are cases. Once the ladder's
   // tables exist this address opens Cases; a signal a person heard is a New case ("Opened by a person"). The old
   // board stays reachable only while it still holds signals recorded before (nothing recorded is hidden).
+  // Which page this is (or a redirect) is the gate: it is decided before the frame; the lists stream in under it.
   const ladder = await ladderAvailable(guard.context.tenantId);
   if (view === "signals") {
-    const legacy = await getLapseRisk(guard.context);
-    if (ladder && legacy.policies.length === 0) redirect("/app/retention?step=paperwork&by=person");
+    const legacyRead = getLapseRisk(guard.context);
+    if (ladder && (await legacyRead).policies.length === 0) redirect("/app/retention?step=paperwork&by=person");
     return (
-      <DataInPage step="needs-you" title="Lapse risk" tabs={tabs()} actions={readOnly || legacy.policies.length === 0 ? undefined : <RecordLapseSignal />}>
-        {legacy.policies.length === 0
-          ? <LapseRiskEmpty notice={legacy.storage === "pending" ? LAPSE_SCHEMA_PENDING_MESSAGE : undefined} framed />
-          : <LapseRiskBoard policies={legacy.policies} totals={legacy.totals} readOnly={readOnly} framed />}
+      <DataInPage step="needs-you" title="Lapse risk" tabs={tabs()} actions={readOnly ? undefined : <Suspense fallback={null}><RecordSignal read={legacyRead} /></Suspense>}>
+        <StreamSection shape="strip+table"><Signals read={legacyRead} readOnly={readOnly} /></StreamSection>
       </DataInPage>
     );
   }
@@ -73,13 +74,43 @@ export default async function LapseRiskPage({ searchParams }: { searchParams: Pr
   // The call list became Retention › Cases (owner 2026-11-05: Retention is what the files say), once its
   // tables exist; the recorded signals above stay here.
   if (ladder) redirect("/app/retention");
-  const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope: await scopeFor(guard.context) };
-  const [board, rates] = await Promise.all([loadBoard(viewer), loadSaveRates(viewer)]);
+  const reads: Calls = scopeFor(guard.context).then((scope) => {
+    const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope };
+    return Promise.all([loadBoard(viewer), loadSaveRates(viewer)] as const);
+  });
   return (
-    <DataInPage step="needs-you" title="Lapse risk" tabs={tabs(board.rows.length)}>
-      <div className="m-stagger flex flex-col gap-6">
-        <RetentionBoard rows={board.rows} rates={rates.available ? { calls: rates.calls, byReason: rates.byReason, byCarrier: rates.byCarrier, byAgent: rates.byAgent } : null} readOnly={readOnly} />
-      </div>
+    <DataInPage step="needs-you" title="Lapse risk" tabs={<Suspense fallback={tabs()}><CallTabs read={reads} tabs={tabs} /></Suspense>}>
+      <StreamSection shape="table"><Calls read={reads} readOnly={readOnly} /></StreamSection>
     </DataInPage>
+  );
+}
+
+type Legacy = ReturnType<typeof getLapseRisk>;
+type Calls = Promise<[Awaited<ReturnType<typeof loadBoard>>, Awaited<ReturnType<typeof loadSaveRates>>]>;
+
+/** Record a signal, once there are signals on the board (an empty board says how). */
+async function RecordSignal({ read }: { read: Legacy }) {
+  const legacy = await read;
+  return legacy.policies.length === 0 ? null : <RecordLapseSignal />;
+}
+
+async function Signals({ read, readOnly }: { read: Legacy; readOnly: boolean }) {
+  const legacy = await read;
+  return legacy.policies.length === 0
+    ? <LapseRiskEmpty notice={legacy.storage === "pending" ? LAPSE_SCHEMA_PENDING_MESSAGE : undefined} framed />
+    : <LapseRiskBoard policies={legacy.policies} totals={legacy.totals} readOnly={readOnly} framed />;
+}
+
+async function CallTabs({ read, tabs }: { read: Calls; tabs: (count?: number) => ReactNode }) {
+  const [board] = await read;
+  return tabs(board.rows.length);
+}
+
+async function Calls({ read, readOnly }: { read: Calls; readOnly: boolean }) {
+  const [board, rates] = await read;
+  return (
+    <div className="m-stagger flex flex-col gap-6">
+      <RetentionBoard rows={board.rows} rates={rates.available ? { calls: rates.calls, byReason: rates.byReason, byCarrier: rates.byCarrier, byAgent: rates.byAgent } : null} readOnly={readOnly} />
+    </div>
   );
 }

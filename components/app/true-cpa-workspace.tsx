@@ -2,12 +2,12 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Download } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { ActiveFilters, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { checkboxControl } from "@/components/ui/field";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
@@ -34,6 +34,8 @@ import { bySlotOrder, cumulativeCpa, grainFromParams, reportScopeQuery, scopeFro
 import { load as loadResource, readResource } from "@/lib/client/resource-cache";
 import { notify } from "@/lib/notify";
 
+import { CheckBox } from "@/components/ui/check-box";
+import { titleCaseNode } from "@/components/ui/title-case";
 /** The report's read, as the app's cache keys it (lib/client/resource-cache.ts). */
 const trueCpaKey = (query: string) => `/api/app/true-cpa?${query}`;
 /** The cards' small charts: the same report a week at a time (lib/vendorScorecard/series.ts). */
@@ -264,8 +266,13 @@ export function TrueCpaWorkspace({ initialReport = null, framed = false }: { ini
   const points = series && series.query === query ? series.data.points : null;
   const cpaTrend = points ? cumulativeCpa(points) : [];
 
-  // First paint without a server-rendered report: the page's one loading look.
-  if (loading && !report && !error) return framed ? <FramedLoading /> : <PageLoading />;
+  // First paint without a server-rendered report. Frame first (UI-CONSISTENCY §7a): standalone, the title and its buttons draw at once and the report loads under them.
+  if (loading && !report && !error) return framed ? <FramedLoading /> : (
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      <PageHeader title="True CPA" description="What an issued policy really cost, by vendor and campaign." actions={<><PeriodPicker value={{ from: applied.from, to: applied.to }} onChange={(next) => commit({ ...applied, ...next })} /><Button asChild variant="outline"><a href={exportUrl}><Download aria-hidden="true" />Export</a></Button></>} />
+      <PageLoading header={false} />
+    </div>
+  );
 
   const tabs: { key: View; label: string }[] = [
     { key: "scorecard", label: "Vendors" },
@@ -310,7 +317,7 @@ export function TrueCpaWorkspace({ initialReport = null, framed = false }: { ini
             <FilterField label="Campaign" htmlFor="true-cpa-campaign"><select id="true-cpa-campaign" className={toolbarControl} value={draft.campaignId} onChange={(event) => setDraft((current) => ({ ...current, campaignId: event.target.value }))}><option value="">All campaigns</option>{(report?.rows ?? []).filter((row) => !draft.vendorId || row.vendor_id === draft.vendorId).map((row) => <option key={row.campaign_id} value={row.campaign_id}>{row.campaign_name}</option>)}</select></FilterField>
             <FilterField label="Product" htmlFor="true-cpa-product"><select id="true-cpa-product" className={toolbarControl} value={draft.productCode} onChange={(event) => setDraft((current) => ({ ...current, productCode: event.target.value }))}><option value="">All products</option>{products.map((product) => <option key={product} value={product}>{product.replaceAll("_", " ")}</option>)}</select></FilterField>
             <label className="inline-flex items-center gap-2 text-sm text-foreground" htmlFor="scorecard-persist" title={upgraded ? undefined : "Needs a database update that has not been applied yet."}>
-              <input id="scorecard-persist" type="checkbox" className={checkboxControl} checked={draft.persist} disabled={!upgraded} onChange={(event) => setDraft((current) => ({ ...current, persist: event.target.checked }))} />
+              <CheckBox id="scorecard-persist" checked={draft.persist} disabled={!upgraded} onChange={(event) => setDraft((current) => ({ ...current, persist: event.target.checked }))} />
               <span>Only policies still in force after {PERSIST_DAYS} days</span>
             </label>
           </FilterPanel>
@@ -325,7 +332,7 @@ export function TrueCpaWorkspace({ initialReport = null, framed = false }: { ini
   </DataToolbar>;
   const notLoaded = <ErrorState title="The scorecard did not load" detail={error ?? "No figures for this period."} action={<Button variant="outline" onClick={refresh}>Try again</Button>} />;
   const pendingUpdate = <EmptyState title="Not available yet" hint="This needs a database update that has not been applied yet." />;
-  const openRows = (href: string, text = "Open the rows") => <Link href={href} className="whitespace-nowrap text-sm font-medium text-foreground hover:underline">{text} ›</Link>;
+  const openRows = (href: string, text = "Open the rows") => <Link href={href} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "no-underline")}>{titleCaseNode(<>{text}</>)}</Link>;
   const chartGrid = "grid gap-8 p-4 lg:grid-cols-2";
   const chartColumn = "flex min-w-0 flex-col gap-4";
 

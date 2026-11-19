@@ -47,6 +47,14 @@ export const SIDEBAR_ICONS = [
   "fact-reports",
   "disclosures",
   "calling-rules",
+  // Billing area pages new in admin round 1 (2026-11-17).
+  "failed-payments",
+  "reconciliation",
+  "catalog-workspace",
+  "monitoring-workspace",
+  "lockouts",
+  "staff-sessions",
+  "jobs",
 ] as const;
 
 export type SidebarIconKey = (typeof SIDEBAR_ICONS)[number];
@@ -65,6 +73,8 @@ export type SidebarGroup = {
   label: string;
   icon: SidebarIconKey;
   links: SidebarLink[];
+  /** An area's home (admin round 1, 2026-11-17): the group's row links here and hovering it lists the pages. */
+  area?: string;
 };
 
 export type SidebarNode = SidebarLink | SidebarGroup;

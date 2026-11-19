@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense, type ReactNode } from "react";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { redirect } from "next/navigation";
@@ -11,6 +12,7 @@ import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ProducersBoard, PublishDrafts, type ProducerFilter, type ProducersView } from "@/components/app/accounting/producers-board";
 import { AccountingPage } from "@/components/app/accounting/accounting-page";
 import { EmptyState } from "@/components/ui/page-states";
+import { StreamSection } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs } from "@/components/ui/view-tabs";
 
@@ -42,29 +44,62 @@ export default async function ProducerSplitsPage({ searchParams }: { searchParam
   const view: ProducersView = asked.view === "runs" ? "runs" : "producers";
   const show: ProducerFilter = asked.show === "owes" || asked.show === "nosplit" ? asked.show : "all";
   const readOnly = guard.entitlement.access === "read_only";
-  let data: Awaited<ReturnType<typeof producersOverview>> | null = null;
-  let problem: string | null = null;
-  try {
-    if (!readOnly) await syncProducerLedger(guard.context.tenantId);
-    data = await producersOverview(guard.context.tenantId);
-  } catch (error) {
-    if (!(error instanceof ProducerError)) throw error;
-    problem = error.message;
-  }
-  const policy = data ? `${NEGATIVE_POLICY_LABELS[data.settings.negativePolicy as NegativePolicy] ?? data.settings.negativePolicy}${data.settings.negativePolicy === "cap" ? ` (at most ${percent(data.settings.recoveryCapBp)} of each payout)` : ""}` : "";
-  const drafts = data ? data.runs.filter((r) => r.status === "draft") : [];
-  const names = data ? Object.fromEntries(data.people.map((p) => [p.userId, p.name])) : {};
+  // Frame first (UI-CONSISTENCY §7a): the ledger sync and the overview are read now; the title, the two tabs and the
+  // (i) draw at once, the counts, the rule and Publish when they land.
+  const read: SplitsRead = (async () => {
+    try {
+      if (!readOnly) await syncProducerLedger(guard.context.tenantId);
+      return { data: await producersOverview(guard.context.tenantId), problem: null };
+    } catch (error) {
+      if (!(error instanceof ProducerError)) throw error;
+      return { data: null, problem: error.message };
+    }
+  })();
+  const tabsOf = (counts: { people: number; drafts: number } | null) => (
+    <ViewTabs label="Producer splits" value={view} tabs={[
+      { key: "producers", label: "Producers", count: counts?.people ?? null, href: "/app/producer-splits" },
+      { key: "runs", label: "Payout runs", count: counts?.drafts || null, href: "/app/producer-splits?view=runs" },
+    ]} />
+  );
   return (
     <AccountingPage
       step="splits"
-      info={data ? <>A negative balance is shown, never reset. This agency&apos;s rule: {policy}. <Link className="underline" href="/app/accounting-settings">Change it in Accounting settings</Link>.</> : undefined}
-      tabs={data ? <ViewTabs label="Producer splits" value={view} tabs={[
-        { key: "producers", label: "Producers", count: data.people.length, href: "/app/producer-splits" },
-        { key: "runs", label: "Payout runs", count: drafts.length || null, href: "/app/producer-splits?view=runs" },
-      ]} /> : undefined}
-      actions={drafts.length ? <PublishDrafts drafts={drafts} names={names} readOnly={readOnly} /> : undefined}
+      info={<Suspense fallback={RULE_LEAD}><SplitsInfo read={read} /></Suspense>}
+      tabs={<Suspense fallback={tabsOf(null)}><SplitsTabs read={read} tabsOf={tabsOf} /></Suspense>}
+      actions={<Suspense fallback={null}><SplitsActions read={read} readOnly={readOnly} /></Suspense>}
     >
-      {data ? <ProducersBoard key={show} data={data} view={view} show={show} readOnly={readOnly} /> : <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>}
+      <StreamSection shape="strip+table">
+        <SplitsBody read={read} view={view} show={show} readOnly={readOnly} />
+      </StreamSection>
     </AccountingPage>
   );
+}
+
+type SplitsRead = Promise<{ data: Awaited<ReturnType<typeof producersOverview>> | null; problem: string | null }>;
+const RULE_LEAD = "A negative balance is shown, never reset.";
+const draftsOf = (data: Awaited<ReturnType<typeof producersOverview>>) => data.runs.filter((r) => r.status === "draft");
+
+async function SplitsInfo({ read }: { read: SplitsRead }) {
+  const { data } = await read;
+  if (!data) return RULE_LEAD;
+  const policy = `${NEGATIVE_POLICY_LABELS[data.settings.negativePolicy as NegativePolicy] ?? data.settings.negativePolicy}${data.settings.negativePolicy === "cap" ? ` (at most ${percent(data.settings.recoveryCapBp)} of each payout)` : ""}`;
+  return <>{RULE_LEAD} This agency&apos;s rule: {policy}. <Link className="underline" href="/app/accounting-settings">Change it in Accounting settings</Link>.</>;
+}
+
+async function SplitsTabs({ read, tabsOf }: { read: SplitsRead; tabsOf: (counts: { people: number; drafts: number } | null) => ReactNode }) {
+  const { data } = await read;
+  return data ? tabsOf({ people: data.people.length, drafts: draftsOf(data).length }) : null;
+}
+
+async function SplitsActions({ read, readOnly }: { read: SplitsRead; readOnly: boolean }) {
+  const { data } = await read;
+  const drafts = data ? draftsOf(data) : [];
+  if (!data || !drafts.length) return null;
+  const names = Object.fromEntries(data.people.map((p) => [p.userId, p.name]));
+  return <PublishDrafts drafts={drafts} names={names} readOnly={readOnly} />;
+}
+
+async function SplitsBody({ read, view, show, readOnly }: { read: SplitsRead; view: ProducersView; show: ProducerFilter; readOnly: boolean }) {
+  const { data, problem } = await read;
+  return data ? <ProducersBoard key={show} data={data} view={view} show={show} readOnly={readOnly} /> : <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>;
 }

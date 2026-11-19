@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { friendlyImportCommitError } from "@/lib/agentTemplates/errors";
 import type { CapturedConsent } from "@/lib/consent/capture";
+import { sealLeadValues } from "@/lib/leadValues/seal";
 
 /**
  * LA-2.2-9 · the one write of a list import: its scrub-rejection ledger, its leads, their sources,
@@ -112,8 +113,14 @@ export async function commitLeadImport(input: {
    * no duplicate outcome and refuses the whole payload on its check constraint.
    */
   rejectionsWithoutRepeats?: ScrubRejection[];
+  /** The lead form's fields, so a field typed SSN or bank is sealed whatever it is called. */
+  fields?: ReadonlyArray<{ field_key: string; type?: string | null }>;
 }): Promise<ImportCommitResult> {
   const db = getSupabaseServiceClient() as unknown as Db;
+  // Every import path commits here, and the SQL functions store `values` as given: SSN and bank values
+  // are sealed now, before they leave the server (lib/leadValues/seal.ts). Already-sealed values (a row
+  // held for duplicate review) pass through unchanged.
+  input = { ...input, items: input.items.map((item) => ("values" in item ? { ...item, values: sealLeadValues(input.tenantId, item.values, input.fields ?? []) } : item)) };
   const rejections = input.campaignId ? input.rejections : [];
   const withoutRepeats = input.rejectionsWithoutRepeats ?? rejections.filter((rejection) => rejection.outcome !== "duplicate_in_file");
   const ledger = input.campaignId && rejections.length > 0 ? { campaign_id: input.campaignId, items: rejections } : null;

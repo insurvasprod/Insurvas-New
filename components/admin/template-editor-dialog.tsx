@@ -5,10 +5,13 @@ import { notify } from "@/lib/notify";
 
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Sheet } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Callout, pillTone } from "@/components/app/settings/primitives";
+import { pillTone } from "@/components/app/settings/primitives";
+import { TmplChanges, asChangeDraft, detailChanges } from "@/components/admin/catalog/tmpl-changes";
+import { formChanges } from "@/lib/templates/formChanges";
 import type { ProductRow } from "@/lib/products/constants";
 import {
   TEMPLATE_FIELD_TYPES,
@@ -25,6 +28,7 @@ import {
 import { TEMPLATE_STATE_LABELS, leadFieldDependents, type TemplateState, type TemplateUsage } from "@/lib/templates/catalog";
 import { inputControl } from "@/components/ui/field";
 
+import { CheckBox } from "@/components/ui/check-box";
 type Draft = {
   name: string;
   product_code: string;
@@ -66,7 +70,6 @@ const STATE_TONE = { published: "success", draft: "warning", archived: "neutral"
 
 export function TemplateEditorDialog({
   mode,
-  open,
   template,
   state,
   usage = null,
@@ -76,7 +79,6 @@ export function TemplateEditorDialog({
   onSaved,
 }: {
   mode: "create" | "edit";
-  open: boolean;
   template?: TemplateRow | null;
   /** The template's catalog state; edit mode only. */
   state?: TemplateState;
@@ -225,102 +227,112 @@ export function TemplateEditorDialog({
     },
   };
 
+  const saved = isEdit && template ? draftFrom(template, products) : null;
+  const changes = saved ? [...formChanges(asChangeDraft(saved), asChangeDraft(draft)), ...detailChanges(saved, draft, products)] : [];
+  const confirm = confirming ? confirmCopy[confirming] : null;
+
   return (
-    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-h-[92vh] max-w-6xl overflow-y-auto">
-        <form ref={formRef} onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>{isEdit ? `Edit ${template?.name}` : "New product template"}</DialogTitle>
-            <DialogDescription>
+    <>
+      <Sheet
+        title={isEdit ? `Edit ${template?.name}` : "New product template"}
+        subtitle={isEdit ? `${productName} · saving creates version ${(template?.version ?? 0) + 1}` : "A reusable lead, pipeline and application starting point"}
+        status={isEdit && template ? (
+          <span className="flex flex-wrap items-center gap-2">
+            {state && <StatusChip tone={pillTone(STATE_TONE[state])} dot>{TEMPLATE_STATE_LABELS[state]}</StatusChip>}
+            <StatusChip dot={false} tone="neutral">v{template.version}</StatusChip>
+          </span>
+        ) : undefined}
+        onClose={() => { if (!saving) onClose(); }}
+        className="lg:w-[min(1180px,96vw)]"
+        bodyClassName="p-4"
+        footer={<>
+          {isEdit && template && (
+            <>
+              <Button type="button" variant="outline" disabled={saving} onClick={() => setConfirming("duplicate")}>Duplicate</Button>
+              {state === "draft" && <Button type="button" variant="outline" disabled={saving} onClick={() => setConfirming("publish")}>Publish</Button>}
+              {state === "published" && <Button type="button" variant="outline" className="text-[var(--error-ink)]" disabled={saving} onClick={() => setConfirming("archive")}>Archive</Button>}
+              {state === "archived" && <Button type="button" variant="outline" disabled={saving} onClick={() => setConfirming("restore")}>Restore</Button>}
+            </>
+          )}
+          <span className="flex-1" />
+          <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
+          {!isEdit && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={saving || !draftsSupported}
+              title={draftsSupported ? "Hidden from agencies until you publish it" : "Drafts need a database update that has not been applied yet"}
+              onClick={saveAsDraft}
+            >
+              Save as draft
+            </Button>
+          )}
+          <Button type="submit" form="template-editor-form" disabled={saving}>{saving ? "Saving…" : isEdit ? "Save new version" : "Create and publish"}</Button>
+        </>}
+      >
+        <form id="template-editor-form" ref={formRef} onSubmit={handleSubmit} className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="min-w-0 space-y-6">
+            <p className="m-0 text-sm leading-[1.5] text-muted-foreground">
               {isEdit
                 ? `Saving creates version ${(template?.version ?? 0) + 1}; agents using an older version keep their existing fields, board and form.${state === "draft" ? " This template is a draft: agencies cannot pick it until it is published." : ""}`
-                : "Create a reusable lead, pipeline and application starting point. Publishing takes effect immediately; a draft stays hidden from agencies until you publish it."}
-            </DialogDescription>
-          </DialogHeader>
+                : "Publishing takes effect immediately; a draft stays hidden from agencies until you publish it."}
+              {!isEdit && !draftsSupported && " Save as draft needs a database update that has not been applied yet."}
+            </p>
+            {isEdit && template && (
+              <p className="m-0 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                <span>
+                  {usage
+                    ? `Copied by ${plural(usage.agencies, "agency", "agencies")}${usage.agenciesOnEarlierVersion > 0 ? ` (${usage.agenciesOnEarlierVersion.toLocaleString("en-US")} on an earlier version)` : ""} · ${plural(usage.inProgress, "application")} in progress${usage.inProgressOnEarlierVersion > 0 ? ` (${usage.inProgressOnEarlierVersion.toLocaleString("en-US")} on an earlier version)` : ""}`
+                    : "Agency copies and in-progress applications could not be counted just now."}
+                </span>
+                <span>Product code <code>{template.product_code}</code></span>
+              </p>
+            )}
 
-          {isEdit && template && (
-            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border p-3 text-sm">
-              {state && <StatusChip tone={pillTone(STATE_TONE[state])} dot>{TEMPLATE_STATE_LABELS[state]}</StatusChip>}
-              <StatusChip dot={false} tone="neutral">v{template.version}</StatusChip>
-              <span className="text-muted-foreground">
-                {usage
-                  ? `Copied by ${plural(usage.agencies, "agency", "agencies")}${usage.agenciesOnEarlierVersion > 0 ? ` (${usage.agenciesOnEarlierVersion.toLocaleString("en-US")} on an earlier version)` : ""} · ${plural(usage.inProgress, "application")} in progress${usage.inProgressOnEarlierVersion > 0 ? ` (${usage.inProgressOnEarlierVersion.toLocaleString("en-US")} on an earlier version)` : ""}`
-                  : "Agency copies and in-progress applications could not be counted just now."}
-              </span>
-              <span className="text-muted-foreground">Product code <code>{template.product_code}</code></span>
-            </div>
-          )}
+              <section className="rounded-lg border p-4"><h3 className="text-sm font-semibold">Template details</h3><div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5"><Label htmlFor="template-name">Name</Label><Input id="template-name" required value={draft.name} onChange={(event) => updateDraft({ name: event.target.value })} placeholder="Term Life — standard" /></div>
+                <div className="space-y-1.5"><Label htmlFor="template-product">Product</Label><select id="template-product" className={inputControl} value={draft.product_code} onChange={(event) => { const value = event.target.value; updateDraft({ product_code: value }); }}><option value="" disabled>Choose a product</option>{products.filter((product) => product.is_active || product.code === draft.product_code).map((product) => <option key={product.code} value={product.code}>{product.name} ({product.code})</option>)}</select></div>
+                <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="template-description">Description</Label><Input id="template-description" value={draft.description} onChange={(event) => updateDraft({ description: event.target.value })} placeholder="Optional description for agents" /></div>
+              </div></section>
 
-          <div className="space-y-6 py-4">
-            <section className="rounded-lg border p-4"><h3 className="text-sm font-semibold">Template details</h3><div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5"><Label htmlFor="template-name">Name</Label><Input id="template-name" required value={draft.name} onChange={(event) => updateDraft({ name: event.target.value })} placeholder="Term Life — standard" /></div>
-              <div className="space-y-1.5"><Label htmlFor="template-product">Product</Label><select id="template-product" className={inputControl} value={draft.product_code} onChange={(event) => { const value = event.target.value; updateDraft({ product_code: value }); }}><option value="" disabled>Choose a product</option>{products.filter((product) => product.is_active || product.code === draft.product_code).map((product) => <option key={product.code} value={product.code}>{product.name} ({product.code})</option>)}</select></div>
-              <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="template-description">Description</Label><Input id="template-description" value={draft.description} onChange={(event) => updateDraft({ description: event.target.value })} placeholder="Optional description for agents" /></div>
-            </div></section>
+              <section className="rounded-lg border p-4"><div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold">Lead fields</h3><p className="text-xs text-muted-foreground">Schema fields are reusable keys; lead values will be JSONB in the agent workspace. A field the form or a condition uses can&apos;t be removed until it is taken out of those.</p></div><Button type="button" variant="outline" size="sm" onClick={addField}>Add field</Button></div><div className="mt-4 space-y-3">{draft.fields.map((field, index) => <div key={`${index}-${field.field_key}`} className="grid gap-2 rounded-md bg-muted/30 p-3 md:grid-cols-[1fr_1fr_180px_auto] md:items-end">
+                <div className="space-y-1"><Label htmlFor={`field-key-${index}`}>Key</Label><Input id={`field-key-${index}`} value={field.field_key} onChange={(event) => updateField(index, { field_key: slug(event.target.value, `field_${index + 1}`) })} /></div>
+                <div className="space-y-1"><Label htmlFor={`field-label-${index}`}>Label</Label><Input id={`field-label-${index}`} value={field.label} onChange={(event) => updateField(index, { label: event.target.value })} /></div>
+                <div className="space-y-1"><Label htmlFor={`field-type-${index}`}>Type</Label><select id={`field-type-${index}`} className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" value={field.type} onChange={(event) => updateField(index, { type: event.target.value as TemplateField["type"], options: ["single_select", "multi_select"].includes(event.target.value) ? field.options : [] })}>{TEMPLATE_FIELD_TYPES.map((type) => <option key={type} value={type}>{TEMPLATE_FIELD_TYPE_LABELS[type]}</option>)}</select></div>
+                <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => removeField(index)}>Remove</Button>
+                <label className="flex items-center gap-2 text-xs md:col-span-2"><CheckBox checked={field.is_required} onChange={(event) => updateField(index, { is_required: event.target.checked })} /> Required</label>
+                {["single_select", "multi_select"].includes(field.type) && <div className="space-y-1 md:col-span-2"><Label htmlFor={`field-options-${index}`}>Options (comma separated)</Label><Input id={`field-options-${index}`} value={field.options.join(", ")} onChange={(event) => updateField(index, { options: event.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} placeholder="Yes, No" /></div>}
+                {blockedRemoval?.index === index && <p role="alert" className="text-xs text-destructive md:col-span-4">{blockedRemoval.message}</p>}
+              </div>)}{draft.fields.length === 0 && <p className="text-sm text-muted-foreground">No lead fields yet. Add the fields agents should capture.</p>}</div></section>
 
-            <section className="rounded-lg border p-4"><div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold">Lead fields</h3><p className="text-xs text-muted-foreground">Schema fields are reusable keys; lead values will be JSONB in the agent workspace. A field the form or a condition uses can&apos;t be removed until it is taken out of those.</p></div><Button type="button" variant="outline" size="sm" onClick={addField}>Add field</Button></div><div className="mt-4 space-y-3">{draft.fields.map((field, index) => <div key={`${index}-${field.field_key}`} className="grid gap-2 rounded-md bg-muted/30 p-3 md:grid-cols-[1fr_1fr_180px_auto] md:items-end">
-              <div className="space-y-1"><Label htmlFor={`field-key-${index}`}>Key</Label><Input id={`field-key-${index}`} value={field.field_key} onChange={(event) => updateField(index, { field_key: slug(event.target.value, `field_${index + 1}`) })} /></div>
-              <div className="space-y-1"><Label htmlFor={`field-label-${index}`}>Label</Label><Input id={`field-label-${index}`} value={field.label} onChange={(event) => updateField(index, { label: event.target.value })} /></div>
-              <div className="space-y-1"><Label htmlFor={`field-type-${index}`}>Type</Label><select id={`field-type-${index}`} className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" value={field.type} onChange={(event) => updateField(index, { type: event.target.value as TemplateField["type"], options: ["single_select", "multi_select"].includes(event.target.value) ? field.options : [] })}>{TEMPLATE_FIELD_TYPES.map((type) => <option key={type} value={type}>{TEMPLATE_FIELD_TYPE_LABELS[type]}</option>)}</select></div>
-              <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => removeField(index)}>Remove</Button>
-              <label className="flex items-center gap-2 text-xs md:col-span-2"><input type="checkbox" checked={field.is_required} onChange={(event) => updateField(index, { is_required: event.target.checked })} /> Required</label>
-              {["single_select", "multi_select"].includes(field.type) && <div className="space-y-1 md:col-span-2"><Label htmlFor={`field-options-${index}`}>Options (comma separated)</Label><Input id={`field-options-${index}`} value={field.options.join(", ")} onChange={(event) => updateField(index, { options: event.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} placeholder="Yes, No" /></div>}
-              {blockedRemoval?.index === index && <p role="alert" className="text-xs text-destructive md:col-span-4">{blockedRemoval.message}</p>}
-            </div>)}{draft.fields.length === 0 && <p className="text-sm text-muted-foreground">No lead fields yet. Add the fields agents should capture.</p>}</div></section>
+              <section className="rounded-lg border p-4"><div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold">Pipeline stages</h3><p className="text-xs text-muted-foreground">Stages are kept in the order shown to agents.</p></div><Button type="button" variant="outline" size="sm" onClick={addStage}>Add stage</Button></div><div className="mt-4 space-y-3">{draft.stages.map((stage, index) => <div key={`${index}-${stage.stage_key}`} className="grid gap-2 rounded-md bg-muted/30 p-3 md:grid-cols-[1fr_1fr_140px_110px_auto] md:items-end">
+                <div className="space-y-1"><Label htmlFor={`stage-key-${index}`}>Key</Label><Input id={`stage-key-${index}`} value={stage.stage_key} onChange={(event) => updateStage(index, { stage_key: slug(event.target.value, `stage_${index + 1}`) })} /></div>
+                <div className="space-y-1"><Label htmlFor={`stage-label-${index}`}>Name</Label><Input id={`stage-label-${index}`} value={stage.label} onChange={(event) => updateStage(index, { label: event.target.value })} /></div>
+                <div className="space-y-1"><Label htmlFor={`stage-type-${index}`}>Type</Label><select id={`stage-type-${index}`} className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" value={stage.stage_type} onChange={(event) => updateStage(index, { stage_type: event.target.value as TemplateStage["stage_type"] })}>{TEMPLATE_STAGE_TYPES.map((type) => <option key={type} value={type}>{TEMPLATE_STAGE_TYPE_LABELS[type]}</option>)}</select></div>
+                <div className="space-y-1"><Label htmlFor={`stage-color-${index}`}>Colour</Label><Input id={`stage-color-${index}`} type="color" value={stage.color} onChange={(event) => updateStage(index, { color: event.target.value })} /></div>
+                <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => removeStage(index)}>Remove</Button>
+              </div>)}{draft.stages.length === 0 && <p className="text-sm text-muted-foreground">No pipeline stages yet. Add the board stages agents will use.</p>}</div></section>
 
-            <section className="rounded-lg border p-4"><div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold">Pipeline stages</h3><p className="text-xs text-muted-foreground">Stages are kept in the order shown to agents.</p></div><Button type="button" variant="outline" size="sm" onClick={addStage}>Add stage</Button></div><div className="mt-4 space-y-3">{draft.stages.map((stage, index) => <div key={`${index}-${stage.stage_key}`} className="grid gap-2 rounded-md bg-muted/30 p-3 md:grid-cols-[1fr_1fr_140px_110px_auto] md:items-end">
-              <div className="space-y-1"><Label htmlFor={`stage-key-${index}`}>Key</Label><Input id={`stage-key-${index}`} value={stage.stage_key} onChange={(event) => updateStage(index, { stage_key: slug(event.target.value, `stage_${index + 1}`) })} /></div>
-              <div className="space-y-1"><Label htmlFor={`stage-label-${index}`}>Name</Label><Input id={`stage-label-${index}`} value={stage.label} onChange={(event) => updateStage(index, { label: event.target.value })} /></div>
-              <div className="space-y-1"><Label htmlFor={`stage-type-${index}`}>Type</Label><select id={`stage-type-${index}`} className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" value={stage.stage_type} onChange={(event) => updateStage(index, { stage_type: event.target.value as TemplateStage["stage_type"] })}>{TEMPLATE_STAGE_TYPES.map((type) => <option key={type} value={type}>{TEMPLATE_STAGE_TYPE_LABELS[type]}</option>)}</select></div>
-              <div className="space-y-1"><Label htmlFor={`stage-color-${index}`}>Colour</Label><Input id={`stage-color-${index}`} type="color" value={stage.color} onChange={(event) => updateStage(index, { color: event.target.value })} /></div>
-              <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => removeStage(index)}>Remove</Button>
-            </div>)}{draft.stages.length === 0 && <p className="text-sm text-muted-foreground">No pipeline stages yet. Add the board stages agents will use.</p>}</div></section>
-
-            <section className="rounded-lg border p-4"><div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold">Application form</h3><p className="text-xs text-muted-foreground">Organize lead fields into sections. Each field can have one optional show/hide condition.</p></div><Button type="button" variant="outline" size="sm" onClick={addSection}>Add section</Button></div><div className="mt-4 space-y-4">{draft.form_definition.sections.map((section, sectionIndex) => <div key={`${sectionIndex}-${section.section_key}`} className="rounded-md bg-muted/30 p-3"><div className="flex flex-wrap items-end gap-2"><div className="min-w-48 flex-1 space-y-1"><Label htmlFor={`section-key-${sectionIndex}`}>Section key</Label><Input id={`section-key-${sectionIndex}`} value={section.section_key} onChange={(event) => updateSection(sectionIndex, { section_key: slug(event.target.value, `section_${sectionIndex + 1}`) })} /></div><div className="min-w-48 flex-1 space-y-1"><Label htmlFor={`section-label-${sectionIndex}`}>Section name</Label><Input id={`section-label-${sectionIndex}`} value={section.label} onChange={(event) => updateSection(sectionIndex, { label: event.target.value })} /></div><Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => removeSection(sectionIndex)}>Remove section</Button></div><div className="mt-3 space-y-2">{section.fields.map((formField, fieldIndex) => <div key={`${fieldIndex}-${formField.field_key}`} className="grid gap-2 rounded border bg-background p-2 md:grid-cols-[1fr_auto_auto] md:items-end"><div className="space-y-1"><Label htmlFor={`form-field-${sectionIndex}-${fieldIndex}`}>Field</Label><select id={`form-field-${sectionIndex}-${fieldIndex}`} className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" value={formField.field_key} onChange={(event) => updateFormField(sectionIndex, fieldIndex, { field_key: event.target.value })}>{draft.fields.map((field) => <option key={field.field_key} value={field.field_key}>{field.label}</option>)}</select></div><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={formField.is_required} onChange={(event) => updateFormField(sectionIndex, fieldIndex, { is_required: event.target.checked })} /> Required</label><Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => removeFormField(sectionIndex, fieldIndex)}>Remove</Button><div className="md:col-span-3"><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={Boolean(formField.show_when)} onChange={(event) => updateFormField(sectionIndex, fieldIndex, { show_when: event.target.checked ? { field_key: draft.fields[0]?.field_key ?? "condition", equals: "" } : null })} /> Show only when another field matches</label>{formField.show_when && <div className="mt-2 grid gap-2 sm:grid-cols-2"><select aria-label="Condition field" className="border-input bg-background h-9 w-full rounded-md border px-3 py-1 text-sm" value={formField.show_when.field_key} onChange={(event) => updateFormField(sectionIndex, fieldIndex, { show_when: { ...formField.show_when!, field_key: event.target.value } })}>{draft.fields.map((field) => <option key={field.field_key} value={field.field_key}>{field.label}</option>)}</select><Input aria-label="Condition value" value={formField.show_when.equals} onChange={(event) => updateFormField(sectionIndex, fieldIndex, { show_when: { ...formField.show_when!, equals: event.target.value } })} placeholder="Value" /></div>}</div></div>)}<Button type="button" variant="outline" size="sm" onClick={() => addFormField(sectionIndex)} disabled={draft.fields.length === 0} title={draft.fields.length === 0 ? "Add a lead field first" : undefined}>Add field to section</Button></div></div>)}{draft.form_definition.sections.length === 0 && <p className="text-sm text-muted-foreground">No application sections yet.</p>}</div></section>
-
-            <section className="rounded-lg border p-4"><div className="flex items-center gap-2"><h3 className="text-sm font-semibold">Agent preview</h3><StatusChip>Current draft</StatusChip></div><div className="mt-4 grid gap-4 lg:grid-cols-2"><div><p className="mb-2 text-xs font-semibold text-muted-foreground">Lead form</p>{draft.form_definition.sections.map((section) => <div key={section.section_key} className="mb-3 rounded-md border p-3"><p className="font-medium">{section.label}</p><div className="mt-2 grid gap-2 sm:grid-cols-2">{section.fields.map((formField) => { const field = draft.fields.find((item) => item.field_key === formField.field_key); return field ? previewField({ ...field, is_required: formField.is_required }, formField.show_when) : null; })}</div></div>)}</div><div><p className="mb-2 text-xs font-semibold text-muted-foreground">Pipeline board</p><div className="flex flex-wrap gap-2">{draft.stages.map((stage) => <div key={stage.stage_key} className="min-w-28 rounded-md border-t-4 bg-muted/30 p-3" style={{ borderTopColor: stage.color }}><p className="text-sm font-medium">{stage.label}</p><p className="text-xs text-muted-foreground">{TEMPLATE_STAGE_TYPE_LABELS[stage.stage_type]}</p></div>)}</div></div></div></section>
+              <section className="rounded-lg border p-4"><div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold">Application form</h3><p className="text-xs text-muted-foreground">Organize lead fields into sections. Each field can have one optional show/hide condition.</p></div><Button type="button" variant="outline" size="sm" onClick={addSection}>Add section</Button></div><div className="mt-4 space-y-4">{draft.form_definition.sections.map((section, sectionIndex) => <div key={`${sectionIndex}-${section.section_key}`} className="rounded-md bg-muted/30 p-3"><div className="flex flex-wrap items-end gap-2"><div className="min-w-48 flex-1 space-y-1"><Label htmlFor={`section-key-${sectionIndex}`}>Section key</Label><Input id={`section-key-${sectionIndex}`} value={section.section_key} onChange={(event) => updateSection(sectionIndex, { section_key: slug(event.target.value, `section_${sectionIndex + 1}`) })} /></div><div className="min-w-48 flex-1 space-y-1"><Label htmlFor={`section-label-${sectionIndex}`}>Section name</Label><Input id={`section-label-${sectionIndex}`} value={section.label} onChange={(event) => updateSection(sectionIndex, { label: event.target.value })} /></div><Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => removeSection(sectionIndex)}>Remove section</Button></div><div className="mt-3 space-y-2">{section.fields.map((formField, fieldIndex) => <div key={`${fieldIndex}-${formField.field_key}`} className="grid gap-2 rounded border bg-background p-2 md:grid-cols-[1fr_auto_auto] md:items-end"><div className="space-y-1"><Label htmlFor={`form-field-${sectionIndex}-${fieldIndex}`}>Field</Label><select id={`form-field-${sectionIndex}-${fieldIndex}`} className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" value={formField.field_key} onChange={(event) => updateFormField(sectionIndex, fieldIndex, { field_key: event.target.value })}>{draft.fields.map((field) => <option key={field.field_key} value={field.field_key}>{field.label}</option>)}</select></div><label className="flex items-center gap-2 text-xs"><CheckBox checked={formField.is_required} onChange={(event) => updateFormField(sectionIndex, fieldIndex, { is_required: event.target.checked })} /> Required</label><Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => removeFormField(sectionIndex, fieldIndex)}>Remove</Button><div className="md:col-span-3"><label className="flex items-center gap-2 text-xs"><CheckBox checked={Boolean(formField.show_when)} onChange={(event) => updateFormField(sectionIndex, fieldIndex, { show_when: event.target.checked ? { field_key: draft.fields[0]?.field_key ?? "condition", equals: "" } : null })} /> Show only when another field matches</label>{formField.show_when && <div className="mt-2 grid gap-2 sm:grid-cols-2"><select aria-label="Condition field" className="border-input bg-background h-9 w-full rounded-md border px-3 py-1 text-sm" value={formField.show_when.field_key} onChange={(event) => updateFormField(sectionIndex, fieldIndex, { show_when: { ...formField.show_when!, field_key: event.target.value } })}>{draft.fields.map((field) => <option key={field.field_key} value={field.field_key}>{field.label}</option>)}</select><Input aria-label="Condition value" value={formField.show_when.equals} onChange={(event) => updateFormField(sectionIndex, fieldIndex, { show_when: { ...formField.show_when!, equals: event.target.value } })} placeholder="Value" /></div>}</div></div>)}<Button type="button" variant="outline" size="sm" onClick={() => addFormField(sectionIndex)} disabled={draft.fields.length === 0} title={draft.fields.length === 0 ? "Add a lead field first" : undefined}>Add field to section</Button></div></div>)}{draft.form_definition.sections.length === 0 && <p className="text-sm text-muted-foreground">No application sections yet.</p>}</div></section>
           </div>
 
-          {confirming && (
-            <Callout tone={confirmCopy[confirming].tone} title={confirmCopy[confirming].title} className="mb-4">
-              <p className="m-0">{confirmCopy[confirming].body}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button type="button" size="sm" disabled={saving} onClick={() => void runConfirmed(confirming)}>{saving ? "Working…" : confirmCopy[confirming].action}</Button>
-                <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => setConfirming(null)}>Cancel</Button>
-              </div>
-            </Callout>
-          )}
-
-          <DialogFooter className="flex-wrap gap-2 sm:justify-between">
-            <div className="flex flex-wrap gap-2">
-              {isEdit && template && (
-                <>
-                  <Button type="button" variant="outline" disabled={saving} onClick={() => setConfirming("duplicate")}>Duplicate</Button>
-                  {state === "draft" && <Button type="button" variant="outline" disabled={saving} onClick={() => setConfirming("publish")}>Publish</Button>}
-                  {state === "published" && <Button type="button" variant="outline" className="text-destructive" disabled={saving} onClick={() => setConfirming("archive")}>Archive</Button>}
-                  {state === "archived" && <Button type="button" variant="outline" disabled={saving} onClick={() => setConfirming("restore")}>Restore</Button>}
-                </>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-              {!isEdit && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={saving || !draftsSupported}
-                  title={draftsSupported ? "Hidden from agencies until you publish it" : "Drafts need a database update that has not been applied yet"}
-                  onClick={saveAsDraft}
-                >
-                  Save as draft
-                </Button>
-              )}
-              <Button type="submit" disabled={saving}>{saving ? "Saving…" : isEdit ? "Save new version" : "Create and publish"}</Button>
-            </div>
-          </DialogFooter>
-          {!isEdit && !draftsSupported && <p className="mt-2 text-right text-xs text-muted-foreground">Save as draft needs a database update that has not been applied yet.</p>}
+          <aside className="min-w-0 space-y-4 xl:sticky xl:top-0 xl:self-start" aria-label="What changed and the agent preview">
+            {isEdit && <TmplChanges changes={changes} version={template?.version ?? 0} state={state} />}
+              <section className="rounded-lg border p-4"><div className="flex items-center gap-2"><h3 className="text-sm font-semibold">Agent preview</h3><StatusChip>Current draft</StatusChip></div><div className="mt-4 grid gap-4"><div><p className="mb-2 text-xs font-semibold text-muted-foreground">Lead form</p>{draft.form_definition.sections.map((section) => <div key={section.section_key} className="mb-3 rounded-md border p-3"><p className="font-medium">{section.label}</p><div className="mt-2 grid gap-2">{section.fields.map((formField) => { const field = draft.fields.find((item) => item.field_key === formField.field_key); return field ? previewField({ ...field, is_required: formField.is_required }, formField.show_when) : null; })}</div></div>)}</div><div><p className="mb-2 text-xs font-semibold text-muted-foreground">Pipeline board</p><div className="flex flex-wrap gap-2">{draft.stages.map((stage) => <div key={stage.stage_key} className="min-w-28 rounded-md border-t-4 bg-muted/30 p-3" style={{ borderTopColor: stage.color }}><p className="text-sm font-medium">{stage.label}</p><p className="text-xs text-muted-foreground">{TEMPLATE_STAGE_TYPE_LABELS[stage.stage_type]}</p></div>)}</div></div></div></section>
+          </aside>
         </form>
-      </DialogContent>
-    </Dialog>
+      </Sheet>
+
+      <ConfirmDialog
+        open={confirm !== null}
+        onOpenChange={(open) => { if (!open) setConfirming(null); }}
+        onConfirm={() => { if (confirming) void runConfirmed(confirming); }}
+        busy={saving}
+        title={confirm?.title ?? ""}
+        description={confirm?.body}
+        confirmLabel={confirm?.action ?? "Confirm"}
+        destructive={confirm?.tone === "warning"}
+      />
+    </>
   );
 }

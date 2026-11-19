@@ -1,0 +1,266 @@
+{
+  "base": "http://localhost:3100",
+  "at": "2026-11-18T15:22:09.422Z",
+  "budget": 1000,
+  "results": [
+    {
+      "plane": "partner",
+      "pattern": "/partner",
+      "url": "/partner",
+      "open": 4.7053000000014435,
+      "cold": 2472.6831,
+      "status": 200,
+      "finalPath": "/partner",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "partner",
+      "pattern": "/partner/accept-invite",
+      "url": "/partner/accept-invite",
+      "open": 82.22390000000087,
+      "cold": 92.29510000000118,
+      "status": 200,
+      "finalPath": "/partner/accept-invite",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "partner",
+      "pattern": "/partner/deal-flow",
+      "url": "/partner/deal-flow",
+      "open": 964.0773000000008,
+      "cold": 1203.752699999999,
+      "status": 200,
+      "finalPath": "/partner/deal-flow",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/partner/deal-flow",
+          "q": "?from=2026-11-18&to=2026-11-18",
+          "at": 339,
+          "ms": 595
+        }
+      ]
+    },
+    {
+      "plane": "partner",
+      "pattern": "/partner/login",
+      "url": "/partner/login",
+      "open": 20.08969999999863,
+      "cold": 96.1710000000021,
+      "status": 200,
+      "finalPath": "/partner/login",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "partner",
+      "pattern": "/partner/messages",
+      "url": "/partner/messages",
+      "open": 4575.982399999997,
+      "cold": 4642.851000000002,
+      "status": 200,
+      "finalPath": "/partner/messages",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/partner/chat",
+          "q": "",
+          "at": 34,
+          "ms": 2655
+        },
+        {
+          "url": "/api/partner/chat",
+          "q": "",
+          "at": 2838,
+          "ms": 1708
+        },
+        {
+          "url": "/api/partner/chat",
+          "q": "",
+          "at": 2822,
+          "ms": 14
+        }
+      ]
+    },
+    {
+      "plane": "partner",
+      "pattern": "/partner/payouts",
+      "url": "/partner/payouts",
+      "open": 472.9959000000017,
+      "cold": 1353.3855000000003,
+      "status": 200,
+      "finalPath": "/partner/payouts",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/partner/payouts",
+          "q": "",
+          "at": 61,
+          "ms": 386
+        }
+      ]
+    },
+    {
+      "plane": "partner",
+      "pattern": "/partner/pipeline",
+      "url": "/partner/pipeline",
+      "open": 1703.6072999999997,
+      "cold": 2067.889500000001,
+      "status": 200,
+      "finalPath": "/partner/pipeline",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/partner/leads/pipeline",
+          "q": "?limit=250&offset=0",
+          "at": 327,
+          "ms": 1339
+        }
+      ]
+    },
+    {
+      "plane": "partner",
+      "pattern": "/partner/pipeline/[leadId]",
+      "url": "/partner/pipeline/95e18969-2a48-4a72-b44a-f1d78a109c16",
+      "open": 1060.1489000000001,
+      "cold": 1587.3296000000046,
+      "status": 200,
+      "finalPath": "/partner/pipeline/95e18969-2a48-4a72-b44a-f1d78a109c16",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "partner",
+      "pattern": "/partner/set-password",
+      "url": "/partner/set-password",
+      "open": 82.76710000000458,
+      "cold": 85.6952999999994,
+      "status": 200,
+      "finalPath": "/partner/set-password",
+      "note": "",
+      "apis": []
+    },
+    {
+      "plane": "partner",
+      "pattern": "/partner/settings",
+      "url": "/partner/settings",
+      "open": 2258.075100000002,
+      "cold": 2743.6205000000045,
+      "status": 200,
+      "finalPath": "/partner/settings",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/partner/settings",
+          "q": "",
+          "at": 294,
+          "ms": 1941
+        }
+      ]
+    },
+    {
+      "plane": "partner",
+      "pattern": "/partner/submit-lead",
+      "url": "/partner/submit-lead",
+      "open": 3379.313200000004,
+      "cold": 4025.057200000003,
+      "status": 200,
+      "finalPath": "/partner/submit-lead",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/partner/forms/final_expense",
+          "q": "",
+          "at": 1349,
+          "ms": 1996
+        },
+        {
+          "url": "/api/partner/forms/final_expense/draft",
+          "q": "?new=1",
+          "at": 1350,
+          "ms": 1996
+        },
+        {
+          "url": "/api/partner/markets",
+          "q": "",
+          "at": 18,
+          "ms": 1326
+        },
+        {
+          "url": "/api/partner/products",
+          "q": "",
+          "at": 17,
+          "ms": 1325
+        }
+      ]
+    },
+    {
+      "plane": "partner",
+      "pattern": "/partner/submit-lead/drafts",
+      "url": "/partner/submit-lead/drafts",
+      "open": 685.4236000000019,
+      "cold": 1206.3020000000033,
+      "status": 200,
+      "finalPath": "/partner/submit-lead/drafts",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/partner/drafts",
+          "q": "?page=1",
+          "at": 38,
+          "ms": 628
+        }
+      ]
+    },
+    {
+      "plane": "partner",
+      "pattern": "/partner/team",
+      "url": "/partner/team",
+      "open": 1297.3444000000018,
+      "cold": 1771.510500000004,
+      "status": 200,
+      "finalPath": "/partner/team",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/partner/users",
+          "q": "",
+          "at": 324,
+          "ms": 947
+        }
+      ]
+    },
+    {
+      "plane": "partner",
+      "pattern": "/partner/team-review",
+      "url": "/partner/team-review",
+      "open": 2304.501400000001,
+      "cold": 2414.386799999993,
+      "status": 200,
+      "finalPath": "/partner/team-review",
+      "note": "",
+      "apis": [
+        {
+          "url": "/api/partner/leads/pipeline",
+          "q": "?limit=5000&date_from=2026-10-20&date_to=2026-11-18",
+          "at": 327,
+          "ms": 1941
+        },
+        {
+          "url": "/api/partner/leads/pipeline",
+          "q": "?limit=5000&date_from=2026-09-20&date_to=2026-10-19",
+          "at": 328,
+          "ms": 1941
+        },
+        {
+          "url": "/api/partner/users",
+          "q": "",
+          "at": 328,
+          "ms": 1260
+        }
+      ]
+    }
+  ]
+}

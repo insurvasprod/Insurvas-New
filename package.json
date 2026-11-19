@@ -13,6 +13,7 @@
     "demo:provision-accounts": "node --env-file=.env.local --env-file=.env.demo.local scripts/provision-demo-accounts.mjs",
     "reset:totp": "node --env-file=.env.local scripts/reset-admin-totp.mjs",
     "encrypt:admin-totp": "node --env-file=.env.local scripts/encrypt-admin-totp-secrets.mjs",
+    "seal:lead-values": "node --env-file=.env.local scripts/seal-lead-sensitive-values.mjs",
     "verify:tenant-isolation": "node --env-file=.env.local scripts/verify-tenant-isolation.mjs",
     "check:features": "node --experimental-strip-types --env-file=.env.local scripts/check-feature-keys.mjs",
     "agency:gate": "node scripts/agency/isolation-gate.mjs",
@@ -134,7 +135,8 @@
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.1",
-    "@supabase/supabase-js": "^2.99.0",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.119.0",
     "@whop/elements": "1.9.0",
     "@whop/elements-react": "1.9.0",
     "animejs": "4.5.0",
@@ -177,6 +179,7 @@
     "@types/three": "^0.180.0",
     "eslint": "^9",
     "eslint-config-next": "16.3.3",
+    "playwright-core": "^1.65.1",
     "tailwindcss": "^4",
     "typescript": "5.9.3"
   }

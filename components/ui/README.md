@@ -27,6 +27,7 @@ What lives here and which rule owns it:
 | Filters in a pop-over (`FilterPopover`, `ActiveFilters inline`) and a read-only row peek (`HoverPeek`) | `data-toolbar.tsx`, `hover-peek.tsx` | §6a |
 | One record's facts as a label/value table (`FactTable`); dictating into a note (`DictateButton`) | `fact-table.tsx`, `dictate-button.tsx` | §6, §5 |
 | Loading, empty and error states | `page-states.tsx`, `page-loading.tsx` | §7 |
+| Frame first, data after: one block of a page waiting on its own read, `StreamSection` (`shape` table · strip+table · strip · cards · form · rows; `StreamFallback` for a client block), and `TitleShape` as the fallback of a record page's streamed `PageHeader` title (`PageHeader` takes a node as `title`) | `stream-section.tsx` | §7 |
 | Side panel, info tip | `detail-panel.tsx`, `view-tabs.tsx`, `info-tip.tsx` | §8 |
 | Compact icon switch for dense page views | `view-tabs.tsx` (`IconViewSwitch`) | §6 |
 | The "Table · Chart" switch (`?show=table\|chart`, every other parameter kept): `ViewSwitch`, `useShow`; a server page reads it with `showOf` from `lib/reports/show.ts`. On Reports, pass `show` to `ReportsPage` | `view-switch.tsx` | §5b |
@@ -36,7 +37,6 @@ What lives here and which rule owns it:
 | Dialog, confirm, sheet, popover, menu, toast, search | `dialog.tsx`, `confirm-dialog.tsx`, `sheet.tsx`, `popover.tsx`, `dropdown-menu.tsx`, `toaster.tsx` (raise toasts with `lib/notify`), `search-command.tsx` | §11 |
 | Status chip | `status-chip.tsx` | §12 |
 | A page's own menu in the Settings look (filter box, bold groups, small items, a foot): `MenuCard`. Docs and Get set up use it | `menu-card.tsx` | §8 |
-| Steps in order on one numbered line (`NumberedSteps`), and a few figures in one strip (`FactsStrip`) | `numbered-steps.tsx` | §5b |
 | Motion: overlay enter/exit, the panel's exit, the sub-page bar's sliding line (`tab-track.tsx`), page turns (`paged.tsx`), chart tweens, page transitions (`components/portal/portal-page-transition.tsx`), links that prefetch and show pending (`nav-pending.tsx`) | the motion layer in `app/globals.css`; see `/app/motion-lab` | §18 |
 
 Do not: add a second component that does what one of these does, name a colour (use tokens), or

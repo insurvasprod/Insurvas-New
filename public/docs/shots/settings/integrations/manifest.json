@@ -1,0 +1,86 @@
+[
+  {
+    "src": "/docs/shots/settings/integrations/1.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check the Overview tab",
+    "focus": {
+      "x": 82,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/integrations/2.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the API keys tab",
+    "focus": {
+      "x": 169,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/integrations/3.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click New API key for a new app",
+    "focus": {
+      "x": 720,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/integrations/4.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click a key to see its details",
+    "focus": {
+      "x": 264,
+      "y": 28,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/integrations/5.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Webhooks tab",
+    "focus": {
+      "x": 277,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/integrations/6.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Add a webhook to send events out",
+    "focus": {
+      "x": 720,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/integrations/7.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the Developer docs tab",
+    "focus": {
+      "x": 396,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  }
+]

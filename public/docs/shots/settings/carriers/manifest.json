@@ -1,0 +1,104 @@
+[
+  {
+    "src": "/docs/shots/settings/carriers/1.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Add carrier",
+    "focus": {
+      "x": 720,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/carriers/2.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Find your carrier in the library",
+    "focus": {
+      "x": 243,
+      "y": 191,
+      "w": 954,
+      "h": 596
+    }
+  },
+  {
+    "src": "/docs/shots/settings/carriers/3.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click a carrier to open its sheet",
+    "focus": {
+      "x": 264,
+      "y": 0,
+      "w": 1176,
+      "h": 735
+    }
+  },
+  {
+    "src": "/docs/shots/settings/carriers/4.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Set the First-year commission",
+    "focus": {
+      "x": 606,
+      "y": 91,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/carriers/5.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Tick the Products you sell",
+    "focus": {
+      "x": 701,
+      "y": 176,
+      "w": 739,
+      "h": 462
+    }
+  },
+  {
+    "src": "/docs/shots/settings/carriers/6.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click Open the field map",
+    "focus": {
+      "x": 720,
+      "y": 450,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/carriers/7.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Check each carrier's map badge"
+  },
+  {
+    "src": "/docs/shots/settings/carriers/8.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Open the States tab",
+    "focus": {
+      "x": 304,
+      "y": 0,
+      "w": 720,
+      "h": 450
+    }
+  },
+  {
+    "src": "/docs/shots/settings/carriers/9.jpg",
+    "width": 1440,
+    "height": 900,
+    "alt": "Click a cell to add or end an appointment",
+    "focus": {
+      "x": 293,
+      "y": 134,
+      "w": 720,
+      "h": 450
+    }
+  }
+]

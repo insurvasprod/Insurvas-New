@@ -304,8 +304,29 @@ export type SubscriptionListRow = {
   pendingPlanLabel: string | null;
   /** The plan's monthly equivalent; null when prices could not be read. */
   monthlyCents: number | null;
+  /** What one billing cycle charges at list price (the renewal's amount); null when prices could not be read or the cycle is unpriced. */
+  cycleCents: number | null;
   countsTowardMrr: boolean;
+  /** Active, not ending, and its period ends within RENEWAL_WEEK_DAYS: the "Renews in 7 days" lens. */
+  renewsWithinWeek: boolean;
+  cancelAtPeriodEnd: boolean;
 };
+
+/** "Renews in 7 days": an active subscription that is not ending, whose period ends within this many days. */
+export const RENEWAL_WEEK_DAYS = 7;
+
+/** What one cycle charges at list price, null when that cycle has no price. */
+export function cyclePriceFor(price: PlanPriceRow | undefined, cycle: BillingCycle): number | null {
+  if (!price) return null;
+  return cycle === "monthly" ? price.price_monthly_cents : cycle === "quarterly" ? price.price_quarterly_cents : price.price_yearly_cents;
+}
+
+/** Whether the subscription renews (is charged again) within RENEWAL_WEEK_DAYS of now. */
+export function renewsWithin(row: SubscriptionListInput, now: Date, days = RENEWAL_WEEK_DAYS): boolean {
+  if (row.status !== "active" || isEndingInPeriod(row)) return false;
+  const end = time(row.current_period_end);
+  return end !== null && end >= now.getTime() && end <= now.getTime() + days * DAY_MS;
+}
 
 export function toListRow(row: SubscriptionListInput, priceBy: Map<string, PlanPriceRow> | null, now: Date): SubscriptionListRow {
   const queued = queuedChange(row, now);
@@ -335,6 +356,9 @@ export function toListRow(row: SubscriptionListInput, priceBy: Map<string, PlanP
       ? `${row.pending_plan_name ?? "Another plan"}${row.pending_plan_version === null ? "" : ` v${row.pending_plan_version}`}`
       : null,
     monthlyCents: priceBy ? monthlyEquivalentFor(priceBy.get(row.plan_id), row.billing_cycle) : null,
+    cycleCents: priceBy ? cyclePriceFor(priceBy.get(row.plan_id), row.billing_cycle) : null,
     countsTowardMrr: REVENUE_BEARING.has(row.status),
+    renewsWithinWeek: renewsWithin(row, now),
+    cancelAtPeriodEnd: row.cancel_at_period_end,
   };
 }

@@ -16,6 +16,7 @@ import { markShellEntrance } from "@/components/app/shell-entrance";
 import { SIGN_IN_LINK_MINUTES, TRUSTED_DEVICE_DAYS } from "@/lib/tenantAuth/signInConstants";
 import type { MaintenanceStatus } from "@/lib/system/constants";
 
+import { CheckBox } from "@/components/ui/check-box";
 /** The address that last signed in on this browser, so a returning agent types only the password. */
 const LAST_EMAIL_KEY = "insurvas:last-sign-in-email";
 
@@ -275,7 +276,7 @@ export function TenantAuthWorkspace({
 
   const rememberBox = (
     <label className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
-      <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="size-5 shrink-0 accent-[var(--accent-ink)]" />
+      <CheckBox checked={remember} onChange={(event) => setRemember(event.target.checked)} />
       Keep me signed in on this device
     </label>
   );
@@ -357,8 +358,8 @@ export function TenantAuthWorkspace({
 
         {rememberBox}
 
-        {maintenance?.level === "locked" && <AuthAlert title="Sign in is temporarily unavailable">{maintenance.message}</AuthAlert>}
-        {loginError && <AuthAlert>{loginError}</AuthAlert>}
+        {maintenance?.level === "locked" && <AuthAlert shake={false} title="Sign in is temporarily unavailable">{maintenance.message}</AuthAlert>}
+        {loginError && <AuthAlert shake={loginError !== notice}>{loginError}</AuthAlert>}
 
         <AuthSubmit className="mt-1" pending={loginLoading} disabled={maintenance?.level === "locked"}>
           {loginLoading ? "Signing in…" : "Sign in"}
@@ -459,10 +460,10 @@ export function TenantAuthWorkspace({
           />
         )}
         <label className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
-          <input type="checkbox" checked={trustDevice} onChange={(event) => setTrustDevice(event.target.checked)} className="size-5 shrink-0 accent-[var(--accent-ink)]" />
+          <CheckBox checked={trustDevice} onChange={(event) => setTrustDevice(event.target.checked)} />
           Trust this device for {TRUSTED_DEVICE_DAYS} days
         </label>
-        {loginError && <AuthAlert>{loginError}</AuthAlert>}
+        {loginError && <AuthAlert shake={loginError !== notice}>{loginError}</AuthAlert>}
         <AuthSubmit className="mt-1" pending={loginLoading} disabled={!twoFactorCode.trim()}>
           {loginLoading ? "Checking…" : "Verify and sign in"}
         </AuthSubmit>
@@ -553,7 +554,7 @@ export function TenantAuthWorkspace({
       
       <div className="flex flex-col gap-4">
         {rememberBox}
-        {loginError && <AuthAlert>{loginError}</AuthAlert>}
+        {loginError && <AuthAlert shake={loginError !== notice}>{loginError}</AuthAlert>}
         <AuthSubmit type="button" autoFocus pending={loginLoading} disabled={maintenance?.level === "locked"} onClick={() => void submitSignIn({ link: linkToken })}>
           {loginLoading ? "Signing in…" : "Sign in"}
         </AuthSubmit>

@@ -62,5 +62,5 @@ export function refuseCrossSite(input: OriginCheckInput, options: { paths?: (pat
 
 /** The configured hosts the app and admin planes are served from. */
 export function configuredHosts(env: Record<string, string | undefined>): string[] {
-  return [env.NEXT_PUBLIC_APP_URL, env.NEXT_PUBLIC_AGENT_APP_URL, env.NEXT_PUBLIC_PARTNER_APP_URL, env.APP_URL, env.ADMIN_HOST].filter((value): value is string => Boolean(value));
+  return [env.NEXT_PUBLIC_APP_URL, env.NEXT_PUBLIC_AGENT_APP_URL, env.NEXT_PUBLIC_PARTNER_APP_URL, env.APP_URL, env.APP_HOST, env.PARTNER_HOST, env.ADMIN_HOST].filter((value): value is string => Boolean(value));
 }

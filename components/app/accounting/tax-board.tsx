@@ -148,8 +148,8 @@ export function W9Drop({ profileId, name, file, readOnly }: { profileId: string 
         </div>
       ) : (
         <Why block reason={readOnly ? READ_ONLY_REASON : null}>
-          <label htmlFor="tax-w9-file" aria-disabled={off || undefined}
-            className={`${zone} w-full bg-[var(--surface-alt)] text-[var(--body)] ${off ? "cursor-not-allowed border-border opacity-60" : "cursor-pointer border-border hover:border-[var(--primary)]"} ${over ? "border-[var(--primary)]" : ""}`}
+          <label htmlFor="tax-w9-file" aria-disabled={off || undefined} data-drag-over={over ? "" : undefined}
+            className={`m-dropzone ${zone} w-full bg-[var(--surface-alt)] text-[var(--body)] ${off ? "cursor-not-allowed border-border opacity-60" : "cursor-pointer border-border hover:border-[var(--primary)]"} ${over ? "border-[var(--primary)]" : ""}`}
             onDragOver={(e) => { e.preventDefault(); if (!off) setOver(true); }}
             onDragLeave={() => setOver(false)}
             onDrop={(e) => { e.preventDefault(); setOver(false); if (!off) void upload(e.dataTransfer.files?.[0]); }}>

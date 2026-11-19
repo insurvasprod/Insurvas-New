@@ -9,8 +9,8 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { BulkBar, RowCheckbox, SelectAllCheckbox, useRowSelection } from "@/components/ui/bulk-bar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LeaveGuard } from "@/components/ui/leave-guard";
-import { PageLoading } from "@/components/ui/page-loading";
-import { EmptyState } from "@/components/ui/page-states";
+import { EmptyState, SectionLoading } from "@/components/ui/page-states";
+import { load as loadResource, peek, readResource } from "@/lib/client/resource-cache";
 import { Pager } from "@/components/ui/pager";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -110,17 +110,19 @@ export function LeadMissingData({ tabs, inFrame, readOnly, initialFilter = null,
     if (ask.filter !== filter) { setFilter(ask.filter); setPage(0); setOnlyStaged(false); }
   }
 
-  const load = useCallback(async () => {
+  // Through the app's cache (lib/client/resource-cache.ts): a page already read draws at once while it is asked again;
+  // `fresh` after a save, so it is never the old answer.
+  const load = useCallback(async (fresh = true) => {
     const mine = ++ticket.current;
     setLoading(true);
     try {
       const params = new URLSearchParams({ missing: filter, page: String(page), pageSize: String(PAGE_SIZE) });
       if (campaign !== "all") params.set("campaign", campaign);
-      const response = await fetch(`/api/app/contacts/missing-data?${params}`, { cache: "no-store" });
-      const body = await readJson(response);
-      if (!response.ok || !body) throw new Error(typeof body?.error === "string" ? body.error : "Could not load leads with missing data");
+      const key = `/api/app/contacts/missing-data?${params}`;
+      const kept = fresh ? undefined : peek<MissingDataPage>(key)?.data;
+      if (kept) setData(kept);
+      const next = await (fresh ? loadResource<MissingDataPage>(key) : readResource<MissingDataPage>(key));
       if (mine !== ticket.current) return;
-      const next = body as unknown as MissingDataPage;
       setSeen((current) => ({ ...current, ...Object.fromEntries(next.rows.map((row) => [row.id, row])) }));
       setData(next);
       setError(null);
@@ -130,7 +132,7 @@ export function LeadMissingData({ tabs, inFrame, readOnly, initialFilter = null,
     } finally { if (mine === ticket.current) setLoading(false); }
   }, [filter, campaign, page, onTotal]);
 
-  useEffect(() => { void load(); }, [load]); // eslint-disable-line react-hooks/set-state-in-effect
+  useEffect(() => { void load(false); }, [load]); // eslint-disable-line react-hooks/set-state-in-effect
 
   const changeCount = countMissingEdits(edits);
   const stagedIds = Object.keys(edits);
@@ -297,7 +299,7 @@ export function LeadMissingData({ tabs, inFrame, readOnly, initialFilter = null,
       {error && !data ? (
         <Callout tone="error" title={<span className="flex flex-wrap items-center gap-3">{error}<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button></span>} />
       ) : !data ? (
-        <PageLoading />
+        <TableCard><SectionLoading rows={8} columns={5} /></TableCard>
       ) : (
         <TableCard
           className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1 [&>.overflow-x-auto]:flex-1 lg:[&>.overflow-x-auto]:min-h-0 lg:[&>.overflow-x-auto]:overflow-y-auto"
@@ -315,6 +317,7 @@ export function LeadMissingData({ tabs, inFrame, readOnly, initialFilter = null,
             count={selection.count}
             noun={["lead", "leads"]}
             onClear={selection.clear}
+            selectAll={<SelectAllCheckbox selection={selection} />}
             actions={<Button type="button" variant="outline" disabled={readOnly || !editable.state} onClick={() => { setBulkError(null); setStateOpen(true); }}><MapPin aria-hidden="true" />Set state…</Button>}
           />
           <div aria-busy={loading}>

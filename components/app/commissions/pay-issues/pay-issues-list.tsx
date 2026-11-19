@@ -9,6 +9,8 @@ import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { ToggleChip } from "@/components/ui/toggle-chip";
+import { useArrivals } from "@/components/ui/use-arrivals";
+import { leavingProps, useDepartures } from "@/components/ui/use-row-exit";
 import { fileDay } from "@/lib/ingestion/constants";
 import { DISCREPANCY_LABELS, DISCREPANCY_TYPES } from "@/lib/ingestion/discrepancyEngine";
 import { daysSince, groupPayIssues, payIssueCarrierKey, payIssueHref, payIssueMoney as money, type PayIssue } from "@/lib/commissions/payIssueGroups";
@@ -16,6 +18,7 @@ import { daysSince, groupPayIssues, payIssueCarrierKey, payIssueHref, payIssueMo
 export type UncheckedCarrier = { carrierId: string; carrierName: string; inForce: number; missing: Array<"trigger" | "lag"> };
 
 const RATE_CARD = "/app/book-setup";
+const issueKey = (issue: Pick<PayIssue, "source" | "id">) => `${issue.source}:${issue.id}`;
 
 /**
  * The one chip on a pay issue's row (owner 2026-11-11: one line per row, colour only in a chip). An open issue's chip
@@ -56,12 +59,19 @@ export function PayIssuesList({ issues, tab, unchecked, summary, initialSource, 
   const [source, setSource] = useState(initialSource);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
+  // Tier 1 motion (2026-11-17): rows hold no decisions, so an issue decided on its page, put on a letter from its
+  // group or cleared by Check now leaves as the refresh lands (it stays in place, plays out, then goes); one a refresh
+  // brings in arrives tinted. Another tab is another list: nothing plays.
+  const left = useDepartures(issues, issueKey, tab);
+  const isNew = useArrivals(issues.map(issueKey), tab);
+  const liveGroups = useMemo(() => groupPayIssues(issues).map((group) => group.key), [issues]);
+  const isNewGroup = useArrivals(liveGroups, tab);
   const carriers = useMemo(() => [...new Map(issues.map((i) => [payIssueCarrierKey(i), i.carrierName])).entries()].sort((a, b) => a[1].localeCompare(b[1])), [issues]);
   const handCount = useMemo(() => issues.filter((i) => i.source === "hand").length, [issues]);
   const needle = query.trim().toLowerCase();
-  const visible = useMemo(() => issues.filter((i) =>
+  const visible = useMemo(() => left.rows.filter((i) =>
     (!source || i.source === source) && (!type || i.type === type) && (!carrier || payIssueCarrierKey(i) === carrier) &&
-    (!needle || `${i.policyNumber ?? ""} ${i.clientName ?? ""} ${i.carrierName}`.toLowerCase().includes(needle))), [issues, source, type, carrier, needle]);
+    (!needle || `${i.policyNumber ?? ""} ${i.clientName ?? ""} ${i.carrierName}`.toLowerCase().includes(needle))), [left.rows, source, type, carrier, needle]);
   const groups = useMemo(() => groupPayIssues(visible), [visible]);
   const flat = useMemo(() => [...visible].sort((a, b) => b.owedToYouCents + b.owedToCarrierCents - (a.owedToYouCents + a.owedToCarrierCents) || a.foundAt.localeCompare(b.foundAt)), [visible]);
   const filterCount = (type ? 1 : 0) + (carrier ? 1 : 0) + (source ? 1 : 0);
@@ -164,7 +174,7 @@ export function PayIssuesList({ issues, tab, unchecked, summary, initialSource, 
                         : { text: "To decide", tone: "warning" };
                 const both = tab !== "closed" && group.owedToYouCents > 0 && group.owedToCarrierCents > 0;
                 return (
-                  <tr key={group.key} className="cursor-pointer" onClick={() => router.push(href)}>
+                  <tr key={group.key} {...(liveGroups.includes(group.key) ? {} : leavingProps(0))} data-row-new={isNewGroup(group.key) ? "" : undefined} className="cursor-pointer" onClick={() => router.push(href)}>
                     <td className="whitespace-nowrap font-medium text-foreground"><Link href={href} className="hover:underline" onClick={(e) => e.stopPropagation()}>{group.carrierName}</Link></td>
                     <td className="whitespace-nowrap">{DISCREPANCY_LABELS[group.type]?.label ?? group.type}</td>
                     <td className="text-right tabular-nums">{group.count.toLocaleString("en-US")}</td>
@@ -201,7 +211,7 @@ export function PayIssuesList({ issues, tab, unchecked, summary, initialSource, 
               const href = payIssueHref(issue);
               const chip = payIssueState(issue);
               return (
-                <tr key={`${issue.source}:${issue.id}`} className="cursor-pointer" onClick={() => router.push(href)}>
+                <tr key={issueKey(issue)} {...left.rowProps(issueKey(issue))} data-row-new={isNew(issueKey(issue)) ? "" : undefined} className="cursor-pointer" onClick={() => router.push(href)}>
                   <td className="whitespace-nowrap font-medium tabular-nums text-foreground"><Link href={href} className="hover:underline" onClick={(e) => e.stopPropagation()}>{issue.policyNumber ?? "Whole account"}</Link></td>
                   <td className="whitespace-nowrap">{issue.clientName ?? <span className="text-muted-foreground">—</span>}</td>
                   <td className="whitespace-nowrap">{issue.carrierName}</td>

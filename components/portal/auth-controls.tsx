@@ -70,18 +70,25 @@ const ALERT_TONE = {
  * The one message box on auth screens: what went wrong, what changed, or what to do next.
  * Errors are announced (role="alert"); info and success are polite status messages.
  */
-export function AuthAlert({ tone = "error", title, children, className, id }: {
+/**
+ * The line under a sign-in or sign-up form. It rises in (`m-alert-in`, Wave B 2026-11-18); an error is a refusal, a
+ * wrong password or code, so it then shakes once (`data-refused`). The forms clear their error before each try, so
+ * every refused try rises and shakes again. `shake={false}` for a notice the page opens with.
+ */
+export function AuthAlert({ tone = "error", title, children, className, id, shake = true }: {
   tone?: keyof typeof ALERT_TONE;
   title?: ReactNode;
   children?: ReactNode;
   className?: string;
   id?: string;
+  shake?: boolean;
 }) {
   return (
     <div
       id={id}
       role={tone === "error" ? "alert" : "status"}
-      className={cn("grid gap-0.5 rounded-md border px-3.5 py-3 text-sm leading-[1.45] tracking-[-0.01em]", ALERT_TONE[tone], className)}
+      data-refused={tone === "error" && shake ? "" : undefined}
+      className={cn("m-alert-in grid gap-0.5 rounded-md border px-3.5 py-3 text-sm leading-[1.45] tracking-[-0.01em]", ALERT_TONE[tone], className)}
     >
       {title && <strong className="font-semibold">{title}</strong>}
       {children && <span>{children}</span>}

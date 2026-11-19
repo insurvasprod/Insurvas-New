@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import type { Database } from "@/lib/supabase/database.types";
 import { csvCell } from "@/lib/csv/cell";
 import type { PartnerLeadDetail, PartnerLeadFacets, PartnerLeadFilters, PartnerLeadRow, PartnerPipelineChoice, PartnerPipelineStage } from "@/lib/partnerLeads/types";
 import { maskSensitiveValues } from "@/lib/partnerLeads/mask";
@@ -8,7 +9,8 @@ import { CONVERTED_WINDOW_MS, HELD_STATUSES, NOBODY_CLAIMED_LABEL, SALE_DISPOSIT
 import { countersFromLanes, startOfTodayIn, submittedSinceFromBuckets } from "./counters";
 import { partnerBoardStages, type BoardCount, type BoardStage } from "./board";
 import { partnerLeadLanguage } from "./language";
-import { canSeeLead, effectiveCloser, type PartnerLeadAccess } from "./scope";
+import { ownPipelineChoices } from "./pipelineChoices";
+import { canSeeLead, effectiveCloser, includeLinkReferrals, type PartnerLeadAccess } from "./scope";
 import { getQueueSlaSettings } from "@/lib/queueSla/service";
 import { DEFAULT_AGE_THRESHOLDS, type AgeThresholds } from "./view";
 import type { PartnerTerm } from "@/lib/partners/payout";
@@ -388,6 +390,32 @@ async function partnerOwnPipelineId(db: ReturnType<typeof getSupabaseServiceClie
   return ((pipelines.data ?? []) as Array<{ id: string; partner_type: string | null }>).find((row) => type && row.partner_type === type)?.id ?? null;
 }
 
+/** A minute is fresh enough for "which pipelines hold this partner's leads"; the home polls the pipeline read. */
+const CHOICES_CACHE_MS = 60_000;
+const choicesCache = new Map<string, { at: number; ids: Set<string> }>();
+
+/**
+ * The pipeline picker's choices, narrowed to the partner's own (pipelineChoices.ts): its type's
+ * default pipeline and every pipeline holding at least one of its leads. One `limit 1` probe per agency
+ * pipeline, tenant- and partner-scoped, cached for a minute per partner. A probe that fails keeps the
+ * pipeline out: the picker hides rather than leaks a name.
+ */
+async function partnerPipelineChoices(db: ReturnType<typeof getSupabaseServiceClient>, tenantId: string, partnerId: string, choices: PartnerPipelineChoice[], ownPipelineId: string | null): Promise<PartnerPipelineChoice[]> {
+  const key = `${tenantId}:${partnerId}`;
+  const hit = choicesCache.get(key);
+  const now = Date.now();
+  let holding = hit && now - hit.at < CHOICES_CACHE_MS ? hit.ids : null;
+  if (!holding) {
+    const probes = await Promise.all(choices.filter((choice) => choice.id !== ownPipelineId).map(async (choice) => {
+      const { data, error } = await db.from("lead_queue").select("id").eq("tenant_id", tenantId).eq("partner_id", partnerId).eq("pipeline_id", choice.id).limit(1);
+      return !error && (data ?? []).length > 0 ? choice.id : null;
+    }));
+    holding = new Set(probes.filter((id): id is string => id !== null));
+    choicesCache.set(key, { at: now, ids: holding });
+  }
+  return ownPipelineChoices(choices, ownPipelineId, holding);
+}
+
 /**
  * The board's columns (board.ts): the own pipeline's stages, then any other pipeline holding the
  * partner's leads. Pipelines are read tenant-scoped and a stage is kept only under one of them;
@@ -404,6 +432,18 @@ async function partnerPipelineStages(db: ReturnType<typeof getSupabaseServiceCli
   return partnerBoardStages({ defaultPipelineId: ownPipelineId, selectedPipelineId, pipelines: pipelines.data ?? [], stages: (stages.data ?? []) as BoardStage[], counts });
 }
 
+/**
+ * Calls the read model with the link-referral flag. Until 20261119100000 is applied the function has
+ * no such argument (PostgREST answers PGRST202, no matching function), so the call is repeated
+ * without it: the page keeps working and shows submitted leads only, as before.
+ */
+async function pipelinePage(db: ReturnType<typeof getSupabaseServiceClient>, withLinks: boolean, args: Database["public"]["Functions"]["partner_lead_pipeline_page"]["Args"]) {
+  if (!withLinks) return db.rpc("partner_lead_pipeline_page", args);
+  const first = await db.rpc("partner_lead_pipeline_page", { ...args, p_include_link_referrals: true });
+  if (first.error?.code === "PGRST202") return db.rpc("partner_lead_pipeline_page", args);
+  return first;
+}
+
 export async function listPartnerLeads(tenantId: string, partnerId: string, filters: PartnerLeadFilters, timezone: string, pagination: { limit?: number; offset?: number } = {}, access?: PartnerLeadAccess & { visibleSubmitterIds?: string[] }) {
   validateFilter({ ...filters });
   const limit = pagination.limit ?? 250;
@@ -418,7 +458,7 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
   // narrow within it, never widen it. The DB fails closed when a caller omits the list.
   const effectiveCloserId = effectiveCloser(access, filters);
   const [{ data, error }, ownPipelineId] = await Promise.all([
-    db.rpc("partner_lead_pipeline_page", {
+    pipelinePage(db, includeLinkReferrals(access), {
       p_tenant_id: tenantId,
       p_partner_id: partnerId,
       p_date_from: filters.dateFrom ?? null,
@@ -441,11 +481,15 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
   if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Could not load partner pipeline: invalid read model response");
 
   const payload = data as Record<string, unknown>;
-  const pipelines: PartnerPipelineChoice[] = (Array.isArray(payload.pipelines) ? payload.pipelines : []).flatMap((value): PartnerPipelineChoice[] => {
+  const agencyPipelines: PartnerPipelineChoice[] = (Array.isArray(payload.pipelines) ? payload.pipelines : []).flatMap((value): PartnerPipelineChoice[] => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return [];
     const option = value as Record<string, unknown>;
     return typeof option.id === "string" && typeof option.name === "string" && UUID.test(option.id) ? [{ id: option.id, name: option.name }] : [];
   });
+  // Roles board P1–P3: the read model lists every live pipeline in the agency, which named the other
+  // partner types' pipelines to this partner. The picker is the partner's own: its type's default and
+  // any pipeline that holds its leads.
+  const pipelines = await partnerPipelineChoices(db, tenantId, partnerId, agencyPipelines, ownPipelineId);
   if (filters.pipelineId && !pipelines.some((pipeline) => pipeline.id === filters.pipelineId)) throw new Error("Choose a pipeline available to your account");
   const rowValues = Array.isArray(payload.rows) ? payload.rows : [];
   // 20260929140000 adds position 15, "the SLA ladder has told the partner", so the page needs no

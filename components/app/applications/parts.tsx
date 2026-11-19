@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 import { Eye } from "lucide-react";
 import { notify } from "@/lib/notify";
 
+import { Callout } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
@@ -99,11 +100,7 @@ export function Panel({ title, action, children, className, id }: { title?: Reac
   );
 }
 
-/** The one-line notice every design-phase page shows. Actionable-alert styling, not an info card. */
+/** The notice every design-phase page raises. It goes to the bell (UI-CONSISTENCY §3), never onto the page. */
 export function SampleDataNotice() {
-  return (
-    <p role="status" className="rounded-md border border-[var(--border)] border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-3 py-2 text-sm text-[var(--info-ink)]">
-      Sample data — this screen is a design preview and nothing on it is saved.
-    </p>
-  );
+  return <Callout tone="info" title="Sample data">This screen is a design preview and nothing on it is saved.</Callout>;
 }

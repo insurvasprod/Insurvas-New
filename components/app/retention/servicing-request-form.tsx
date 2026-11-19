@@ -9,7 +9,7 @@ import { LeaveGuard } from "@/components/ui/leave-guard";
 
 import { Button } from "@/components/ui/button";
 import { cardInset, cardSurface } from "@/components/ui/card";
-import { checkboxControl, control, Field } from "@/components/ui/field";
+import { control, Field } from "@/components/ui/field";
 import { SectionLoading } from "@/components/ui/page-states";
 import { CONTACT_OUTCOME_LABELS, CONTACT_OUTCOMES, PAYMENT_METHODS, type ContactOutcome, type PaymentMethod } from "@/lib/retention/constants";
 import { CARRIER_METHOD_LABELS, CARRIER_METHODS, REQUEST_LABELS, type CarrierMethod, type Origin, type RequestType } from "@/lib/retention/servicing";
@@ -17,6 +17,7 @@ import type { Prefill } from "@/lib/retention/servicingStore";
 import { personName } from "@/lib/format/personName";
 import { notify } from "@/lib/notify";
 
+import { CheckBox } from "@/components/ui/check-box";
 const METHOD_WORDS: Record<PaymentMethod, string> = { bank_draft: "Bank draft", direct_express: "Direct Express card", card: "Debit or credit card", direct_bill: "Mailed bill" };
 const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th"}`;
 const DAYS = Array.from({ length: 28 }, (_, i) => i + 1);
@@ -225,7 +226,7 @@ export function ServicingRequestForm({ carrierId, policyNumber, type, origin, fr
 
       {!slot && (
         <label className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <input type="checkbox" className={checkboxControl} checked={sendNow} onChange={(e) => setSendNow(e.target.checked)} />
+          <CheckBox checked={sendNow} onChange={(e) => setSendNow(e.target.checked)} />
           I have sent it to the carrier
         </label>
       )}

@@ -12,6 +12,7 @@ import { legalDay, type LegalDraft } from "@/lib/legal/adminTypes";
 import { type EditorState, type Lookup, plural } from "./model";
 import { LegalText, UtcTime } from "./versions";
 
+import { CheckBox } from "@/components/ui/check-box";
 export function LookupCard({ doc, lookup }: { doc: LegalDocType; lookup: Lookup | null }) {
   const router = useRouter();
   const [email, setEmail] = useState(lookup?.email ?? "");
@@ -265,12 +266,10 @@ export function DraftSummaryCard({
       </div>
 
       <label htmlFor="legal-draft-material" className="mt-4 flex cursor-pointer items-start gap-3 rounded-[8px] border border-[var(--border)] p-3">
-        <input
+        <CheckBox
           id="legal-draft-material"
-          type="checkbox"
           checked={editor.requiresReacceptance}
-          onChange={(event) => onEdit({ requiresReacceptance: event.target.checked })}
-          className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]"
+          onChange={(event) => onEdit({ requiresReacceptance: event.target.checked })} className="mt-0.5"
         />
         <span className="text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
           <span className="font-semibold text-[var(--ink)]">This is a material change.</span> Every user is blocked from the product until

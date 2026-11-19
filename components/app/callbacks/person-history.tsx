@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CalendarClock, MessageSquare, Phone, Dot } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useArrivals } from "@/components/ui/use-arrivals";
 import type { CallbackView } from "@/lib/callbacks/service";
 import { longTime } from "./time";
 
@@ -92,17 +93,21 @@ export function PersonHistory({ callback, yourZone }: { callback: CallbackView; 
   }, [leadId, demo]);
 
   const feed = demo ? feedFrom({}, callback) : state.leadId === leadId ? state.feed : null;
+  // An entry new since the last read (a callback just booked or moved, a note) wears the soft new-row tint once
+  // (Wave C motion, 2026-11-18). Another person, or the first answer of the read, is a new baseline: nothing lights up.
+  const isNew = useArrivals((feed ?? []).map((item) => item.id), `${leadId}|${feed ? "read" : "loading"}`);
   if (!feed) return <p className="m-0 text-sm text-muted-foreground" role="status">Loading their history…</p>;
   const shown = all ? feed : feed.slice(0, SHOWN);
   return (
     <div className="flex flex-col gap-2">
       {state.error && state.leadId === leadId && <p className="m-0 text-xs text-muted-foreground">Showing the callback&rsquo;s own history only: {state.error}</p>}
       {feed.length === 0 ? <p className="m-0 text-sm text-muted-foreground">Nothing recorded with them yet.</p> : (
-        <ol className="m-0 flex list-none flex-col p-0">
+        // The entries settle in one after another, as the day plan's do (m-seq).
+        <ol className="m-seq m-0 flex list-none flex-col p-0">
           {shown.map((item) => {
             const Icon = ICON[item.kind];
             return (
-              <li key={item.id} className="flex gap-3 border-t border-border py-2.5 first:border-t-0">
+              <li key={item.id} data-row-new={isNew(item.id) ? "" : undefined} className="flex gap-3 border-t border-border py-2.5 first:border-t-0">
                 <span className={cn("grid size-7 shrink-0 place-items-center rounded-full", TINT[item.kind])}><Icon className="size-3.5" aria-hidden="true" /></span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline justify-between gap-2">

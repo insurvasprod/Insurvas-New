@@ -37,6 +37,11 @@ const refOf = (r: { id: string; invoiceNumber?: string | null }) => r.invoiceNum
 const pdfHref = (id: string) => `/api/partner/payouts/${id}/invoice`;
 const money = (c: number) => formatCentsAsCurrency(c);
 
+/** What a statement's lines count, in the partner type's words. A publisher's are transfers. */
+type PartnerNoun = { one: string; many: string };
+const TRANSFERS: PartnerNoun = { one: "transfer", many: "transfers" };
+const capital = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
+
 /**
  * "1 Sep – 30 Sep 2026". The period came through as the two raw day strings the database stores;
  * a partner's statement is a month, and should read like one (lib/format/dates, §14).
@@ -47,7 +52,7 @@ function StatementMeta({ label, value, mono = false }: { label: string; value: s
   return <div className="min-w-0 self-end"><p className="m-0 text-xs font-medium text-muted-foreground">{label}</p><p className={`m-0 mt-1 truncate text-sm font-medium text-foreground ${mono ? "font-mono" : ""}`} title={value}>{value}</p></div>;
 }
 
-function Statement({ id, onClose, partnerName }: { id: string; onClose: () => void; partnerName?: string }) {
+function Statement({ id, onClose, partnerName, noun = TRANSFERS }: { id: string; onClose: () => void; partnerName?: string; noun?: PartnerNoun }) {
   const [s, setS] = useState<PartnerStatement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dispute, setDispute] = useState<{ itemId: string | null; reason: string; amount: string } | null>(null);
@@ -88,13 +93,13 @@ function Statement({ id, onClose, partnerName }: { id: string; onClose: () => vo
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <DialogTitle>{s ? `${s.invoiceNumber ? `Invoice ${s.invoiceNumber}` : "Commission statement"} · ${period(s.periodStart, s.periodEnd)}` : "Commission statement"}</DialogTitle>
-              <DialogDescription className="mt-1">Payout summary and itemized transfers for this statement period.</DialogDescription>
+              <DialogDescription className="mt-1">{`Payout summary and itemized ${noun.many} for this statement period.`}</DialogDescription>
             </div>
             {s ? <StatusChip tone={s.status === "paid" ? "good" : "info"}>{s.status === "paid" ? `Paid${s.paidOn ? ` · ${dayMonthYear(s.paidOn)}` : ""}` : "Published"}</StatusChip> : null}
           </div>
           {s ? <div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3 rounded-lg border border-border bg-[var(--surface-alt)] px-4 py-3 sm:grid-cols-4">
             <div className="col-span-2 sm:col-span-1"><p className="m-0 text-xs font-medium text-muted-foreground">Net payable</p><p className="m-0 mt-1 text-2xl font-semibold tabular-nums text-foreground">{money(s.totals.netCents)}</p></div>
-            <StatementMeta label="Transfers" value={`${s.items.length} ${s.items.length === 1 ? "item" : "items"}`} />
+            <StatementMeta label={capital(noun.many)} value={`${s.items.length} ${s.items.length === 1 ? "item" : "items"}`} />
             <StatementMeta label="Statement period" value={period(s.periodStart, s.periodEnd)} />
             <StatementMeta label="Published" value={s.publishedAt ? dayMonthYear(s.publishedAt) : "—"} />
             <StatementMeta label={s.invoiceNumber ? "Invoice" : "Statement ref"} value={s.invoiceNumber ?? s.id.slice(0, 8).toUpperCase()} mono />
@@ -117,7 +122,7 @@ function Statement({ id, onClose, partnerName }: { id: string; onClose: () => vo
               </section>
               <div className="flex min-w-0 flex-col gap-6">
                 <section aria-labelledby="statement-summary-heading">
-                  <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2"><h3 id="statement-summary-heading" className="m-0 text-base font-semibold">Payout breakdown</h3><span className="text-sm text-muted-foreground">{s.items.length} {s.items.length === 1 ? "transfer" : "transfers"}</span></div>
+                  <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2"><h3 id="statement-summary-heading" className="m-0 text-base font-semibold">Payout breakdown</h3><span className="text-sm text-muted-foreground">{s.items.length} {s.items.length === 1 ? noun.one : noun.many}</span></div>
                   <TableCard>
                     <Table>
                       <TableHeader><TableRow><TableHead>Item</TableHead><TableHead className="w-20 text-right">Count</TableHead><TableHead className="w-28 text-right">Rate</TableHead><TableHead className="w-32 text-right">Amount</TableHead></TableRow></TableHeader>
@@ -131,7 +136,7 @@ function Statement({ id, onClose, partnerName }: { id: string; onClose: () => vo
                       </TableBody>
                     </Table>
                   </TableCard>
-                  {s.rejectedCount ? <p className="mt-2 text-xs text-muted-foreground">Transfers rejected at the agency&apos;s compliance check are not billable. The count identifies records you may want to review.</p> : null}
+                  {s.rejectedCount ? <p className="mt-2 text-xs text-muted-foreground">{capital(noun.many)} rejected at the agency&apos;s compliance check are not billable. The count identifies records you may want to review.</p> : null}
                 </section>
                 {s.revenueShare?.policies?.length ? (
                   <section aria-labelledby="statement-shares-heading">
@@ -157,14 +162,14 @@ function Statement({ id, onClose, partnerName }: { id: string; onClose: () => vo
                 {s.footer ? <p className="m-0 border-t border-border pt-4 text-xs text-muted-foreground">{s.footer}</p> : null}
               </div>
               <section aria-labelledby="statement-transfers-heading">
-                <div className="mb-3 flex items-baseline justify-between gap-3"><h3 id="statement-transfers-heading" className="m-0 text-sm font-semibold">Transfers in this statement</h3><span className="text-xs text-muted-foreground">{s.items.length} {s.items.length === 1 ? "item" : "items"}</span></div>
+                <div className="mb-3 flex items-baseline justify-between gap-3"><h3 id="statement-transfers-heading" className="m-0 text-sm font-semibold">{capital(noun.many)} in this statement</h3><span className="text-xs text-muted-foreground">{s.items.length} {s.items.length === 1 ? "item" : "items"}</span></div>
                 <TableCard>
-                  <Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Transfer</TableHead><TableHead className="w-32 text-right">Amount</TableHead><TableHead className="w-24 text-right"><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader>
-                    <TableBody>{s.items.length ? s.items.map((i) => <TableRow key={i.id}><TableCell className="whitespace-nowrap text-muted-foreground">{dayMonth(i.occurredOn)}</TableCell><TableCell className="font-medium">{i.label}{i.reference ? <span className="block text-xs font-normal text-muted-foreground">Reference {i.reference}</span> : null}{i.disputed ? <span className="block text-xs font-medium text-[var(--warning-ink)]">Dispute submitted</span> : null}</TableCell><TableCell className="text-right tabular-nums">{money(i.amountCents)}</TableCell><TableCell className="text-right">{!i.disputed && !dispute ? <Button size="sm" variant="ghost" onClick={() => setDispute({ itemId: i.id, reason: "", amount: "" })}>Dispute</Button> : null}</TableCell></TableRow>) : <TableRow><TableCell colSpan={4} className="h-24 text-center text-sm text-muted-foreground">No transfers in this statement.</TableCell></TableRow>}</TableBody>
+                  <Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>{capital(noun.one)}</TableHead><TableHead className="w-32 text-right">Amount</TableHead><TableHead className="w-24 text-right"><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader>
+                    <TableBody>{s.items.length ? s.items.map((i) => <TableRow key={i.id}><TableCell className="whitespace-nowrap text-muted-foreground">{dayMonth(i.occurredOn)}</TableCell><TableCell className="font-medium">{i.label}{i.reference ? <span className="block text-xs font-normal text-muted-foreground">Reference {i.reference}</span> : null}{i.disputed ? <span className="block text-xs font-medium text-[var(--warning-ink)]">Dispute submitted</span> : null}</TableCell><TableCell className="text-right tabular-nums">{money(i.amountCents)}</TableCell><TableCell className="text-right">{!i.disputed && !dispute ? <Button size="sm" variant="ghost" onClick={() => setDispute({ itemId: i.id, reason: "", amount: "" })}>Dispute</Button> : null}</TableCell></TableRow>) : <TableRow><TableCell colSpan={4} className="h-24 text-center text-sm text-muted-foreground">No {noun.many} in this statement.</TableCell></TableRow>}</TableBody>
                   </Table>
                 </TableCard>
               </section>
-              {dispute ? <section className="rounded-lg border border-border p-4" aria-labelledby="statement-dispute-form-heading"><h3 id="statement-dispute-form-heading" className="mb-1 text-sm font-semibold">Tell the agency what needs review</h3><p className="mb-3 text-xs text-muted-foreground">{dispute.itemId ? "This dispute is linked to the selected transfer." : "Your message will be attached to this statement."}</p><label className="flex flex-col gap-1 text-sm">What is wrong?<input className={toolbarControl} value={dispute.reason} onChange={(e) => setDispute({ ...dispute, reason: e.target.value })} autoFocus /></label><label className="mt-3 flex flex-col gap-1 text-sm">Amount you believe is owed<input className={toolbarControl} inputMode="decimal" placeholder="0.00" value={dispute.amount} onChange={(e) => setDispute({ ...dispute, amount: e.target.value })} /><span className="text-xs text-muted-foreground">Enter dollars and cents. Leave blank if you are not disputing an amount.</span></label></section> : null}
+              {dispute ? <section className="rounded-lg border border-border p-4" aria-labelledby="statement-dispute-form-heading"><h3 id="statement-dispute-form-heading" className="mb-1 text-sm font-semibold">Tell the agency what needs review</h3><p className="mb-3 text-xs text-muted-foreground">{dispute.itemId ? `This dispute is linked to the selected ${noun.one}.` : "Your message will be attached to this statement."}</p><label className="flex flex-col gap-1 text-sm">What is wrong?<input className={toolbarControl} value={dispute.reason} onChange={(e) => setDispute({ ...dispute, reason: e.target.value })} autoFocus /></label><label className="mt-3 flex flex-col gap-1 text-sm">Amount you believe is owed<input className={toolbarControl} inputMode="decimal" placeholder="0.00" value={dispute.amount} onChange={(e) => setDispute({ ...dispute, amount: e.target.value })} /><span className="text-xs text-muted-foreground">Enter dollars and cents. Leave blank if you are not disputing an amount.</span></label></section> : null}
             </div>
           )}
         </div>
@@ -186,14 +191,16 @@ function Statement({ id, onClose, partnerName }: { id: string; onClose: () => vo
  */
 type ClientRow = { dealId: string; clientName: string; transferredOn: string | null; submittedOn: string | null; issuedOn: string | null; policyNumber: string | null; carrier: string | null; chargedBackOn: string | null; payableCents: number; unpaidCents: number; invoicedCents: number; paidCents: number; openFrom: string | null; expectedOn: string | null };
 
-function stageOf(c: ClientRow): { label: string; tone: "neutral" | "info" | "good" | "danger" } {
+function stageOf(c: ClientRow, sent = "Transferred"): { label: string; tone: "neutral" | "info" | "good" | "danger" } {
   if (c.chargedBackOn) return { label: "Charged back", tone: "danger" };
   if (c.issuedOn) return { label: "Issued", tone: "good" };
   if (c.submittedOn) return { label: "App submitted", tone: "info" };
-  return { label: "Transferred", tone: "neutral" };
+  return { label: sent, tone: "neutral" };
 }
 
-function ComingUp() {
+function ComingUp({ noun = TRANSFERS }: { noun?: PartnerNoun }) {
+  // A publisher transfers a call; a marketing partner or an affiliate sends a lead or a referral.
+  const sentWord = noun.one === "transfer" ? "Transferred" : "Sent";
   const [clients, setClients] = useState<ClientRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -234,16 +241,16 @@ function ComingUp() {
         footer={visible.length > pageSize ? <Pager page={paged.current} total={visible.length} noun={visible.length === 1 ? "client" : "clients"} pageSize={pageSize} onPage={setPage} /> : undefined}
       >
         {error ? <div className="flex min-h-64 flex-1 items-center justify-center"><EmptyState title="Not available" hint={error} /></div> : clients === null ? <SectionLoading rows={4} columns={5} /> : clients.length === 0 ? (
-          <div className="flex min-h-64 flex-1 items-center justify-center"><EmptyState title="No clients yet" hint="Each client you transfer appears here with its stage and when you can expect payment." /></div>
+          <div className="flex min-h-64 flex-1 items-center justify-center"><EmptyState title="No clients yet" hint={`Each client from your ${noun.many} appears here with its stage and when you can expect payment.`} /></div>
         ) : (
           <Table>
             <TableHeader><TableRow><TableHead>Client</TableHead><TableHead>Stage</TableHead><TableHead className="text-right">Earned</TableHead><TableHead>Payment</TableHead></TableRow></TableHeader>
             <TableBody>
               {paged.rows.map((c) => {
-                const stage = stageOf(c);
+                const stage = stageOf(c, sentWord);
                 return (
                   <TableRow key={c.dealId}>
-                    <TableCell className="max-w-[320px]"><strong className="block truncate font-semibold text-foreground">{c.clientName}</strong><span className="block truncate text-xs text-muted-foreground">{c.transferredOn ? `Transferred ${dayMonth(c.transferredOn)}` : "Transferred"}{c.policyNumber ? ` · ${c.carrier ? `${c.carrier} ` : ""}${c.policyNumber}` : ""}</span></TableCell>
+                    <TableCell className="max-w-[320px]"><strong className="block truncate font-semibold text-foreground">{c.clientName}</strong><span className="block truncate text-xs text-muted-foreground">{c.transferredOn ? `${sentWord} ${dayMonth(c.transferredOn)}` : sentWord}{c.policyNumber ? ` · ${c.carrier ? `${c.carrier} ` : ""}${c.policyNumber}` : ""}</span></TableCell>
                     <TableCell><StatusChip tone={stage.tone}>{stage.label}</StatusChip></TableCell>
                     <TableCell className={`text-right tabular-nums ${c.payableCents < 0 ? "text-[var(--error-ink)]" : ""}`}>{c.payableCents || c.unpaidCents ? money(c.payableCents) : <span className="text-muted-foreground">—</span>}</TableCell>
                     <TableCell className="text-sm">{c.unpaidCents !== 0 && c.expectedOn ? <>Expected around {dayMonthYear(c.expectedOn)}</> : c.invoicedCents !== 0 ? "On an invoice, awaiting payment" : c.paidCents !== 0 ? "Paid" : <span className="text-muted-foreground">{c.issuedOn || c.submittedOn ? "Nothing payable yet" : "Not payable yet"}</span>}</TableCell>
@@ -259,24 +266,26 @@ function ComingUp() {
 }
 
 /** Sample statements for `/design/organization`; a partner's own page never passes them. */
-export function PartnerPayouts({ sample, partnerName, header }: {
+export function PartnerPayouts({ sample, partnerName, header, noun = TRANSFERS }: {
   sample?: RunRow[];
   partnerName?: string;
   /** The page's header, drawn here so Invoices · Coming up sit on its line as the sub-page bar (UI-CONSISTENCY §8b). */
   header?: { title: string; description?: string; breadcrumbs?: Crumb[] };
+  /** What this partner sends, in its type's words (lib/partnerAuth/portalAccess.ts): transfers, leads or referrals. */
+  noun?: PartnerNoun;
 }) {
   // Invoices (the published statements) or Coming up (every client and when it pays). The sample shows invoices only.
   const [view, setView] = useState<"invoices" | "upcoming">("invoices");
-  const views = sample ? undefined : <ViewTabs label="Commissions view" value={view} onChange={setView} tabs={[{ key: "invoices", label: "Invoices" }, { key: "upcoming", label: "Coming up" }]} />;
+  const views = sample ? undefined : <ViewTabs label="Statements view" value={view} onChange={setView} tabs={[{ key: "invoices", label: "Invoices" }, { key: "upcoming", label: "Coming up" }]} />;
   return (
     <div className="m-stagger flex min-h-0 w-full flex-1 flex-col gap-6">
       {header ? <PageHeader title={header.title} description={header.description} hideTitle breadcrumbs={header.breadcrumbs} tabs={views} /> : views}
-      {view === "upcoming" && !sample ? <ComingUp /> : <PartnerInvoices sample={sample} partnerName={partnerName} />}
+      {view === "upcoming" && !sample ? <ComingUp noun={noun} /> : <PartnerInvoices sample={sample} partnerName={partnerName} noun={noun} />}
     </div>
   );
 }
 
-function PartnerInvoices({ sample, partnerName }: { sample?: RunRow[]; partnerName?: string }) {
+function PartnerInvoices({ sample, partnerName, noun = TRANSFERS }: { sample?: RunRow[]; partnerName?: string; noun?: PartnerNoun }) {
   const [runs, setRuns] = useState<RunRow[] | null>(sample ?? null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -441,7 +450,7 @@ function PartnerInvoices({ sample, partnerName }: { sample?: RunRow[]; partnerNa
           </Table>
         )}
       </TableCard>
-      {open ? <Statement key={open} id={open} onClose={() => setOpen(null)} partnerName={partnerName} /> : null}
+      {open ? <Statement key={open} id={open} onClose={() => setOpen(null)} partnerName={partnerName} noun={noun} /> : null}
       </div>
     </>
   );

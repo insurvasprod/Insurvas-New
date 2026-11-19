@@ -20,16 +20,29 @@ export function VoidInvoiceDialog({
   invoiceId,
   number,
   refusalReason,
+  trigger,
 }: {
   invoiceId: string;
   number: string;
   /** Non-null when this invoice cannot be voided; shown instead of hiding the button. */
   refusalReason: string | null;
+  /** The trigger, when it is not the full-width outline button of the detail page (the invoice sheet's footer). */
+  trigger?: { /** Refused: the reason rides on the disabled button (the sheet prints it once, beside the footer). */ compact?: boolean; label?: string; variant?: "default" | "outline" | "ghost" | "secondary" | "destructive"; className?: string };
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+
+  if (refusalReason && trigger?.compact) {
+    return (
+      <span title={refusalReason}>
+        <Button variant={trigger.variant ?? "outline"} className={trigger.className} disabled>
+          {trigger.label ?? "Void invoice"}
+        </Button>
+      </span>
+    );
+  }
 
   if (refusalReason) {
     return (
@@ -64,8 +77,8 @@ export function VoidInvoiceDialog({
 
   return (
     <>
-      <Button variant="outline" className="w-full" onClick={() => setOpen(true)}>
-        Void invoice
+      <Button variant={trigger?.variant ?? "outline"} className={trigger?.className ?? "w-full"} onClick={() => setOpen(true)}>
+        {trigger?.label ?? "Void invoice"}
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>

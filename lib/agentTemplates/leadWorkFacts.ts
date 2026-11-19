@@ -31,7 +31,8 @@ type Query = PromiseLike<{ data: Row[] | null; error: { message: string } | null
 /** A uuid is 36 characters; 150 of them keep the request line well under PostgREST's limit. */
 const CHUNK = 150;
 
-export async function leadWorkFacts(tenantId: string, leadIds: string[], withPremium: boolean): Promise<Map<string, LeadWorkFacts>> {
+/** `knownEntered`: each lead's stage_entered_at when the caller already read it with the leads; then it is not read again. */
+export async function leadWorkFacts(tenantId: string, leadIds: string[], withPremium: boolean, knownEntered?: ReadonlyMap<string, string | null>): Promise<Map<string, LeadWorkFacts>> {
   const db = getSupabaseServiceClient() as unknown as { from(table: string): Query };
   const chunks: string[][] = [];
   for (let start = 0; start < leadIds.length; start += CHUNK) chunks.push(leadIds.slice(start, start + CHUNK));
@@ -45,7 +46,9 @@ export async function leadWorkFacts(tenantId: string, leadIds: string[], withPre
   const [queue, deals, entered] = await Promise.all([
     Promise.all(chunks.map((ids) => read("lead_queue", "lead_id, owner_user_id, disposition, disposition_at", ids))),
     withPremium ? Promise.all(chunks.map((ids) => read("deal_flow", "lead_id, monthly_premium_cents", ids))) : Promise.resolve([] as Row[][]),
-    Promise.all(chunks.map((ids) => db.from("agent_leads").select("id, stage_entered_at").eq("tenant_id", tenantId).in("id", ids))),
+    knownEntered
+      ? Promise.resolve([{ data: [...knownEntered].map(([id, at]) => ({ id, stage_entered_at: at }) as Row), error: null }])
+      : Promise.all(chunks.map((ids) => db.from("agent_leads").select("id, stage_entered_at").eq("tenant_id", tenantId).in("id", ids))),
   ]);
   const facts = new Map<string, LeadWorkFacts>(leadIds.map((id) => [id, { ownerUserId: null, ownerName: null, disposition: null, dispositionAt: null, stageEnteredAt: null, monthlyPremiumCents: null }]));
   for (const row of queue.flat()) {

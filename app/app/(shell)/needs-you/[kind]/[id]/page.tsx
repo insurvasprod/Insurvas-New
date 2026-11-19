@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 
-import { DataInPage } from "@/components/app/data-in/data-in-page";
+import { DataInPage, RecordName } from "@/components/app/data-in/data-in-page";
 import { ItemDecide } from "@/components/app/book/needs-you/item-decide";
 import { ItemTabs, itemTab, type ItemTab } from "@/components/app/book/needs-you/item-tabs";
 import { RowAsSentTable } from "@/components/app/book/needs-you/row-as-sent";
@@ -10,9 +11,10 @@ import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
+import { StreamSection } from "@/components/ui/stream-section";
 import { scopeFor } from "@/lib/agency/visibility";
 import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
-import { ageLong, isItemId, isNeedsYouKind, isNeedsYouView, KIND_META, neighbours, viewItems, type NeedsYouView } from "@/lib/needsYou/kinds";
+import { ageLong, isItemId, isNeedsYouKind, isNeedsYouView, itemHref, KIND_META, neighbours, viewItems, type NeedsYouItem, type NeedsYouKind, type NeedsYouView } from "@/lib/needsYou/kinds";
 import { needsYouScope } from "@/lib/needsYou/scope";
 import { loadItemPage, loadNeedsYou, type ItemDetail } from "@/lib/needsYou/store";
 
@@ -52,41 +54,66 @@ export default async function NeedsYouItemPage({ params, searchParams }: { param
   if (!isNeedsYouKind(kind) || !isItemId(kind, id)) notFound();
 
   const scope = await needsYouScope(guard);
-  const [list, page] = await Promise.all([loadNeedsYou(scope), loadItemPage(scope, kind, id)]);
-  const me = { userId: scope.userId, keeper: scope.keeper };
-  const item = list.open.find((entry) => entry.kind === kind && entry.id === id) ?? null;
   const { from: asked, tab: askedTab } = await searchParams;
+  const me = { userId: scope.userId, keeper: scope.keeper };
   // The list it was opened from; a status word cycles through the other status words.
   const fallback: Exclude<NeedsYouView, "closed"> = kind === "status-word" ? "insurvas" : scope.keeper ? "agency" : "mine";
   const chosen: Exclude<NeedsYouView, "closed"> = isNeedsYouView(asked) && asked !== "closed" && (scope.keeper || asked === "mine") ? asked : fallback;
-  // An item that isn't in the list it names (opened from a link, or that list moved on) cycles through its own.
-  const from = item && !viewItems(list.open, chosen, me).some((entry) => entry.kind === kind && entry.id === id) ? fallback : chosen;
-  const listHref = `/app/needs-you?view=${from}`;
-
-  if (!page || !item) {
-    return (
-      <DataInPage step="needs-you" title="This item is closed">
-        <EmptyState title="Nothing to decide here any more" hint="Someone decided it, a newer file answered it, or it isn't yours to see. Your list has what still waits." action={<Button asChild><Link href={listHref}>Back to Needs you</Link></Button>} />
-      </DataInPage>
-    );
-  }
-
-  const items = viewItems(list.open, from, me);
-  const place = neighbours(items, kind, id);
-  const nextHref = place.next ? `${place.next.href}?from=${from}` : null;
-  const meta = KIND_META[kind];
-  const waits = waitsLine(page.detail);
-  const tab = itemTab(askedTab, Boolean(page.row));
-  const tabHref = (next: ItemTab) => `${item.href}?from=${from}${next === "row" ? "&tab=row" : ""}`;
+  // Frame first (UI-CONSISTENCY §7a): the trail, the tabs and the frame draw at once; the item's name waits behind its
+  // shape, and Skip and the item stream in. The reads are today's, only started before the frame returns.
+  const model = Promise.all([loadNeedsYou(scope), loadItemPage(scope, kind, id)]).then(([list, page]) => {
+    const item = list.open.find((entry) => entry.kind === kind && entry.id === id) ?? null;
+    // An item that isn't in the list it names (opened from a link, or that list moved on) cycles through its own.
+    const from = item && !viewItems(list.open, chosen, me).some((entry) => entry.kind === kind && entry.id === id) ? fallback : chosen;
+    const listHref = `/app/needs-you?view=${from}`;
+    if (!page || !item) return { found: false as const, listHref };
+    const place = neighbours(viewItems(list.open, from, me), kind, id);
+    const nextHref = place.next ? `${place.next.href}?from=${from}` : null;
+    const tab = itemTab(askedTab, Boolean(page.row));
+    const tabHref = (next: ItemTab) => `${item.href}?from=${from}${next === "row" ? "&tab=row" : ""}`;
+    return { found: true as const, item, page, place, nextHref, listHref, tab, tabHref };
+  });
+  const guessTab: ItemTab = askedTab === "row" ? "row" : "decide";
 
   return (
     <DataInPage
       step="needs-you"
-      title={item.about}
+      title={<RecordName read={model.then((m) => (m.found ? m.item.about : "This item is closed"))} />}
       // The item's parts on the title line (UI-CONSISTENCY §8a), as the other steps' tabs are.
-      tabs={<ItemTabs current={tab} hasRow={Boolean(page.row)} href={tabHref} />}
-      actions={nextHref ? <Button asChild variant="outline"><Link href={nextHref}>Skip</Link></Button> : undefined}
+      tabs={<Suspense fallback={<ItemTabs current={guessTab} hasRow={guessTab === "row"} href={(next) => `${itemHref(kind, id)}?from=${chosen}${next === "row" ? "&tab=row" : ""}`} />}><Tabs read={model} /></Suspense>}
+      actions={<Suspense fallback={null}><Skip read={model} /></Suspense>}
     >
+      <StreamSection shape="form" rows={4}><Item read={model} kind={kind} readOnly={guard.entitlement.access === "read_only"} /></StreamSection>
+    </DataInPage>
+  );
+}
+
+type Model = Promise<
+  | { found: false; listHref: string }
+  | { found: true; item: NeedsYouItem; page: NonNullable<Awaited<ReturnType<typeof loadItemPage>>>; place: ReturnType<typeof neighbours>; nextHref: string | null; listHref: string; tab: ItemTab; tabHref: (next: ItemTab) => string }
+>;
+
+async function Tabs({ read }: { read: Model }) {
+  const m = await read;
+  if (!m.found) return null;
+  return <ItemTabs current={m.tab} hasRow={Boolean(m.page.row)} href={m.tabHref} />;
+}
+
+async function Skip({ read }: { read: Model }) {
+  const m = await read;
+  return m.found && m.nextHref ? <Button asChild variant="outline"><Link href={m.nextHref}>Skip</Link></Button> : null;
+}
+
+async function Item({ read, kind, readOnly }: { read: Model; kind: NeedsYouKind; readOnly: boolean }) {
+  const m = await read;
+  if (!m.found) {
+    return <EmptyState title="Nothing to decide here any more" hint="Someone decided it, a newer file answered it, or it isn't yours to see. Your list has what still waits." action={<Button asChild><Link href={m.listHref}>Back to Needs you</Link></Button>} />;
+  }
+  const { item, page, place, nextHref, listHref, tab } = m;
+  const meta = KIND_META[kind];
+  const waits = waitsLine(page.detail);
+  return (
+    <>
       {/* Owner 2026-11-10: nothing beside or under the title; the kind leads the item's own line. */}
       {/* Owner 2026-11-11: one plain line, one chip (the kind; an escalated item's chip turns danger and says so). */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-foreground">
@@ -98,8 +125,8 @@ export default async function NeedsYouItemPage({ params, searchParams }: { param
       </div>
       {waits && <p className="m-0 text-sm text-muted-foreground">{waits}</p>}
       <div id="needs-you-item-panel" role="tabpanel" aria-labelledby={`needs-you-item-panel-tab-${tab}`} className="flex min-w-0 flex-col gap-4">
-        {tab === "row" && page.row ? <RowAsSentTable row={page.row} /> : <ItemDecide detail={page.detail} nextHref={nextHref} listHref={listHref} readOnly={guard.entitlement.access === "read_only"} />}
+        {tab === "row" && page.row ? <RowAsSentTable row={page.row} /> : <ItemDecide detail={page.detail} nextHref={nextHref} listHref={listHref} readOnly={readOnly} />}
       </div>
-    </DataInPage>
+    </>
   );
 }

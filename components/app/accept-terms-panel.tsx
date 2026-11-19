@@ -11,6 +11,7 @@ import { AuthAlert } from "@/components/portal/auth-controls";
 import { LogoutButton } from "@/components/app/logout-button";
 import { LegalDocumentBody } from "@/components/public/legal-document-body";
 
+import { CheckBox } from "@/components/ui/check-box";
 export type OutstandingDoc = {
   id: string;
   docType: string;
@@ -148,11 +149,9 @@ export function AcceptTermsPanel({ documents }: { documents: OutstandingDoc[] })
 
       <div className="mt-5 flex flex-col gap-4 rounded-md bg-[var(--surface-alt)] p-4 sm:flex-row sm:items-center sm:justify-between">
         <label className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
-          <input
-            type="checkbox"
+          <CheckBox
             checked={accepted}
             onChange={(event) => setAccepted(event.target.checked)}
-            className="size-5 shrink-0 accent-[var(--accent-ink)]"
           />
           <span>
             I have read and agree to{" "}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowRight, ChevronDown, CircleAlert, ExternalLink } from "lucide-react";
 import { notify } from "@/lib/notify";
@@ -22,6 +22,8 @@ import type { TemplateField, TemplateRow } from "@/lib/templates/constants";
 import type { PipelineStage } from "@/lib/pipelines/types";
 import { pruneHiddenTemplateValues, templateFormFieldVisible } from "@/lib/templates/visibility";
 import { cn } from "@/lib/utils";
+import { useFlip } from "@/components/ui/use-flip";
+import { useDragLift } from "@/components/ui/use-drag-lift";
 import { dayMonthYear } from "@/lib/format/dates";
 import { productLineLabel } from "@/lib/format/productLine";
 import { LeadStageHint } from "@/components/app/applications/lead-stage-hint";
@@ -31,15 +33,21 @@ import { useSolo } from "@/components/app/solo-context";
 import { Segmented, UnderlineTabs } from "@/components/ui/view-tabs";
 import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
 
+import { CheckBox } from "@/components/ui/check-box";
 type Lead = { id: string; pipeline_id: string; stage_id: string; values: Record<string, unknown>; screening_outcome?: string | null; screening_warning?: string | null; created_at: string; updated_at: string; submitter_name?: string | null; owner_user_id?: string | null; owner_name?: string | null; disposition?: string | null; disposition_at?: string | null; stage_entered_at?: string | null; monthly_premium_cents?: number | null };
 type Pipeline = { id: string; name: string; partner_type: string; stages: PipelineStage[] };
-type PageData = { template: { assignment: { template_version: number }; template: TemplateRow; latest: { version: number; name: string } | null }; pipelines: Pipeline[]; leads: Lead[]; role?: string; currentUserId?: string; money?: boolean; readOnly: boolean };
+type PageData = { template: { assignment: { template_version: number }; template: TemplateRow; latest: { version: number; name: string } | null }; pipelines: Pipeline[]; leads: Lead[]; page?: number; pageSize?: number; hasMore?: boolean; pipelineId?: string | null; totals?: Record<string, number | null> | null; role?: string; currentUserId?: string; money?: boolean; readOnly: boolean };
 type LeadDetail = { lead: Lead & { product_line: string; definition_version: number }; template: TemplateRow; queue: { status: string; owner_user_id: string | null; claimed_at: string | null; disposition: string | null } | null; partner: { name: string; partner_type: string } | null; stage: PipelineStage | null; submitter: { name: string } | null; owner: { name: string } | null; screening: { outcome: string | null; warning: string | null }; timeline: Array<{ id: string; label: string; at: string; actor: string; detail: string | null }>; readOnly: boolean };
 
 /** The combined view. A sentinel rather than a pipeline id, because it is not one. */
 /** Leads whose stage is archived or belongs to no stage on this board. */
 /** The workspace's reads, as the app's cache keys them (lib/client/route-resources.ts warms the first on hover). */
-const leadsKey = (query: string) => `/api/app/leads${query ? `?${query}` : ""}`;
+const leadsKey = (query: string, pipeline = "") => {
+  const params = new URLSearchParams(query);
+  if (pipeline) params.set("pipeline", pipeline);
+  const text = params.toString();
+  return `/api/app/leads${text ? `?${text}` : ""}`;
+};
 const CONTEXT_KEY = "/api/app/leads/pipeline-context";
 const UNMAPPED = "__unmapped";
 
@@ -68,7 +76,7 @@ function compactAnnual(monthlyCents: number) {
 function FieldInput({ field, value, onChange, id, labelId }: { field: TemplateField; value: unknown; onChange: (value: unknown) => void; id?: string; labelId?: string }) {
   if (field.type === "boolean") return <select id={id} aria-labelledby={labelId} aria-label={labelId ? undefined : field.label} className="lead-form-control" value={value === undefined ? "" : String(value)} onChange={(event) => onChange(event.target.value === "" ? undefined : event.target.value === "true")}><option value="">Choose…</option><option value="true">Yes</option><option value="false">No</option></select>;
   if (field.type === "single_select") return <select id={id} aria-labelledby={labelId} aria-label={labelId ? undefined : field.label} className="lead-form-control" value={String(value ?? "")} onChange={(event) => onChange(event.target.value || undefined)}><option value="">Choose…</option>{field.options.map((option) => <option key={option} value={option}>{option}</option>)}</select>;
-  if (field.type === "multi_select") return <div id={id} role="group" aria-labelledby={labelId} aria-label={labelId ? undefined : field.label} className="flex flex-wrap gap-2">{field.options.map((option) => { const selected = Array.isArray(value) && value.includes(option); return <label key={option} className="flex items-center gap-1 text-xs"><input type="checkbox" aria-label={option} checked={selected} onChange={(event) => onChange([...(Array.isArray(value) ? value : []).filter((item) => item !== option), ...(event.target.checked ? [option] : [])])} />{option}</label>; })}</div>;
+  if (field.type === "multi_select") return <div id={id} role="group" aria-labelledby={labelId} aria-label={labelId ? undefined : field.label} className="flex flex-wrap gap-2">{field.options.map((option) => { const selected = Array.isArray(value) && value.includes(option); return <label key={option} className="flex items-center gap-1 text-xs"><CheckBox aria-label={option} checked={selected} onChange={(event) => onChange([...(Array.isArray(value) ? value : []).filter((item) => item !== option), ...(event.target.checked ? [option] : [])])} />{option}</label>; })}</div>;
   if (field.type === "long_text") return <textarea id={id} aria-labelledby={labelId} aria-label={labelId ? undefined : field.label} className="lead-form-control min-h-24 py-2" value={String(value ?? "")} onChange={(event) => onChange(event.target.value || undefined)} />;
   const inputType = field.type === "number" || field.type === "currency" ? "number" : field.type === "date" ? "date" : field.type === "phone" ? "tel" : field.type === "email" ? "email" : "text";
   // A currency field is kept in whole cents (the template's rule): the person types dollars, so it is shown
@@ -118,15 +126,16 @@ type Column = { id: string; name: string; color: string; stage: PipelineStage | 
  * stay: a drop asks for the disposition that moves the lead, a click opens the lead beside the board, a lead past its
  * stage's time allowed is flagged red.
  */
-function PipelineCard({ lead, status, selected, readOnly, now, money, late, dragging = false, onSelect, onDragStart, onDragEnd }: { lead: Lead; status: string; selected: boolean; readOnly: boolean; now: number; money: boolean; late: boolean; dragging?: boolean; onSelect: () => void; onDragStart: () => void; onDragEnd?: () => void }) {
+function PipelineCard({ lead, status, selected, readOnly, now, money, late, dragging = false, onSelect, onDragStart, onDragEnd }: { lead: Lead; status: string; selected: boolean; readOnly: boolean; now: number; money: boolean; late: boolean; dragging?: boolean; onSelect: () => void; onDragStart: (event: DragEvent<HTMLElement>) => void; onDragEnd?: () => void }) {
   const premium = money && lead.monthly_premium_cents != null ? annual(lead.monthly_premium_cents) : null;
   // Time in the current stage when it is known (20260925100000); until then, time since arrival.
   const stageMs = inStageMs(lead, now);
   const ageText = stageMs != null ? durationLabel(stageMs) : now ? age(lead.created_at, now) : "—";
   return (
     // m-drop-in (§ Motion, Wave 3): a card settles into its column — on the first draw, after a page turn, and where it
-    // lands when moved; the card being dragged fades back in place until it is dropped.
-    <article draggable={!readOnly} onDragStart={onDragStart} onDragEnd={onDragEnd} data-dragging={dragging ? "" : undefined} className={cn("m-drop-in group w-full rounded-md border bg-card transition-colors hover:border-[var(--primary)] hover:bg-[var(--surface-alt)]", !readOnly && "cursor-grab active:cursor-grabbing", selected ? "border-[var(--primary)]" : "border-border")}>
+    // lands when moved; the card being dragged fades back in place until it is dropped. data-flip-key (Wave C): a card
+    // whose place changes glides there (useFlip on the board).
+    <article data-flip-key={lead.id} draggable={!readOnly} onDragStart={onDragStart} onDragEnd={onDragEnd} data-dragging={dragging ? "" : undefined} className={cn("m-drop-in group w-full rounded-md border bg-card transition-colors hover:border-[var(--primary)] hover:bg-[var(--surface-alt)]", !readOnly && "cursor-grab active:cursor-grabbing", selected ? "border-[var(--primary)]" : "border-border")}>
       <button type="button" onClick={onSelect} className="block w-full p-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]" title={readOnly ? undefined : "Open to see the lead, or drag it to another stage — you will be asked which disposition"}>
         <span className="flex items-start justify-between gap-2">
           <span className="min-w-0">
@@ -155,7 +164,14 @@ function PipelineCard({ lead, status, selected, readOnly, now, money, late, drag
 }
 
 function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, context, onSelect, onStageChange }: { stages: PipelineStage[]; leads: Lead[]; selectedId: string | null; readOnly: boolean; now: number; money: boolean; context: ViewContext | null; onSelect: (lead: Lead) => void; onStageChange: (lead: Lead, stage: string) => void }) {
-  const [draggedId, setDraggedId] = useState<string | null>(null); const [dragOver, setDragOver] = useState<string | null>(null);
+  const [dragged, setDragged] = useState<{ id: string; height: number } | null>(null); const [dragOver, setDragOver] = useState<string | null>(null);
+  const draggedId = dragged?.id ?? null;
+  // Wave C (plan item 12): the card lifts and follows the pointer (no browser ghost), the lane it is over opens a gap
+  // where it will land and its cards slide aside, and the dropped card glides from where it was let go into that slot,
+  // settling with m-drop-in. Only the cards on screen glide (useFlip), never the whole page of 500.
+  const boardRef = useRef<HTMLDivElement>(null);
+  const flip = useFlip(boardRef);
+  const lift = useDragLift();
   const [folded, setFolded] = useState<ReadonlySet<string>>(() => new Set());
   const toggleLane = (id: string) => setFolded((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const activeStages = stages.filter((stage) => !stage.is_archived).sort((a, b) => a.position - b.position);
@@ -169,7 +185,7 @@ function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, contex
   ];
   // Below md the lanes stack into one vertical read; on wider screens they sit side by side.
   return (
-    <div className="flex min-h-[24rem] flex-1 flex-col gap-3 overflow-x-auto p-3 md:h-[calc(100dvh-var(--top-bar-h)-14.5rem)] md:flex-row">
+    <div ref={boardRef} className="flex min-h-[24rem] flex-1 flex-col gap-3 overflow-x-auto p-3 md:h-[calc(100dvh-var(--top-bar-h)-14.5rem)] md:flex-row">
       {columns.map((column) => {
         const columnLeads = column.id === UNMAPPED ? unmapped : leads.filter((lead) => lead.stage_id === column.id);
         const premium = columnLeads.reduce((sum, lead) => sum + (lead.monthly_premium_cents ?? 0), 0);
@@ -181,6 +197,12 @@ function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, contex
         const isFolded = folded.has(column.id);
         const total = columnLeads.length;
         const footnote = column.id === UNMAPPED ? "Stage retired or moved" : late ? `${late} past the ${durationLabel((allowed ?? 0) * 60_000)} allowed` : money && premium > 0 ? `${compactAnnual(premium)} annualised` : undefined;
+        // The gap opens at the very slot the card will take: the lane keeps the board's order, so it is the held card's
+        // place among this lane's cards once it is in.
+        const heldLead = dragged && dragOver === column.id && dropTarget ? leads.find((lead) => lead.id === dragged.id) : undefined;
+        const landing = heldLead && heldLead.stage_id !== column.id ? leads.filter((lead) => lead.stage_id === column.id || lead.id === heldLead.id).indexOf(heldLead) : -1;
+        const cards: ReactNode[] = columnLeads.map((lead) => <PipelineCard key={lead.id} lead={lead} status={dispositionLabel(lead.disposition, context) ?? column.name} selected={lead.id === selectedId} readOnly={readOnly} now={now} money={money} late={isOverdue(lead, context, now)} onSelect={() => onSelect(lead)} dragging={lead.id === draggedId} onDragStart={(event) => { event.dataTransfer.setData("text/plain", lead.id); lift.lift(event); setDragged({ id: lead.id, height: event.currentTarget.offsetHeight }); }} onDragEnd={() => { setDragged(null); setDragOver(null); }} />);
+        if (landing >= 0 && dragged) cards.splice(landing, 0, <div key="__drop-gap" aria-hidden="true" className="m-drop-gap rounded-md" style={{ height: dragged.height }} />);
         return (
           <section
             key={column.id}
@@ -188,8 +210,8 @@ function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, contex
             aria-label={`${column.name}: ${total} ${total === 1 ? "lead" : "leads"}`}
             className={cn("flex min-w-0 flex-col rounded-md border bg-[var(--canvas)] transition-colors duration-[var(--t-micro)]", isFolded ? "md:w-12 md:min-w-12 md:flex-none" : "md:w-0 md:min-h-0 md:min-w-[18rem] md:flex-1", dragOver === column.id ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-border")}
             onDragOver={(event) => { if (column.id === UNMAPPED || readOnly) return; event.preventDefault(); setDragOver(column.id); }}
-            onDragLeave={() => setDragOver(null)}
-            onDrop={(event) => { event.preventDefault(); setDragOver(null); const lead = leads.find((item) => item.id === draggedId); setDraggedId(null); if (!lead || lead.stage_id === column.id) return; if (!dropTarget) { notify.block(`Map a disposition to ${column.name} in Settings › Dispositions to move leads there.`); return; } onStageChange(lead, column.id); }}
+            onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragOver(null); }}
+            onDrop={(event) => { event.preventDefault(); setDragOver(null); const lead = leads.find((item) => item.id === draggedId); setDragged(null); if (!lead || lead.stage_id === column.id) return; if (!dropTarget) { notify.block(`Map a disposition to ${column.name} in Settings › Dispositions to move leads there.`); return; } const at = lift.rect(); if (at) flip.place(lead.id, at); onStageChange(lead, column.id); }}
           >
             <header className="sticky top-0 z-10 rounded-t-md border-t-[3px] border-b border-b-border text-sm font-semibold text-foreground md:static" style={{ borderTopColor: column.color, background: `color-mix(in srgb, ${column.color} 16%, var(--color-card))` }} title={footnote}>
               <div className={cn("flex w-full items-center gap-2 px-3 py-2", isFolded && "md:flex-col md:px-0 md:py-3")}>
@@ -209,10 +231,10 @@ function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, contex
               </div>
               {!isFolded && footnote && <p className={cn("-mt-1 truncate px-3 pb-2 text-xs font-normal tabular-nums", late ? "font-semibold text-[var(--error-ink)]" : "text-muted-foreground")}>{footnote}</p>}
             </header>
-            <div className={cn("grid content-start gap-2 p-2 md:min-h-0 md:flex-1 md:overflow-y-auto", isFolded && "hidden")} style={{ background: `color-mix(in srgb, ${column.color} 5%, transparent)` }}>
-              {columnLeads.map((lead) => <PipelineCard key={lead.id} lead={lead} status={dispositionLabel(lead.disposition, context) ?? column.name} selected={lead.id === selectedId} readOnly={readOnly} now={now} money={money} late={isOverdue(lead, context, now)} onSelect={() => onSelect(lead)} dragging={lead.id === draggedId} onDragStart={() => setDraggedId(lead.id)} onDragEnd={() => { setDraggedId(null); setDragOver(null); }} />)}
+            <div data-flip-scroll="" className={cn("grid content-start gap-2 p-2 md:min-h-0 md:flex-1 md:overflow-y-auto", isFolded && "hidden")} style={{ background: `color-mix(in srgb, ${column.color} 5%, transparent)` }}>
+              {cards}
               {/* An empty lane is one quiet line on a phone, not 420px of nothing. */}
-              {!total && <p className="px-2 py-2 text-center text-xs text-muted-foreground md:py-6">{readOnly ? "Nothing here right now" : column.stage && context && !enterable ? "No disposition lands here" : "Nothing here right now"}</p>}
+              {!total && landing < 0 && <p className="px-2 py-2 text-center text-xs text-muted-foreground md:py-6">{readOnly ? "Nothing here right now" : column.stage && context && !enterable ? "No disposition lands here" : "Nothing here right now"}</p>}
             </div>
           </section>
         );
@@ -379,7 +401,55 @@ export function LeadWorkspace() {
   const loadContext = useCallback(async (fresh = false) => { try { setContext(await (fresh ? loadResource<ViewContext>(CONTEXT_KEY, { persist: true }) : readResource<ViewContext>(CONTEXT_KEY, { persist: true }))); } catch { /* the board works without its rules */ } }, []);
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadContext(); }, [loadContext]);
-  const load = useCallback(async (nextQuery: string, fresh = false) => { let body: PageData; try { body = await (fresh ? loadResource<PageData>(leadsKey(nextQuery), { persist: !nextQuery }) : readResource<PageData>(leadsKey(nextQuery), { persist: !nextQuery })); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load leads"); return; } setError(""); setData(body); setNow(Date.now()); setSelected((current) => (current ? (body.leads ?? []).find((lead: Lead) => lead.id === current.id) ?? null : null)); }, []);
+  // The board in pages (2026-11-12). /api/app/leads answers one pipeline, 500 leads at a time, newest first, with
+  // each pipeline's count for the tabs; "Show more" adds the next 500. The board used to read every lead at once,
+  // which PostgREST stopped at 1,000 without saying so (the demo book has 15,649). A refresh after a move re-reads
+  // the first page and keeps the older pages already shown. A newer load (a search, a pipeline, a refresh) stops an
+  // older one.
+  const loadRun = useRef(0);
+  const pipelineRef = useRef("");
+  const [loadingMore, setLoadingMore] = useState(false);
+  const load = useCallback(async (nextQuery: string, fresh = false) => {
+    const run = ++loadRun.current;
+    const key = leadsKey(nextQuery, pipelineRef.current);
+    let body: PageData;
+    try { body = await (fresh ? loadResource<PageData>(key, { persist: !nextQuery }) : readResource<PageData>(key, { persist: !nextQuery })); } catch (cause) { if (run === loadRun.current) setError(cause instanceof Error ? cause.message : "Could not load leads"); return; }
+    if (run !== loadRun.current) return;
+    if (!pipelineRef.current && body.pipelineId) pipelineRef.current = body.pipelineId;
+    setError("");
+    setData((current) => {
+      // The same list asked again: keep the older pages already shown beneath the fresh first page.
+      if (!fresh || !current || !current.page || current.pipelineId !== body.pipelineId) return body;
+      const fresher = new Set(body.leads.map((lead) => lead.id));
+      return { ...body, leads: [...body.leads, ...current.leads.filter((lead) => !fresher.has(lead.id))], page: current.page, hasMore: current.hasMore };
+    });
+    setNow(Date.now());
+    setSelected((current) => (current ? (body.leads ?? []).find((lead: Lead) => lead.id === current.id) ?? current : null));
+  }, []);
+  /** The next 500 of the pipeline on screen, added under the ones shown. */
+  const loadMore = useCallback(async () => {
+    if (!data?.hasMore || loadingMore) return;
+    const run = loadRun.current;
+    const params = new URLSearchParams(query);
+    if (pipelineRef.current) params.set("pipeline", pipelineRef.current);
+    params.set("page", String((data.page ?? 0) + 1));
+    setLoadingMore(true);
+    try {
+      const response = await fetch(`/api/app/leads?${params}`, { cache: "no-store" });
+      const next = (await response.json().catch(() => null)) as PageData | null;
+      if (run !== loadRun.current) return;
+      if (!response.ok || !next) { notify.block("Could not load more leads. Check your connection and try again."); return; }
+      setData((current) => {
+        if (!current) return current;
+        const seen = new Set(current.leads.map((lead) => lead.id));
+        return { ...current, leads: [...current.leads, ...next.leads.filter((lead) => !seen.has(lead.id))], page: next.page, hasMore: next.hasMore };
+      });
+    } catch {
+      notify.fail("Could not load more leads. Check your connection and try again.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [data, loadingMore, query]);
   // This client effect intentionally hydrates the interactive workspace from the authenticated API.
   useEffect(() => {
     // A fresh document (a reload) starts from the kept answer as soon as it has hydrated, then asks again.
@@ -403,13 +473,13 @@ export function LeadWorkspace() {
   // One pipeline on screen at a time, chosen from the pipeline tabs above the list. Every pipeline has
   // its own stages, so there is no honest single set of columns across them, and the old "All
   // pipelines" view stacked one board per pipeline down a long scroll.
-  const activePipeline = useMemo(() => pipelines.find((item) => item.id === pipelineId) ?? pipelines.find((item) => item.partner_type === "marketing") ?? pipelines[0], [pipelines, pipelineId]);
+  const activePipeline = useMemo(() => pipelines.find((item) => item.id === pipelineId) ?? pipelines.find((item) => item.id === data?.pipelineId) ?? pipelines.find((item) => item.partner_type === "marketing") ?? pipelines[0], [pipelines, pipelineId, data?.pipelineId]);
   const allStages = useMemo(() => activePipeline?.stages ?? [], [activePipeline]);
   // A new lead is filed into the pipeline on screen.
   const formPipeline = activePipeline;
   const formStages = useMemo(() => { const stages = formPipeline?.stages ?? []; const live = stages.filter((stage) => !stage.is_archived); return live.length ? live : stages; }, [formPipeline]);
   const leadsInPipeline = useMemo(() => (data?.leads ?? []).filter((lead) => !activePipeline || lead.pipeline_id === activePipeline.id), [data, activePipeline]);
-  const countFor = useCallback((id: string) => (data?.leads ?? []).filter((lead) => lead.pipeline_id === id).length, [data]);
+  const countFor = useCallback((id: string) => data?.totals?.[id] ?? (data?.leads ?? []).filter((lead) => lead.pipeline_id === id).length, [data]);
   // One lookup across every pipeline, so the table and stage filter can resolve a
   // stage id without knowing which board it came from.
   const stageIndex = useMemo(() => { const map = new Map<string, { stage: PipelineStage; pipelineName: string }>(); for (const pipeline of pipelines) for (const stage of pipeline.stages) map.set(stage.id, { stage, pipelineName: pipeline.name }); return map; }, [pipelines]);
@@ -429,7 +499,9 @@ export function LeadWorkspace() {
   function applyView(state: ViewState) {
     const text = (key: string) => (typeof state[key] === "string" ? (state[key] as string) : "");
     const nextPipeline = pipelines.find((item) => item.id === text("pipeline")) ?? activePipeline;
+    const pipelineChanged = Boolean(nextPipeline && nextPipeline.id !== pipelineRef.current);
     if (nextPipeline && nextPipeline.id !== activePipeline?.id) { setPipelineId(nextPipeline.id); setSelected(null); }
+    if (nextPipeline && pipelineChanged) pipelineRef.current = nextPipeline.id;
     // A stage belongs to one pipeline: a saved stage that is not on this board is dropped, not shown as an empty board.
     const stage = text("stage");
     setStageFilter(stage && nextPipeline?.stages.some((item) => item.id === stage) ? stage : "");
@@ -440,12 +512,12 @@ export function LeadWorkspace() {
     const params = new URLSearchParams(); if (q) params.set("q", q);
     const next = params.toString();
     setSearch(q);
-    if (next !== query) { setQuery(next); void load(next); }
+    if (next !== query || pipelineChanged) { setQuery(next); void load(next); }
   }
   // Switching pipeline clears the stage filter and any open preview. A stage id belongs to exactly
   // one pipeline, so carrying the filter across would silently show an empty board, and the
   // previewed lead is not on the new board at all.
-  function selectPipeline(id: string) { setPipelineId(id); setStageFilter(""); setSelected(null); }
+  function selectPipeline(id: string) { setPipelineId(id); setStageFilter(""); setSelected(null); if (id !== pipelineRef.current) { pipelineRef.current = id; void load(query); } }
   // A stage change is a disposition. A drop names the target stage, so the picker offers only the
   // dispositions that land there; the preview and the table offer every one, grouped.
   // A drop on the board moves the card straight into that stage (owner 2026-11-10: "just put it on the exact thing,
@@ -488,8 +560,24 @@ export function LeadWorkspace() {
     }
   }
   if (error && !data) return <div className="flex flex-col gap-6"><PageHeader title="Leads" /><TableCard><ErrorState detail={error} action={<Button type="button" variant="outline" onClick={() => void load(query)}>Try again</Button>} /></TableCard></div>;
-  if (!data || !template) return <PageLoading strip={false} />;
   const exportParams = query ? `?${query}` : "";
+  // Frame first (UI-CONSISTENCY §7a): the title and its buttons draw at once (Add lead waits for the stages); the board
+  // loads in its card.
+  if (!data || !template) {
+    return (
+      <div className="m-stagger lead-workspace-page flex flex-col gap-6">
+        <PageHeader
+          title="Leads"
+          description="Every lead by stage. Drag a card to record the outcome that moves it."
+          actions={<>
+            <Button asChild variant="outline"><a href={`/api/app/leads/export${exportParams}`}>Export CSV</a></Button>
+            <Button type="button" disabled>Add lead</Button>
+          </>}
+        />
+        <PageLoading header={false} strip={false} />
+      </div>
+    );
+  }
   const toggle = (lead: Lead) => setSelected((current) => (current?.id === lead.id ? null : lead));
   const selectedStages = selected ? pipelines.find((item) => item.id === selected.pipeline_id)?.stages ?? [] : [];
 
@@ -514,6 +602,9 @@ export function LeadWorkspace() {
   // Built-in views: only what the workspace's filters can already say. Counted over the whole
   // pipeline, because applying a view replaces the filters rather than adding to them.
   const scopeCounts = tableScopeCounts(leadsInPipeline, context, now, data.currentUserId ?? null);
+  // The pipeline on screen and what the server counted in it; `switching` while a newly chosen tab's page is on its way.
+  const switching = Boolean(data.pipelineId && activePipeline && data.pipelineId !== activePipeline.id);
+  const pipelineTotal = activePipeline ? data.totals?.[activePipeline.id] ?? null : null;
   const pipelineKey = activePipeline?.id ?? "";
   const builtInViews: BuiltInView[] = [
     { id: "all", name: "All", state: { pipeline: pipelineKey }, count: scopeCounts.all },
@@ -586,6 +677,8 @@ export function LeadWorkspace() {
         >
           {/* The board's columns sit inset; Stages, Table and List render bare, edge to edge in the card. */}
           {/* Keyed by the view, so switching board / table / list / stages settles the new view in (§ Motion). */}
+          {/* A pipeline tab just chosen: its first page is on the way (the board holds one pipeline at a time). */}
+          {switching ? <SectionLoading rows={6} label="Loading this pipeline's leads" /> : <>
           <div key={view} className={cn("m-content-in")}>
             {view === "stages" && (
               <StagesView
@@ -636,6 +729,15 @@ export function LeadWorkspace() {
               />
             ) : null}
           </div>
+          {/* The board in pages (2026-11-12): the newest 500 of the pipeline first, the next 500 on request. The
+              filters above narrow what is shown. */}
+          {data.hasMore && (
+            <div className="flex flex-col items-center gap-2 border-t border-border px-4 py-4">
+              <p className="text-sm text-[var(--muted)]">{leadsInPipeline.length.toLocaleString("en-US")}{pipelineTotal != null ? ` of ${pipelineTotal.toLocaleString("en-US")}` : ""} leads shown, newest first</p>
+              <Button type="button" variant="outline" disabled={loadingMore} aria-busy={loadingMore} onClick={() => void loadMore()}>{`Show ${(data.pageSize ?? 500).toLocaleString("en-US")} more`}</Button>
+            </div>
+          )}
+          </>}
         </TableCard>
         {selected && (view === "board" || view === "table") && <LeadPreviewPanel lead={selected} stages={selectedStages} readOnly={data.readOnly} now={now} onMove={() => setPicker({ leads: [selected], stageId: null, source: "board" })} onClose={() => setSelected(null)} onReconciled={() => void refresh()} />}
       </div>

@@ -25,13 +25,14 @@ import { SettingsCard, SettingsSectionHeader, SettingsStack } from "@/components
 import { SettingsHistory } from "@/components/app/settings/settings-history";
 import { OwnProfileFields, profileChangeWord, useOwnProfileDraft } from "@/components/app/own-profile-form";
 import { SecurityLog, SecuritySettings, type SecurityStatus } from "@/components/app/profile/security-settings";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 import { SectionLoading } from "@/components/ui/page-states";
 import { Sheet } from "@/components/ui/sheet";
 import { notify } from "@/lib/notify";
 import { parseSettingsHash } from "@/lib/settings/registry";
 import type { OwnProfile } from "@/lib/users/ownProfile";
+import { cn } from "@/lib/utils";
 
 const SECTIONS = { profile: "my-profile-profile", producer: "my-profile-producer", security: "my-profile-security", notifications: "my-profile-alerts" } as const;
 
@@ -196,7 +197,7 @@ function ProfilePage({ profile, recordId, promptTwoFactor }: { profile: OwnProfi
               <dt className="text-xs text-[var(--muted)]">Carriers and writing numbers</dt>
               <dd className="m-0 flex items-center gap-2 text-[var(--ink)]">
                 Your appointments, and anything that still stops you submitting
-                <Link href={`/app/producers/${recordId}`} className="text-xs font-medium text-[var(--accent-ink)] underline-offset-2 hover:underline">Open my record ›</Link>
+                <Link href={`/app/producers/${recordId}`} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Open My Record</Link>
               </dd>
             </dl>
           </FormBlock>

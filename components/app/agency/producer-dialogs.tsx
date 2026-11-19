@@ -54,10 +54,10 @@ export function OffboardDialog({ producerId, open, onOpenChange, onDone }: { pro
         {preview && (
           <div className="grid gap-3 text-sm">
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-lg border border-border p-3"><div className="text-xs font-semibold uppercase text-[var(--muted)]">Frozen balance <BasisChip basis="reported" /></div><div className="mt-1 text-xl font-semibold"><Money cents={preview.balanceCents} /></div><div className="text-xs text-[var(--muted)]">{preview.balanceCents < 0 ? "They owe the agency" : preview.balanceCents > 0 ? "The agency owes them" : "Nothing owed either way"}</div></div>
-              <div className="rounded-lg border border-border p-3"><div className="text-xs font-semibold uppercase text-[var(--muted)]">Still in the chargeback window</div><div className="mt-1 text-xl font-semibold tabular-nums">{preview.policiesInWindow} {preview.policiesInWindow === 1 ? "policy" : "policies"}</div><div className="text-xs text-[var(--muted)]"><Money cents={preview.advanceAtRiskCents} /> advanced, at risk</div></div>
+              <div className="rounded-lg border border-border p-3"><div className="text-xs font-semibold text-[var(--muted)]">Frozen balance <BasisChip basis="reported" /></div><div className="mt-1 text-xl font-semibold"><Money cents={preview.balanceCents} /></div><div className="text-xs text-[var(--muted)]">{preview.balanceCents < 0 ? "They owe the agency" : preview.balanceCents > 0 ? "The agency owes them" : "Nothing owed either way"}</div></div>
+              <div className="rounded-lg border border-border p-3"><div className="text-xs font-semibold text-[var(--muted)]">Still in the chargeback window</div><div className="mt-1 text-xl font-semibold tabular-nums">{preview.policiesInWindow} {preview.policiesInWindow === 1 ? "policy" : "policies"}</div><div className="text-xs text-[var(--muted)]"><Money cents={preview.advanceAtRiskCents} /> advanced, at risk</div></div>
             </div>
-            <p role="alert" className="rounded-md border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-2 font-medium text-[var(--error-ink)]">{preview.sentence}</p>
+            <p role="alert" className="m-0 font-medium text-[var(--error-ink)]">{preview.sentence}</p>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
               <dt className="text-[var(--muted)]">Their seat</dt><dd>released on {preview.seatReleasedOn} (end of period)</dd>
               <dt className="text-[var(--muted)]">Undo</dt><dd>reactivate until {preview.reactivatableUntil} (30 days)</dd>
@@ -65,7 +65,7 @@ export function OffboardDialog({ producerId, open, onOpenChange, onDone }: { pro
             <label className="grid gap-1 font-medium">Type OFFBOARD to confirm<input className={toolbarControl} value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" /></label>
           </div>
         )}
-        {error && <p role="alert" className="rounded-md border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-2 text-sm text-[var(--error-ink)]">{error}</p>}
+        {error && <p role="alert" className="m-0 text-sm font-medium text-[var(--error-ink)]">{error}</p>}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button variant="destructive" disabled={!preview || typed.trim() !== "OFFBOARD" || busy} onClick={confirm}>{busy ? "Offboarding…" : `Offboard ${preview?.displayName ?? ""}`.trim()}</Button>
@@ -95,7 +95,7 @@ export function StatusDialog({ producerId, name, action, open, onOpenChange, onD
           <DialogTitle>{action === "suspend" ? `Suspend ${name}` : `Reactivate ${name}`}</DialogTitle>
           <DialogDescription>{action === "suspend" ? "They cannot sign in to this agency or submit business. Their book and seat stay as they are. You can reactivate them in one click." : "They can sign in again. They can submit once their licences and appointments check out."}</DialogDescription>
         </DialogHeader>
-        {error && <p role="alert" className="rounded-md border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-2 text-sm text-[var(--error-ink)]">{error}</p>}
+        {error && <p role="alert" className="m-0 text-sm font-medium text-[var(--error-ink)]">{error}</p>}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button variant={action === "suspend" ? "destructive" : "default"} onClick={go} disabled={busy}>{busy ? "Saving…" : action === "suspend" ? "Suspend" : "Reactivate"}</Button>
@@ -135,7 +135,7 @@ export function ManagerDialog({ producerId, name, managers, open, onOpenChange, 
             </select>
           </label>
           <label className="grid gap-1 text-sm font-medium">From<input type="date" className={toolbarControl} value={from} onChange={(e) => setFrom(e.target.value)} /></label>
-          {error && <p role="alert" className="rounded-md border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-2 text-sm text-[var(--error-ink)]">{error}</p>}
+          {error && <p role="alert" className="m-0 text-sm font-medium text-[var(--error-ink)]">{error}</p>}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

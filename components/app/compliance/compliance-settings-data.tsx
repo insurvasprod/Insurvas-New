@@ -5,9 +5,9 @@ import { useCallback, useEffect, useState } from "react";
 import type { RuleRow } from "@/lib/compliance/retention";
 import type { Hold, Run } from "@/lib/compliance/retentionStore";
 import type { ComplianceSettings } from "@/lib/compliance/settingsStore";
-import { checkboxControl } from "@/components/ui/field";
 import { notify } from "@/lib/notify";
 
+import { CheckBox } from "@/components/ui/check-box";
 /**
  * LA-6.8 · what the Compliance settings page and its record pages read: one GET of
  * /api/app/compliance/settings, and the writes that go with it. Every write is validated, capped and
@@ -113,7 +113,7 @@ export function Recipients({ team, value, disabled, onChange, label }: { team: B
       <legend className="sr-only">{label}</legend>
       {people.map((p) => (
         <label key={p.id} className="flex items-center gap-2 text-sm text-[var(--ink)]">
-          <input type="checkbox" className={checkboxControl} checked={value.includes(p.id)} disabled={disabled} onChange={(e) => onChange(e.target.checked ? [...value, p.id] : value.filter((x) => x !== p.id))} />
+          <CheckBox checked={value.includes(p.id)} disabled={disabled} onChange={(e) => onChange(e.target.checked ? [...value, p.id] : value.filter((x) => x !== p.id))} />
           {p.name} <span className="text-[var(--muted)]">({p.role})</span>
         </label>
       ))}

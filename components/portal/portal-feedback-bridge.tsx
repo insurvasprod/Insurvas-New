@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { NOTIFY_OWNED_CLASS } from "@/lib/notify/sound";
 
+import { CheckBox } from "@/components/ui/check-box";
 export type PortalFeedbackKind = "success" | "failure" | "incoming";
 
 export type PortalSoundSettings = {
@@ -145,8 +146,8 @@ export function PortalSoundControls({ compact = false }: { compact?: boolean }) 
         <label className="portal-toggle"><span className="sr-only">Enable sound feedback</span><input type="checkbox" checked={settings.enabled} onChange={(event) => update({ enabled: event.target.checked })} /><span aria-hidden="true" /></label>
       </div>
       {settings.enabled && <div className="mt-3 space-y-3 text-sm">
-        <label className="flex items-center justify-between gap-3"><span>Mute sound</span><input type="checkbox" checked={settings.muted} onChange={(event) => update({ muted: event.target.checked })} /></label>
-        <label className="flex items-center justify-between gap-3"><span>Do not disturb</span><input type="checkbox" checked={settings.doNotDisturb} onChange={(event) => update({ doNotDisturb: event.target.checked })} /></label>
+        <label className="flex items-center justify-between gap-3"><span>Mute sound</span><CheckBox checked={settings.muted} onChange={(event) => update({ muted: event.target.checked })} /></label>
+        <label className="flex items-center justify-between gap-3"><span>Do not disturb</span><CheckBox checked={settings.doNotDisturb} onChange={(event) => update({ doNotDisturb: event.target.checked })} /></label>
         <label className="block">Volume <input className="mt-1 w-full accent-[var(--portal-primary)]" type="range" min="0" max="100" value={settings.volume} onChange={(event) => update({ volume: Number(event.target.value) })} /></label>
         <button type="button" className="portal-secondary-button" onClick={() => playPortalSound("success", settings, true)}>Test sound</button>
       </div>}

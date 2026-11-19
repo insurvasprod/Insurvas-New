@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { allRows } from "@/lib/ingestion/pages";
 import { csvCell } from "@/lib/csv/cell";
 import type { Json } from "@/lib/supabase/database.types";
 import { getEntitlement } from "@/lib/entitlements/get";
@@ -16,6 +17,8 @@ import { assertOutboundLimit } from "@/lib/metering/outbound";
 import { getUsPhone10Digits } from "@/lib/compliance/scrub";
 import { LeadPhoneScreeningError, leadPhoneValue, phoneEditNeedsScreening, phoneEditVerdict } from "@/lib/compliance/phoneEdit";
 import { linkLeadsToContacts } from "@/lib/contacts/leadLink";
+import { isSensitiveLeadKey, maskLead, maskLeadValues, restoreMaskedLeadValues, sensitiveLeadFieldKeys } from "@/lib/leadValues/sensitive";
+import { openLeadValues, sealLeadValues, ssnLookup } from "@/lib/leadValues/seal";
 import { fetchTemplateVersion } from "@/lib/templates/queries";
 import {
   DEFAULT_TEMPLATE_FORM,
@@ -1284,22 +1287,102 @@ export async function filterAgentLeads(
   /** visibleLeadIds(tenantId, scope), when the caller started it already (it needs no template). */
   visible?: PromiseLike<string[]>,
 ) {
+  return (await filterAgentLeadsPage(tenantId, template, search, filterField, filterValue, sortField, direction, scope, visible, null)).leads;
+}
+
+/** How many leads one page of the Leads board reads (2026-11-12: the board loads in pages, newest first). */
+export const LEADS_PAGE_SIZE = 500;
+
+/**
+ * A paged search runs in the database, over the template's fields, so it finds a lead on any page, not only on the one
+ * read: PostgREST's `or` of `values->>field ilike *term*`. The characters its filter syntax uses are taken out of the
+ * term. Null when there is nothing to search.
+ */
+function leadSearchFilter(template: AgentTemplate, search: string): string | null {
+  const term = search.replace(/[,()*%\\:"'.]/g, " ").replace(/\s+/g, " ").trim();
+  // Never the SSN or bank fields: a database search on them would answer "does any lead carry this number" without
+  // the reveal route's 2FA and audit (security review 2026-11, H-1). The in-memory search runs on masked values.
+  const sensitiveKeys = sensitiveLeadFieldKeys(template.template.fields);
+  const keys = template.template.fields.map((field) => field.field_key).filter((key) => /^[A-Za-z0-9_]+$/.test(key) && !isSensitiveLeadKey(key, sensitiveKeys));
+  return term && keys.length ? keys.map((key) => `values->>${key}.ilike.*${term}*`).join(",") : null;
+}
+
+/**
+ * Each pipeline's lead count, for the board's pipeline tabs once the board no longer holds every lead (2026-11-12):
+ * one head count per pipeline, under the same search as the page. Null for a pipeline whose count failed.
+ */
+export async function countAgentLeadsByPipeline(tenantId: string, template: AgentTemplate, pipelineIds: string[], search: string): Promise<Record<string, number | null>> {
+  const filter = leadSearchFilter(template, search);
+  const counts = await Promise.all(pipelineIds.map(async (pipelineId) => {
+    let query = getSupabaseServiceClient().from("agent_leads").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("tenant_template_id", template.tenant_template_id).eq("pipeline_id", pipelineId);
+    if (filter) query = query.or(filter);
+    const { count, error } = await query;
+    return [pipelineId, error ? null : (count ?? 0)] as const;
+  }));
+  return Object.fromEntries(counts);
+}
+
+/**
+ * filterAgentLeads, one page at a time (`page` from 0), newest first; `page: null` reads every lead, three pages at a
+ * time. Before 2026-11-12 the read was one request, which PostgREST stops at 1,000 rows without saying so, so a
+ * bigger book lost its older leads from the board. `hasMore`: a later page may hold more. The search
+ * and filter apply within the page, so a page can come back empty with more after it. A narrowed agency session
+ * reads its producers' leads by id, all at once, as before.
+ */
+export async function filterAgentLeadsPage(
+  tenantId: string,
+  template: AgentTemplate,
+  search: string,
+  filterField: string,
+  filterValue: string,
+  sortField: string,
+  direction: "asc" | "desc",
+  scope: ProducerScope,
+  visible: PromiseLike<string[]> | undefined,
+  page: number | null,
+  /** One pipeline's leads (the board shows one at a time); null for every pipeline. */
+  pipelineId: string | null = null,
+) {
+  let hasMore = false;
+  // SSN and bank fields are neither filters nor sort keys: a filter on them would answer "does any lead
+  // carry this number" without the reveal route's 2FA and audit (security review 2026-11, H-1).
+  const sensitiveKeys = sensitiveLeadFieldKeys(template.template.fields);
   const allowedFields = new Set(
-    template.template.fields.map((field) => field.field_key),
+    template.template.fields.map((field) => field.field_key).filter((key) => !isSensitiveLeadKey(key, sensitiveKeys)),
   );
+  const searchFilter = page !== null ? leadSearchFilter(template, search) : null;
   const safeFilterField = allowedFields.has(filterField) ? filterField : "";
   const safeSortField = allowedFields.has(sortField) ? sortField : "";
-  const columns = "id, product_line, pipeline_id, stage_id, values, created_by, screening_outcome, screening_warning, screening_checked_at, created_at, updated_at";
-  const base = () => getSupabaseServiceClient()
-    .from("agent_leads")
-    .select(columns)
-    .eq("tenant_id", tenantId)
-    .eq("tenant_template_id", template.tenant_template_id);
+  // stage_entered_at (20260925100000) rides here so leadWorkFacts need not read every lead again by id (speed pass
+  // 2026-11-12). The generated types predate the column, so the select is typed as the list without it; the route
+  // reads it untyped.
+  const columns = "id, product_line, pipeline_id, stage_id, values, created_by, screening_outcome, screening_warning, screening_checked_at, created_at, updated_at, stage_entered_at" as "id, product_line, pipeline_id, stage_id, values, created_by, screening_outcome, screening_warning, screening_checked_at, created_at, updated_at";
+  const base = () => {
+    let query = getSupabaseServiceClient()
+      .from("agent_leads")
+      .select(columns)
+      .eq("tenant_id", tenantId)
+      .eq("tenant_template_id", template.tenant_template_id);
+    if (pipelineId) query = query.eq("pipeline_id", pipelineId);
+    if (searchFilter) query = query.or(searchFilter);
+    return query;
+  };
   let data: Awaited<ReturnType<typeof base>>["data"];
   if (scope === null) {
-    const result = await base().order("created_at", { ascending: false });
-    if (result.error) throw new Error(`Could not load leads: ${result.error.message}`);
-    data = result.data;
+    // created_at then id, so a page boundary never splits or repeats an import batch that shares one created_at
+    // (agent_leads_tenant_created_id_idx serves this order).
+    const ordered = () => base().order("created_at", { ascending: false }).order("id", { ascending: false });
+    if (page === null) {
+      const result = await allRows(ordered, 50_000);
+      if (result.error) throw new Error(`Could not load leads: ${result.error.message}`);
+      data = result.rows as typeof data;
+    } else {
+      const from = Math.max(0, page) * LEADS_PAGE_SIZE;
+      const result = await ordered().range(from, from + LEADS_PAGE_SIZE - 1);
+      if (result.error) throw new Error(`Could not load leads: ${result.error.message}`);
+      data = result.data;
+      hasMore = (result.data?.length ?? 0) === LEADS_PAGE_SIZE;
+    }
   } else {
     // A narrowed agency session: only the leads its producers hold, read by id so the list (which the
     // board counts and totals from) never contains another producer's lead.
@@ -1307,13 +1390,13 @@ export async function filterAgentLeads(
     data = (await readByLeadIds(ids, (chunk) => base().in("id", chunk), "leads"))
       .sort((a, b) => b.created_at.localeCompare(a.created_at));
   }
-  const normalizedSearch = search.toLocaleLowerCase();
+  // A paged read searched in the database already; the whole-book read (and a narrowed session's) searches here.
+  const normalizedSearch = searchFilter ? "" : search.toLocaleLowerCase();
   const normalizedFilter = filterValue.toLocaleLowerCase();
+  // Masked before the search runs, so free text matches what the board shows: the last four of an SSN,
+  // never the whole number.
   const leads = (data ?? [])
-    .map((lead) => ({
-      ...lead,
-      values: (lead.values ?? {}) as Record<string, unknown>,
-    }))
+    .map((lead) => maskLead(lead, template.template.fields))
     .filter(
       (lead) =>
         !normalizedSearch ||
@@ -1340,7 +1423,7 @@ export async function filterAgentLeads(
           { numeric: true },
         ) * (direction === "desc" ? -1 : 1),
     );
-  return leads;
+  return { leads, hasMore };
 }
 
 /** Each lead with the name of the person who submitted it ("Workspace" when nobody, or unknown). */
@@ -1408,10 +1491,7 @@ export async function searchAgentLeads(
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
       .slice(0, safeLimit);
   }
-  return (data ?? []).map((lead) => ({
-    ...lead,
-    values: (lead.values ?? {}) as Record<string, unknown>,
-  }));
+  return (data ?? []).map((lead) => maskLead(lead, template.template.fields));
 }
 
 export async function createAgentLead(
@@ -1465,7 +1545,8 @@ export async function createAgentLead(
       product_line: template.template.product_code,
       pipeline_id: stage.pipelineId,
       stage_id: stage.stage.id,
-      values: normalized.values as Json,
+      // SSN and bank values are stored sealed (lib/leadValues/seal.ts).
+      values: sealLeadValues(tenantId, normalized.values, template.template.fields) as Json,
       created_by: userId,
     })
     .select(
@@ -1487,7 +1568,8 @@ export async function createAgentLead(
     status: "unclaimed",
   });
   if (queue.error && queue.error.code !== "23505") console.error("[leads] the work item for a hand-added lead could not be created", queue.error);
-  return data;
+  // The only caller returns this to the browser: SSN and bank values go back masked (H-1).
+  return maskLead(data, template.template.fields);
 }
 
 type ImportedLeadResult = {
@@ -1833,7 +1915,7 @@ export async function importAgentLeads(
   // The ledger is still written, on its own: commitLeadImport with no items records it alone.
   const commit = async (items: Array<Record<string, unknown>>) => {
     try {
-      return await commitLeadImport({ tenantId, userId, items, batchId: null, spend: null, campaignId: campaignId ?? null, rejections: ledger });
+      return await commitLeadImport({ tenantId, userId, items, batchId: null, spend: null, campaignId: campaignId ?? null, rejections: ledger, fields: template.template.fields });
     } catch (error) {
       // No batch and no spend on this path, so the only refusal is a database one, already worded.
       throw error instanceof ImportCommitRefusal ? new Error(error.message) : error;
@@ -1953,14 +2035,6 @@ export async function updateAgentLead(
   stageIdentifier: string,
   actorId: string,
 ) {
-  const normalized = normalizeFormValues(
-    template.template.fields,
-    template.template.form_definition,
-    values,
-  );
-  if (normalized.error) throw new Error(normalized.error);
-  // A changed phone number is screened as import and intake screen one (lib/compliance/phoneEdit.ts):
-  // a hit or an outage refuses the whole edit, so the number never lands on the lead unscreened.
   const before = await getSupabaseServiceClient()
     .from("agent_leads")
     .select("values")
@@ -1969,6 +2043,19 @@ export async function updateAgentLead(
     .maybeSingle();
   if (before.error) throw new Error(`Could not read the lead: ${before.error.message}`);
   if (!before.data) throw new Error("Lead not found");
+  // The browser holds SSN and bank values masked ("•••• 6789") and the lead page sends the whole object
+  // back on a stage change: put the stored value back wherever the mask came in, before validation, so a
+  // save never replaces a real number with its mask (H-1).
+  // Restored from the opened values, so validation (an ABA checksum, a nine-digit SSN) sees the number,
+  // not its sealed form; sealed again on the write below.
+  const normalized = normalizeFormValues(
+    template.template.fields,
+    template.template.form_definition,
+    restoreMaskedLeadValues(values, openLeadValues(tenantId, before.data.values), template.template.fields),
+  );
+  if (normalized.error) throw new Error(normalized.error);
+  // A changed phone number is screened as import and intake screen one (lib/compliance/phoneEdit.ts):
+  // a hit or an outage refuses the whole edit, so the number never lands on the lead unscreened.
   let screening: Pick<ScreeningDecision, "resultId" | "version" | "outcome" | "warning" | "checkedAt"> | null = null;
   if (phoneEditNeedsScreening(before.data.values, normalized.values)) {
     const decision = await screenPartnerPhone({ tenantId, partnerId: null, userId: actorId, phone: leadPhoneValue(normalized.values), leadId });
@@ -2003,7 +2090,7 @@ export async function updateAgentLead(
   const { data, error } = await getSupabaseServiceClient()
     .from("agent_leads")
     .update({
-      values: normalized.values as Json,
+      values: sealLeadValues(tenantId, normalized.values, template.template.fields) as Json,
       product_line: template.template.product_code,
       definition_version: template.assignment.definition_version,
       pipeline_id: pipelineId,
@@ -2045,7 +2132,8 @@ export async function updateAgentLead(
     throw new Error(`Could not update lead work item: ${queueUpdate.error.message}`);
   if (dealUpdate.error)
     throw new Error(`Could not update lead deal: ${dealUpdate.error.message}`);
-  return data;
+  // Returned to the browser by PATCH /api/app/leads/[id]: masked like every other lead read (H-1).
+  return maskLead(data, template.template.fields);
 }
 
 function ageInYears(value: string) {
@@ -2664,15 +2752,13 @@ export async function findPartnerLeadDuplicates(
   const ssn = typeof ssnValue === "string" ? ssnValue.replace(/\D/g, "") : null;
   const name = fullNameForDuplicate(values);
   if (!phoneDigits && !ssn) return [];
-  const { data, error } = await getSupabaseServiceClient().rpc(
-    "find_partner_lead_duplicates",
-    {
-      p_tenant_id: tenantId,
-      p_phone_digits: phoneDigits,
-      p_full_name: name,
-      p_ssn_digits: ssn,
-    },
-  );
+  // A sealed SSN on a lead matches by its keyed lookup (lib/leadValues/seal.ts); the plaintext digits still
+  // match leads written before the backfill. Before 20261117100000 the function has no lookup argument
+  // (PGRST202), so the call falls back to the plaintext match alone.
+  const args = { p_tenant_id: tenantId, p_phone_digits: phoneDigits, p_full_name: name, p_ssn_digits: ssn };
+  const lookup = ssn ? ssnLookup(tenantId, ssn) : null;
+  let { data, error } = await getSupabaseServiceClient().rpc("find_partner_lead_duplicates", { ...args, p_ssn_lookup: lookup } as typeof args);
+  if (error?.code === "PGRST202") ({ data, error } = await getSupabaseServiceClient().rpc("find_partner_lead_duplicates", args));
   if (error)
     throw new Error(`Could not check existing leads: ${error.message}`);
   return (
@@ -2804,7 +2890,8 @@ export async function createPartnerLead(
     screening.warning?.code === "dnc" &&
     Boolean(options.screeningWarningAcknowledged);
   const metadata = {
-    values: normalized.values as Json,
+    // SSN and bank values are stored sealed (lib/leadValues/seal.ts), on a replay too.
+    values: sealLeadValues(tenantId, normalized.values, template.template.fields) as Json,
     screening_result_id: screening.resultId,
     screening_version: screening.version,
     screening_outcome: screening.outcome,
@@ -2873,7 +2960,7 @@ export async function createPartnerLead(
     submission_id: submissionId,
     pipeline_id: stage.pipelineId,
     stage_id: stage.stage.id,
-    values: normalized.values as Json,
+    values: metadata.values,
     created_by: userId,
     partner_submission_profile_id:
       template.partner_submission_profile_id ?? null,
@@ -3072,7 +3159,10 @@ export async function exportAgentLeads(
     range(from: number, to: number): PageQuery;
   };
   const db = getSupabaseServiceClient() as unknown as { from(table: string): { select(columns: string): PageQuery } };
-  const allowedFields = new Set(template.template.fields.map((field) => field.field_key));
+  // The file carries SSN and bank values masked to their last four, like the board (H-1): a spreadsheet
+  // leaves the audited reveal path for good. Those fields are neither filters nor sort keys either.
+  const sensitiveKeys = sensitiveLeadFieldKeys(template.template.fields);
+  const allowedFields = new Set(template.template.fields.map((field) => field.field_key).filter((key) => !isSensitiveLeadKey(key, sensitiveKeys)));
   const safeFilterField = allowedFields.has(filterField) ? filterField : "";
   const safeSortField = allowedFields.has(sortField) ? sortField : "";
   const product = template.template.product_code.replace(/[^a-z0-9_]/gi, "");
@@ -3088,7 +3178,7 @@ export async function exportAgentLeads(
       .or(`tenant_template_id.eq.${template.tenant_template_id},and(tenant_template_id.is.null,product_line.eq.${product})`)
       .in("id", chunk), "leads");
     rows.sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id));
-    for (const lead of rows) leads.push({ ...lead, values: (lead.values ?? {}) as Record<string, unknown> });
+    for (const lead of rows) leads.push({ ...lead, values: maskLeadValues(lead.values, template.template.fields) });
   }
   for (let from = 0; scope === null; from += PAGE) {
     const page = await db
@@ -3100,7 +3190,7 @@ export async function exportAgentLeads(
       .order("id", { ascending: true })
       .range(from, from + PAGE - 1);
     if (page.error) throw new Error(`Could not load leads: ${page.error.message}`);
-    for (const lead of page.data ?? []) leads.push({ ...lead, values: (lead.values ?? {}) as Record<string, unknown> });
+    for (const lead of page.data ?? []) leads.push({ ...lead, values: maskLeadValues(lead.values, template.template.fields) });
     if (!page.data || page.data.length < PAGE) break;
   }
   const needle = search.toLocaleLowerCase();

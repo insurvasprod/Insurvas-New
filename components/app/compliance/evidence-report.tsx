@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition, type FormEvent } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, control } from "@/components/ui/field";
@@ -19,6 +19,7 @@ import { LinkRow } from "@/components/app/book/setup/link-row";
 import { bookLine, formatPhone, gapDay, type BookGapLine } from "@/lib/compliance/evidenceGaps";
 import type { BookScan, EvidenceReport, ReportGap, ReportRun, TimelineItem } from "@/lib/compliance/evidenceReport";
 import { SEVERITY_LABEL, SEVERITY_TONE, evidenceHref, evidenceQuery, rangeProblem, runHref, runScope, whenShort, type EvidenceQuery, type EvidenceView } from "@/lib/compliance/evidenceView";
+import { cn } from "@/lib/utils";
 
 /**
  * LA-6.3 · the evidence report on screen, and with no number the book-wide gap scan. PDF and CSV come from
@@ -245,7 +246,7 @@ export function ReportView({ report, view, query }: { report: EvidenceReport; vi
                     <td className="max-w-[280px] truncate whitespace-nowrap" title={c.sourceUrl ?? undefined}>{c.certificateId ?? "—"}</td>
                     <td className={muted} title={`Captured ${whenShort(c.capturedAt)} UTC`}>{c.consentAt ? whenShort(c.consentAt) : "Not stated"}</td>
                     <td><StatusChip tone={c.valid ? "good" : "danger"} title={c.validity}>{c.valid ? "Valid" : "Not valid"}</StatusChip></td>
-                    <td className={next}><Link href={`/app/consent/${c.artefactId}`} className="hover:underline">Open ›</Link></td>
+                    <td className={next}><Link href={`/app/consent/${c.artefactId}`} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Open</Link></td>
                   </LinkRow>
                 ))}
               </tbody>
@@ -263,7 +264,7 @@ export function ReportView({ report, view, query }: { report: EvidenceReport; vi
                     <td className={first}>{l.name ?? "No name"}</td>
                     <td className="whitespace-nowrap">{l.partner ? `Partner: ${l.partner}` : l.campaign ? `Campaign: ${l.campaign}` : "Entered directly"}</td>
                     <td className={muted}>{gapDay(l.createdAt)}</td>
-                    <td className={next}><Link href={`/app/leads/${l.leadId}`} className="hover:underline">Open lead ›</Link></td>
+                    <td className={next}><Link href={`/app/leads/${l.leadId}`} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Open Lead</Link></td>
                   </LinkRow>
                 ))}
               </tbody>
@@ -417,7 +418,7 @@ export function FindingView({ scan, query, category }: { scan: BookScan; query: 
                 <td className={`${first} tabular-nums`}>{formatPhone(n.phone)}</td>
                 <td className={num}>{n.count.toLocaleString("en-US")}</td>
                 <td className={muted}>{n.firstAt ? gapDay(n.firstAt) : "—"}</td>
-                <td className={next}><Link href={report(n.phone)} className="hover:underline">Open report ›</Link></td>
+                <td className={next}><Link href={report(n.phone)} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Open Report</Link></td>
               </LinkRow>
             ))}
           </tbody>

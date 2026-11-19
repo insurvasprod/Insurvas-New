@@ -60,7 +60,7 @@ export async function RoleGateNotice({
    * (`action`), and "Add a teammate" when the owner's plan has a seat to fill.
    */
   reason?: "role" | "agency" | "solo";
-  /** Solo: where the work this page did happens instead (the dialer, Inbound, the calendar). */
+  /** Where the work this page did happens instead: for solo, the dialer, Inbound or the calendar; for a role gate, the page that role uses (an owner on My pay → Producer pay). Drawn as the first button. */
   action?: { href: string; label: string };
 }) {
   const context = await resolveTenantContext();
@@ -124,17 +124,24 @@ export async function RoleGateNotice({
               {roleLabel && <>You are signed in as {withArticle(roleLabel).split(" ")[0]} <strong>{roleLabel}</strong>. </>}
               {detail}
             </p>
-            {reason === "role" && <p>
+            {reason === "role" && role !== "owner" && <p>
               This is not a plan limit.{" "}
               {agencyHasIt && facts.agencyName
                 ? `${facts.agencyName} has ${featureLabel}, and your owner can change your role if this is wrong.`
                 : `Your ${facts.agencyName ? `owner at ${facts.agencyName}` : "account owner"} can change your role if this is wrong.`}
             </p>}
             <div className="portal-gate-actions">
-              <Button asChild>
+              {/* The page this role uses instead comes first when there is one (QA pass 2026-11: an owner on My pay
+                  was offered only "Back to your dashboard" and "Ask your owner", i.e. to ask themself). */}
+              {action && (
+                <Button asChild>
+                  <Link href={action.href}>{action.label}</Link>
+                </Button>
+              )}
+              <Button asChild variant={action ? "outline" : "default"}>
                 <Link href="/app/dashboard">Back to your dashboard</Link>
               </Button>
-              {askHref && (
+              {askHref && role !== "owner" && (
                 <Button asChild variant="outline">
                   <a href={askHref}>Ask your owner</a>
                 </Button>

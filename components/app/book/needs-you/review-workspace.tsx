@@ -10,11 +10,11 @@ import { refreshStepCounts } from "@/components/app/step-frame/step-rail";
 import { Button } from "@/components/ui/button";
 import { cardHead, cardInset, cardSurface } from "@/components/ui/card";
 import { ToolbarSearch } from "@/components/ui/data-toolbar";
-import { checkboxControl } from "@/components/ui/field";
 import { EmptyState, LoadingRows } from "@/components/ui/page-states";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { StatusChip } from "@/components/ui/status-chip";
 import { fillLine } from "@/components/ui/table-card-layout";
+import { useRowExit } from "@/components/ui/use-row-exit";
 import { cn } from "@/lib/utils";
 import { fileDay } from "@/lib/ingestion/constants";
 import type { MatchField } from "@/lib/ingestion/policyMatching";
@@ -23,6 +23,7 @@ import type { QueueItemRow } from "@/lib/ingestion/exceptionQueuesStore";
 import type { ItemDetail } from "@/lib/needsYou/store";
 import { notify } from "@/lib/notify";
 
+import { CheckBox } from "@/components/ui/check-box";
 /** One item of the queue, as the server read it. */
 export type ReviewItem = { kind: NeedsYouKind; id: string; about: string; why: string; who: string; ageDays: number; href: string; /** lib/needsYou/kinds.ts searchText */ search: string };
 
@@ -53,6 +54,11 @@ export function ReviewWorkspace({ items, startAt, source, backHref, readOnly, in
   const [currentKey, setCurrentKey] = useState<string | null>(items[startAt] ? keyOf(items[startAt]) : items[0] ? keyOf(items[0]) : null);
   const [query, setQuery] = useState(initialQuery);
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
+  // Tier 1 motion (2026-11-17): an answered item leaves the queue (fade, slide, its height closes) and is then off
+  // it; ticked items answered together leave 30ms apart before the refresh takes them. The count above keeps score.
+  const leave = useRowExit(items);
+  const exitRow = leave.exit;
+  const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
   const answers = useRef<Answer[]>([]);
   // The question on screen names its answers (for the number keys); a callback, so a child never writes the ref.
   const register = useCallback((list: Answer[]) => { answers.current = list; }, []);
@@ -83,7 +89,7 @@ export function ReviewWorkspace({ items, startAt, source, backHref, readOnly, in
     return after.find((item) => !skip.has(keyOf(item)) && keyOf(item) !== key) ?? null;
   }, [shown]);
 
-  const finish = useCallback((label: string) => {
+  const finish = useCallback((label: string, refresh?: () => void) => {
     if (!current) return;
     const key = keyOf(current);
     const next = new Map(done).set(key, label);
@@ -91,7 +97,8 @@ export function ReviewWorkspace({ items, startAt, source, backHref, readOnly, in
     refreshStepCounts();
     const following = nextAfter(key, next);
     setCurrentKey(following ? keyOf(following) : null);
-  }, [current, done, nextAfter]);
+    void exitRow(key, () => { setGone((now) => new Set(now).add(key)); refresh?.(); });
+  }, [current, done, nextAfter, exitRow]);
 
   const skip = useCallback(() => {
     if (!current) return;
@@ -100,6 +107,7 @@ export function ReviewWorkspace({ items, startAt, source, backHref, readOnly, in
   }, [current, done, nextAfter]);
 
 
+  const exitNoSale = (ids: string[], then: () => void) => leave.exit(ids.map((id) => keyOf({ kind: "no-sale", id })), then);
   const toggle = (key: string) => setTicked((now) => { const next = new Set(now); if (next.has(key)) next.delete(key); else next.add(key); return next; });
   const allTicked = bulkable.length > 0 && bulkable.every((item) => ticked.has(keyOf(item)));
   const total = items.length;
@@ -143,20 +151,20 @@ export function ReviewWorkspace({ items, startAt, source, backHref, readOnly, in
           </div>
           {bulkable.length > 1 && !readOnly && (
             <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-sm text-foreground">
-              <input type="checkbox" aria-label="Select every No sale yet item" className={checkboxControl} checked={allTicked} onChange={() => setTicked(allTicked ? new Set() : new Set(bulkable.map(keyOf)))} />
+              <CheckBox aria-label="Select every No sale yet item" checked={allTicked} onChange={() => setTicked(allTicked ? new Set() : new Set(bulkable.map(keyOf)))} />
               <span>Select all {bulkable.length.toLocaleString("en-US")}</span>
               <span className="ml-auto">Oldest first</span>
             </div>
           )}
           <ul className="m-0 max-h-[40vh] min-h-0 flex-1 list-none overflow-y-auto p-0 lg:max-h-none" aria-label="Queue">
-            {shown.slice(0, SHOWN).map((item) => {
+            {shown.filter((item) => !gone.has(keyOf(item))).slice(0, SHOWN).map((item) => {
               const key = keyOf(item);
               const on = current !== null && keyOf(current) === key;
               const outcome = done.get(key);
               return (
-                <li key={key} className={cn("flex items-center gap-3 border-b border-[var(--border)] px-3 py-3 transition-[background-color,box-shadow,opacity] duration-[var(--t-panel)]", on && "bg-[var(--surface-alt)] shadow-[inset_3px_0_0_var(--primary)]", outcome && "opacity-50")}>
+                <li key={key} {...leave.rowProps(key)} className={cn("flex items-center gap-3 border-b border-[var(--border)] px-3 py-3 transition-[background-color,box-shadow,opacity] duration-[var(--t-panel)]", on && "bg-[var(--surface-alt)] shadow-[inset_3px_0_0_var(--primary)]", outcome && "opacity-50")}>
                   {item.kind === "no-sale" && !readOnly && !outcome
-                    ? <input type="checkbox" aria-label={`Select ${item.about}`} className={checkboxControl} checked={ticked.has(key)} onChange={() => toggle(key)} />
+                    ? <CheckBox aria-label={`Select ${item.about}`} checked={ticked.has(key)} onChange={() => toggle(key)} />
                     : <span className="size-4 shrink-0" aria-hidden="true" />}
                   <button type="button" onClick={() => setCurrentKey(key)} aria-current={on ? "true" : undefined} className="min-w-0 flex-1 text-left">
                     <span className="block whitespace-nowrap text-sm font-medium text-foreground">{item.about}</span>
@@ -170,8 +178,8 @@ export function ReviewWorkspace({ items, startAt, source, backHref, readOnly, in
             <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] bg-[var(--surface-alt)] p-3">
               <span className="text-sm text-foreground">{tickedIds.length.toLocaleString("en-US")} selected</span>
               <span className="ml-auto flex gap-2">
-                <BulkResolve ids={tickedIds} resolution="not_mine" noun="items" label="Not ours" variant="outline" />
-                <BulkResolve ids={tickedIds} resolution="confirm_client" noun="clients" label={`Mark ${tickedIds.length.toLocaleString("en-US")} as mine`} />
+                <BulkResolve ids={tickedIds} resolution="not_mine" noun="items" label="Not ours" variant="outline" exitRows={exitNoSale} />
+                <BulkResolve ids={tickedIds} resolution="confirm_client" noun="clients" label={`Mark ${tickedIds.length.toLocaleString("en-US")} as mine`} exitRows={exitNoSale} />
               </span>
             </div>
           ) : shown.length > SHOWN ? (
@@ -201,7 +209,7 @@ export function DoneForNow({ href }: { href: string }) {
 type Loaded = { state: "loading" } | { state: "ready"; detail: ItemDetail } | { state: "gone"; message: string };
 
 /** One item's question: read its Decide part, then ask it in the kind's own words. */
-function Question({ item, readOnly, register, onDone, onSkip, hasNext }: { item: ReviewItem; readOnly: boolean; register: (list: Answer[]) => void; onDone: (label: string) => void; onSkip: () => void; hasNext: boolean }) {
+function Question({ item, readOnly, register, onDone, onSkip, hasNext }: { item: ReviewItem; readOnly: boolean; register: (list: Answer[]) => void; onDone: (label: string, refresh?: () => void) => void; onSkip: () => void; hasNext: boolean }) {
   const [loaded, setLoaded] = useState<Loaded>({ state: "loading" });
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -266,7 +274,7 @@ function Question({ item, readOnly, register, onDone, onSkip, hasNext }: { item:
   // Every other kind: the item's own Decide form in place.
   return (
     <div className="flex flex-col gap-5 p-4 sm:p-6">{head}
-      <ItemDecide detail={detail} nextHref={null} listHref={item.href} readOnly={readOnly} inline={{ hasNext, onDone: () => onDone("Saved"), onSkip }} />
+      <ItemDecide detail={detail} nextHref={null} listHref={item.href} readOnly={readOnly} inline={{ hasNext, onDone: (_how, refresh) => onDone("Saved", refresh), onSkip }} />
     </div>
   );
 }

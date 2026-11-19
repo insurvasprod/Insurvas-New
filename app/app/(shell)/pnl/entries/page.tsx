@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { lineKey, namedRange, readableDate, resolvePeriod, statementOrder } from "@/lib/accounting/pnlCore";
@@ -16,6 +17,8 @@ import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { EmptyState, ErrorState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
+import { StreamSection, TitleShape } from "@/components/ui/stream-section";
+import { accountingStepLabel } from "@/lib/accounting/steps";
 import { TableCard } from "@/components/ui/table-card";
 
 /**
@@ -47,47 +50,93 @@ export default async function PnlEntriesPage({ searchParams }: { searchParams: P
   const category = q.category ?? null;
   const page = Math.max(0, Number(q.page ?? 0) || 0);
 
-  const settings = await reportingSettings(tenantId);
-  const period = resolvePeriod(q, { basis: settings.basis, fyStartMonth: settings.fyStartMonth, today: new Date().toISOString().slice(0, 10) });
-  if ("error" in period) return <AccountingPage step="pnl"><ErrorState detail={period.error} /></AccountingPage>;
-  const query = queryFor(period.kind, period.basis, period.range);
-  const back = pnlHref(query);
-  const notOnStatement = (
-    <AccountingPage step="pnl">
-      <TableCard><EmptyState title="This line is not on the statement." hint={`Nothing on the ${period.range.label} statement matches this address.`} action={<Button asChild variant="outline"><Link href={back}>Back to the statement</Link></Button>} /></TableCard>
+  const validLine = Boolean(section) && /^[a-z_]{2,40}$/.test(entryType) && !(sourceId && !UUID.test(sourceId));
+  // Frame first (UI-CONSISTENCY §7a): the settings, the statement and the entries are read now; the line's name, its
+  // ‹ › and its figures stream in under the trail.
+  const read: LineRead = (async () => {
+    const settings = await reportingSettings(tenantId);
+    const period = resolvePeriod(q, { basis: settings.basis, fyStartMonth: settings.fyStartMonth, today: new Date().toISOString().slice(0, 10) });
+    if ("error" in period) return { kind: "invalid", detail: period.error } as const;
+    const query = queryFor(period.kind, period.basis, period.range);
+    const back = pnlHref(query);
+    if (!section || !validLine) return { kind: "missing", label: period.range.label, back } as const;
+    // The statement (for the line's name, its neighbours and its figures) and the entries start together.
+    const full = statementRows(tenantId, period);
+    full.catch(() => {});
+    let result: Awaited<ReturnType<typeof drill>> | null = null;
+    let problem: string | null = null;
+    try {
+      result = await drill(tenantId, { range: period.range, basis: period.basis, section, entryType, sourceType, sourceId, category, page });
+    } catch (error) {
+      if (!(error instanceof PnlError)) throw error;
+      problem = error.message;
+    }
+    let statement: Awaited<typeof full> | null = null;
+    try {
+      statement = await full;
+    } catch (error) {
+      if (!(error instanceof PnlError)) throw error;
+      problem = error.message;
+    }
+    if (problem || !statement) return { kind: "invalid", detail: problem ?? "The statement could not be read." } as const;
+    const order = statementOrder(statement.rows);
+    const key = lineKey({ section, entryType, sourceType, sourceId, sourceName: category });
+    const row = order.find((r) => r.key === key);
+    if (!row) return { kind: "missing", label: period.range.label, back } as const;
+    const { previous, next } = neighboursOf(order, key, (r) => r.key);
+    const neighbour = (n: typeof row | null) => (n ? { href: entriesHref(n.line, query), label: lineLabel(n.line) } : null);
+    return { kind: "line", settings, period, query, back, statement, row, result, title: `${lineLabel(row.line)} · ${period.range.label}`, previous: neighbour(previous), next: neighbour(next) } as const;
+  })();
+
+  return (
+    <AccountingPage
+      step="pnl"
+      title={<Suspense fallback={<TitleShape />}><LineTitle read={read} /></Suspense>}
+      stepper={<Suspense fallback={<span aria-hidden="true" className="h-9" />}><LineStepper read={read} /></Suspense>}
+    >
+      <StreamSection shape="strip+table">
+        <LineBody read={read} q={q} page={page} />
+      </StreamSection>
     </AccountingPage>
   );
-  if (!section || !/^[a-z_]{2,40}$/.test(entryType) || (sourceId && !UUID.test(sourceId))) return notOnStatement;
+}
 
-  // The statement (for the line's name, its neighbours and its figures) and the entries start together.
-  const full = statementRows(tenantId, period);
-  full.catch(() => {});
-  let result: Awaited<ReturnType<typeof drill>> | null = null;
-  let problem: string | null = null;
-  try {
-    result = await drill(tenantId, { range: period.range, basis: period.basis, section, entryType, sourceType, sourceId, category, page });
-  } catch (error) {
-    if (!(error instanceof PnlError)) throw error;
-    problem = error.message;
+type LineRead = Promise<
+  | { kind: "invalid"; detail: string }
+  | { kind: "missing"; label: string; back: string }
+  | {
+    kind: "line";
+    settings: Awaited<ReturnType<typeof reportingSettings>>;
+    period: Exclude<ReturnType<typeof resolvePeriod>, { error: string }>;
+    query: ReturnType<typeof queryFor>;
+    back: string;
+    statement: Awaited<ReturnType<typeof statementRows>>;
+    row: ReturnType<typeof statementOrder>[number];
+    result: Awaited<ReturnType<typeof drill>> | null;
+    title: string;
+    previous: { href: string; label: string } | null;
+    next: { href: string; label: string } | null;
   }
-  let statement: Awaited<typeof full> | null = null;
-  try {
-    statement = await full;
-  } catch (error) {
-    if (!(error instanceof PnlError)) throw error;
-    problem = error.message;
+>;
+
+async function LineTitle({ read }: { read: LineRead }) {
+  const line = await read;
+  return line.kind === "line" ? line.title : accountingStepLabel("pnl");
+}
+
+async function LineStepper({ read }: { read: LineRead }) {
+  const line = await read;
+  return line.kind === "line" ? <RecordStepper noun="line" previous={line.previous} next={line.next} /> : null;
+}
+
+async function LineBody({ read, q, page }: { read: LineRead; q: Search; page: number }) {
+  const found = await read;
+  if (found.kind === "invalid") return <ErrorState detail={found.detail} />;
+  if (found.kind === "missing") {
+    return <TableCard><EmptyState title="This line is not on the statement." hint={`Nothing on the ${found.label} statement matches this address.`} action={<Button asChild variant="outline"><Link href={found.back}>Back to the statement</Link></Button>} /></TableCard>;
   }
-  if (problem || !statement) return <AccountingPage step="pnl"><ErrorState detail={problem ?? "The statement could not be read."} /></AccountingPage>;
-
-  const order = statementOrder(statement.rows);
-  const key = lineKey({ section, entryType, sourceType, sourceId, sourceName: category });
-  const row = order.find((r) => r.key === key);
-  if (!row) return notOnStatement;
-
+  const { settings, period, query, back, statement, row, result } = found;
   const line = row.line;
-  const title = `${lineLabel(line)} · ${period.range.label}`;
-  const { previous, next } = neighboursOf(order, key, (r) => r.key);
-  const neighbour = (n: typeof row | null) => (n ? { href: entriesHref(n.line, query), label: lineLabel(n.line) } : null);
   const prevQuery = queryFor(period.kind, period.basis, statement.previous);
   const cash = period.basis === "cash";
   const basisWord = cash ? "cash basis" : "accrual basis";
@@ -97,7 +146,7 @@ export default async function PnlEntriesPage({ searchParams }: { searchParams: P
   const money = formatCentsAsCurrency;
 
   return (
-    <AccountingPage step="pnl" title={title} stepper={<RecordStepper noun="line" previous={neighbour(previous)} next={neighbour(next)} />}>
+    <>
       <StatStrip label="This line">
         <StatTile label="This line" value={row.cur === null ? "—" : money(row.cur)} footnote={row.cur === null ? `nothing in ${period.range.label}` : `${line.entries} entr${line.entries === 1 ? "y" : "ies"} · ${basisWord}`} />
         <StatTile label={period.kind === "custom" ? "Period before" : `${period.kind[0].toUpperCase()}${period.kind.slice(1)} before`} value={row.prev === null ? "—" : money(row.prev)} footnote={namedRange(period.kind, statement.previous, settings.fyStartMonth)} href={entriesHref(line, prevQuery)} />
@@ -129,6 +178,6 @@ export default async function PnlEntriesPage({ searchParams }: { searchParams: P
           </table>
         )}
       </PagedTableCard>
-    </AccountingPage>
+    </>
   );
 }

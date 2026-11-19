@@ -1,3 +1,5 @@
+import { Suspense, type ReactNode } from "react";
+
 import { scopeFor } from "@/lib/agency/visibility";
 import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { ExceptionQueues, type ExceptionsTab } from "@/components/app/exception-queues";
@@ -7,6 +9,7 @@ import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { Callout } from "@/components/app/settings/primitives";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
+import { PageLoading } from "@/components/ui/page-loading";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { agencyToday } from "@/lib/ingestion/agencyDay";
 import { ageDays } from "@/lib/ingestion/exceptionQueues";
@@ -26,41 +29,56 @@ export default async function ExceptionsPage({ searchParams }: { searchParams: P
   if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Exceptions" detail="In an agency, the owner, admins and the bookkeeper clear exceptions." />;
   const seesAll = guard.role === "owner" || guard.role === "bookkeeper";
   // Ages are counted in the agency's day, not UTC's.
-  const [view, today] = await Promise.all([loadQueues({ tenantId: guard.context.tenantId, userId: guard.context.userId, seesAll }), agencyToday(guard.context.tenantId)]);
+  // Speed pass 2026-11-12: the title and the views draw at once; the queues stream in under them.
+  const read = Promise.all([loadQueues({ tenantId: guard.context.tenantId, userId: guard.context.userId, seesAll }), agencyToday(guard.context.tenantId)]);
 
   const isOwner = guard.role === "owner";
   const { tab: asked } = await searchParams;
   const tab: ExceptionsTab = asked === "closed" ? "closed" : asked === "owners" && isOwner ? "owners" : "open";
-  // The views on the title line (UI-CONSISTENCY §8a), each its own address.
-  const tabs = view.available ? (
+  // The views on the title line (UI-CONSISTENCY §8a), each its own address. Counts once the queues are read.
+  const tabsOf = (open: number | null, closed: number | null) => (
     <ViewTabs<ExceptionsTab>
       label="Exception views"
       value={tab}
       controls="exceptions-panel"
       tabs={[
-        { key: "open", label: "Open", count: view.open.length, href: "/app/exceptions" },
-        { key: "closed", label: "Closed, 30 days", count: view.closed.length, href: "/app/exceptions?tab=closed" },
+        { key: "open", label: "Open", count: open, href: "/app/exceptions" },
+        { key: "closed", label: "Closed, 30 days", count: closed, href: "/app/exceptions?tab=closed" },
         ...(isOwner ? [{ key: "owners" as const, label: "Who owns each queue", href: "/app/exceptions?tab=owners" }] : []),
       ]}
     />
-  ) : undefined;
+  );
 
   return (
-    <DataInPage step="needs-you" title="Exceptions" tabs={tabs}>
-      {!view.available ? (
-        // §3: a blocked state raises a bell alert, never a box on the page.
-        <Callout tone="warning" title={QUEUES_PENDING_MESSAGE} />
-      ) : (
-        <>
-          <StatStrip label="Exception totals">
-            <StatTile label="Sales no carrier has" value={view.open.filter((i) => i.queueType === "no_policy").length.toLocaleString("en-US")} footnote={view.open.some((i) => i.queueType === "no_policy") ? <StatusChip tone="warning">May not be submitted</StatusChip> : "may never have been submitted"} />
-            <StatTile label="Policies with no sale" value={view.open.filter((i) => i.queueType === "no_deal_flow").length.toLocaleString("en-US")} footnote="client is provisional until confirmed" />
-            <StatTile label="Possibly one client" value={view.open.filter((i) => i.queueType === "multi_policy").length.toLocaleString("en-US")} footnote="only when not certain" />
-            <StatTile label="Oldest open" value={view.open.length ? `${Math.max(...view.open.map((i) => ageDays(i.ageFrom, today)))} d` : "—"} footnote={view.open.some((i) => i.escalated) ? <StatusChip tone="warning">{view.open.filter((i) => i.escalated).length} escalated</StatusChip> : "0 escalated"} />
-          </StatStrip>
-          <ExceptionQueues open={view.open} closed={view.closed} rules={view.rules} isOwner={isOwner} today={today} readOnly={guard.entitlement.access === "read_only"} carriers={view.carriers} tab={tab} />
-        </>
-      )}
+    <DataInPage step="needs-you" title="Exceptions" tabs={<Suspense fallback={tabsOf(null, null)}><ExceptionTabs read={read} tabsOf={tabsOf} /></Suspense>}>
+      <Suspense fallback={<PageLoading header={false} />}>
+        <ExceptionsBody read={read} isOwner={isOwner} tab={tab} readOnly={guard.entitlement.access === "read_only"} />
+      </Suspense>
     </DataInPage>
+  );
+}
+
+type QueuesRead = Promise<[Awaited<ReturnType<typeof loadQueues>>, string]>;
+
+async function ExceptionTabs({ read, tabsOf }: { read: QueuesRead; tabsOf: (open: number | null, closed: number | null) => ReactNode }) {
+  const [view] = await read;
+  return view.available ? tabsOf(view.open.length, view.closed.length) : null;
+}
+
+async function ExceptionsBody({ read, isOwner, tab, readOnly }: { read: QueuesRead; isOwner: boolean; tab: ExceptionsTab; readOnly: boolean }) {
+  const [view, today] = await read;
+  return !view.available ? (
+    // §3: a blocked state raises a bell alert, never a box on the page.
+    <Callout tone="warning" title={QUEUES_PENDING_MESSAGE} />
+  ) : (
+    <>
+      <StatStrip label="Exception totals">
+        <StatTile label="Sales no carrier has" value={view.open.filter((i) => i.queueType === "no_policy").length.toLocaleString("en-US")} footnote={view.open.some((i) => i.queueType === "no_policy") ? <StatusChip tone="warning">May not be submitted</StatusChip> : "may never have been submitted"} />
+        <StatTile label="Policies with no sale" value={view.open.filter((i) => i.queueType === "no_deal_flow").length.toLocaleString("en-US")} footnote="client is provisional until confirmed" />
+        <StatTile label="Possibly one client" value={view.open.filter((i) => i.queueType === "multi_policy").length.toLocaleString("en-US")} footnote="only when not certain" />
+        <StatTile label="Oldest open" value={view.open.length ? `${Math.max(...view.open.map((i) => ageDays(i.ageFrom, today)))} d` : "—"} footnote={view.open.some((i) => i.escalated) ? <StatusChip tone="warning">{view.open.filter((i) => i.escalated).length} escalated</StatusChip> : "0 escalated"} />
+      </StatStrip>
+      <ExceptionQueues open={view.open} closed={view.closed} rules={view.rules} isOwner={isOwner} today={today} readOnly={readOnly} carriers={view.carriers} tab={tab} />
+    </>
   );
 }

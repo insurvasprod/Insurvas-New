@@ -230,7 +230,7 @@ export async function loadAgencyView(props: DashViewProps, period: AgencyPeriod)
     import("@/lib/applications/lists"),
   ]);
   const { context, available, solo, zone, now, scope } = props;
-  const open = (keys: readonly string[]) => firstOpenable(keys, available, context.role, solo);
+  const open = (keys: readonly string[]) => firstOpenable(keys, available, context.role, solo, props.gate);
   const links = {
     policies: open(AGENCY_PAGES.policies),
     applications: open(AGENCY_PAGES.applications),

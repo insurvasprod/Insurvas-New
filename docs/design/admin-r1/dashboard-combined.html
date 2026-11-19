@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin Dashboard Combined</title>
+<!--kit-css-->
+<style>
+/*
+ * Settings round 8 — shared mockup kit. Every board links this file so all boards share one look.
+ * Tokens = the live app: light "C · White + olive lines" + gold third colour; dark = the live dark theme.
+ * Text 12 / 14 / 16 only; page title 24. Theme: <body class="light|dark">. Option: <body data-opt="A|B|C">.
+ */
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--board);color:var(--ink)}
+body.light{--board:#e9ecea;--board-ink:#0d4037;--board-line:#cdd6d1;--board-card:#fff;
+  --canvas:#fbfcfb;--card:#fff;--card-border:#cbd8d2;--band:#e9f2ee;--tile:#fff;--tile-edge:#d9e5df;--hover:#f1f7f4;--rule:#dbe6e1;
+  --border:#cbd8d2;--border-strong:#6d7f77;--ink:#0d4037;--body:#26332e;--muted:#4d5f58;
+  --primary:#07d6a0;--primary-hover:#08bf8b;--on-primary:#0d4037;--primary-soft:#dcfaf0;--accent-ink:#00735a;--ring:#008769;
+  --ok:#0c6633;--ok-s:#e0f3e7;--warn:#9a3d00;--warn-s:#fde8dc;--bad:#ab1f1f;--bad-s:#fdeaea;--info:#1d4f9a;--info-s:#e3edfa;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#8a5a00;--hl-soft:#fdf2d9;--hl-mark:#c98a12;
+  --backdrop:rgba(13,40,34,.38);--shadow:0 1px 0 rgba(13,64,55,.04);--overlay:0 2px 6px rgba(13,64,55,.08),0 28px 60px -12px rgba(13,64,55,.28);--code:#f4f8f6}
+body.dark{--board:#050b09;--board-ink:#f2f7f5;--board-line:#1d2b26;--board-card:#0d1714;
+  --canvas:#08110f;--card:#0d1714;--card-border:rgba(255,255,255,.09);--band:rgba(255,255,255,.04);--tile:rgba(255,255,255,.035);--tile-edge:rgba(255,255,255,.06);--hover:rgba(255,255,255,.04);--rule:#1b2a25;
+  --border:#22342e;--border-strong:#5f7a71;--ink:#f2f7f5;--body:#c9d6d1;--muted:#93a69f;
+  --primary:#07d6a0;--primary-hover:#2fe0b0;--on-primary:#0d4037;--primary-soft:#0f3a30;--accent-ink:#4fe3bb;--ring:#07d6a0;
+  --ok:#45c07d;--ok-s:#11291d;--warn:#f08a4b;--warn-s:#2e180c;--bad:#f0837c;--bad-s:#2d1412;--info:#7fb0ff;--info-s:#10203a;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#f5c562;--hl-soft:#2b2210;--hl-mark:#f2b33d;
+  --backdrop:rgba(0,0,0,.6);--shadow:none;--overlay:0 24px 64px rgba(0,0,0,.7);--code:#0a1412}
+body{--nav:#0d4037;--nav-ink:#eaf6f2;--nav-muted:#9fc4b8;--nav-line:#1d5649}
+
+/* ── Board chrome ───────────────────────────────────────────── */
+.board{max-width:1520px;margin:0 auto;padding:24px 16px 120px;color:var(--board-ink)}
+.board > h1{font-size:24px;margin:0;letter-spacing:-.02em}
+.lead{max-width:1100px;margin:8px 0 0;color:var(--board-ink);opacity:.85}
+.bar{position:sticky;top:0;z-index:80;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 0;margin:16px 0;background:var(--board);border-bottom:1px solid var(--board-line)}
+.bar .grp{display:flex;gap:6px;align-items:center;margin-right:10px}
+.bar .grp > span{font-size:12px;font-weight:600;opacity:.75;margin-right:2px}
+.bar button{font:600 14px Inter,system-ui,sans-serif;border:1px solid var(--board-line);background:var(--board-card);color:var(--board-ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+.bar button[aria-pressed=true]{background:#0d4037;color:#fff;border-color:#0d4037}
+.bar .hint{font-size:12px;opacity:.7;margin-left:auto}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin:14px 0}
+.notes > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px;font-size:14px}
+.notes b{display:block;margin-bottom:3px}
+.sec{display:flex;align-items:baseline;gap:12px;margin:30px 0 10px}
+.sec h2{font-size:16px;margin:0}
+.sec span{font-size:12px;opacity:.75}
+.opt{display:none}
+body[data-opt=A] .opt.A, body[data-opt=B] .opt.B, body[data-opt=C] .opt.C{display:block}
+.pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px}
+.pick > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:14px;font-size:14px}
+.pick > div.rec{border:2px solid #07d6a0}
+.pick b{font-size:16px;display:block;margin-bottom:4px}
+.pick ul{margin:6px 0 0;padding-left:18px}
+.tag-mig{display:inline-block;font-size:12px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink);margin-left:6px;vertical-align:middle}
+
+/* ── App shell ──────────────────────────────────────────────── */
+.app{display:grid;grid-template-columns:56px 232px 1fr;grid-template-rows:52px 1fr;height:760px;background:var(--canvas);border-radius:14px;overflow:hidden;border:1px solid var(--board-line);margin-bottom:20px;color:var(--ink);position:relative}
+.app.tall{height:880px}
+.app.norail{grid-template-columns:56px 1fr}
+.top{grid-column:1/-1;background:var(--nav);display:flex;align-items:center;gap:12px;padding:0 16px}
+.top .logo{width:22px;height:22px;border-radius:6px;background:var(--primary)}
+.top .search{flex:0 0 280px;height:32px;border-radius:8px;background:rgba(234,246,242,.08);color:var(--nav-muted);display:flex;align-items:center;padding:0 12px;font-size:12px}
+.top .sp{flex:1}
+.top .me{width:30px;height:30px;border-radius:50%;background:var(--hl);color:var(--on-hl);display:grid;place-items:center;font-size:12px;font-weight:700}
+.icons{background:var(--nav);display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0}
+.icons i{display:block;width:22px;height:22px;border-radius:6px;border:1.5px solid var(--nav-muted);opacity:.85}
+.icons i.on{border-color:var(--primary);background:rgba(7,214,160,.16)}
+/* settings rail */
+.srail{border-right:1px solid var(--border);background:var(--card);padding:12px 10px;overflow:auto}
+.srail .find{height:32px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--muted);margin-bottom:10px}
+.srail h5{font-size:12px;font-weight:600;color:var(--muted);margin:12px 6px 4px}
+.srail a{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:8px;font-size:14px;color:var(--body);text-decoration:none}
+.srail a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.srail a small{font-size:12px;color:var(--muted)}
+.srail a .cnt{font-size:12px;font-weight:700;padding:0 6px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink)}
+/* main */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px 24px 20px}
+.crumb{font-size:12px;color:var(--muted)}
+.head{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;margin:2px 0 4px}
+.head h3{font-size:24px;font-weight:600;letter-spacing:-.025em;margin:0}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--border);flex:1;min-width:200px}
+.tabs a{font-size:14px;color:var(--muted);padding:6px 0 8px;border-bottom:2px solid transparent;text-decoration:none;white-space:nowrap}
+.tabs a.on{color:var(--ink);border-color:var(--primary);font-weight:500}
+.tabs a .c{font-size:12px;margin-left:4px;padding:0 5px;border-radius:5px;background:var(--band);color:var(--muted)}
+.head .acts{display:flex;gap:8px;margin-left:auto;padding-bottom:6px}
+.status{font-size:12px;color:var(--muted);margin:2px 0 12px;display:flex;align-items:center;gap:6px}
+.status .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.status.bad .dot{background:var(--bad)}
+.status.warn .dot{background:var(--warn)}
+.body{flex:1;min-height:0;display:flex;gap:12px}
+/* cards */
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--shadow);min-width:0;display:flex;flex-direction:column;min-height:0}
+.card.flex1{flex:1}
+.card-h{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--rule);background:var(--band);border-radius:16px 16px 0 0}
+.card-h b{font-size:14px;font-weight:600}
+.card-h .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.card-b{padding:14px 16px}
+.scroll{overflow:auto;min-height:0;flex:1}
+.card-f{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule)}
+.card-f .sp{flex:1}
+.savebar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule);background:var(--hl-soft);border-radius:0 0 16px 16px;font-size:14px;color:var(--hl-ink);font-weight:500}
+.savebar .sp{flex:1}
+/* form */
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+.fgrid .full{grid-column:1/-1}
+label.l{display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:5px}
+.help{font-size:12px;color:var(--muted);margin-top:4px}
+.err{font-size:12px;color:var(--bad);margin-top:4px}
+.input{height:36px;border-radius:8px;border:1px solid var(--border-strong);background:var(--card);color:var(--ink);padding:0 12px;font-size:14px;display:flex;align-items:center;gap:8px;min-width:0}
+.input.ph{color:var(--muted)}
+.input.focus{outline:2px solid var(--ring);outline-offset:2px}
+.input.bad{border-color:var(--bad)}
+.input.dis{background:var(--band);color:var(--muted);border-color:var(--border)}
+.input .end{margin-left:auto;color:var(--muted);font-size:12px}
+.textarea{min-height:72px;align-items:flex-start;padding:8px 12px;height:auto}
+.fsec{padding:16px 0;border-top:1px solid var(--rule)}
+.fsec:first-child{border-top:0;padding-top:4px}
+.fsec > h4{font-size:16px;margin:0 0 2px}
+.fsec > p{font-size:12px;color:var(--muted);margin:0 0 12px}
+/* controls */
+.btn{font:500 14px Inter,system-ui,sans-serif;height:36px;padding:0 14px;border-radius:8px;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;cursor:default}
+.btn.sm{height:30px;padding:0 10px;font-size:12px}
+.btn.p{background:var(--primary);color:var(--on-primary)}
+.btn.o{background:var(--card);border-color:var(--border);color:var(--ink)}
+.btn.g{background:transparent;color:var(--body)}
+.btn.hl{background:var(--hl);color:var(--on-hl);font-weight:600}
+.btn.danger{background:var(--bad-s);color:var(--bad)}
+.btn.d{opacity:.5}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:500;background:var(--card);color:var(--body);border:1px solid var(--tile-edge);white-space:nowrap}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.n::before{display:none}
+.chip.ok{background:var(--ok-s);color:var(--ok);border-color:transparent}
+.chip.warn{background:var(--warn-s);color:var(--warn);border-color:transparent}
+.chip.bad{background:var(--bad-s);color:var(--bad);border-color:transparent}
+.chip.info{background:var(--info-s);color:var(--info);border-color:transparent}
+.chip.act{background:var(--primary-soft);color:var(--accent-ink);border-color:transparent}
+.chip.hl{background:var(--hl-soft);color:var(--hl-ink);border-color:transparent;font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg span{padding:6px 12px;font-size:14px;color:var(--body);border-left:1px solid var(--border)}
+.seg span:first-child{border-left:0}
+.seg span.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.tog{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);font-size:14px;color:var(--body)}
+.tog.on{background:var(--primary-soft);border-color:transparent;color:var(--accent-ink);font-weight:500}
+.switch{width:36px;height:20px;border-radius:999px;background:var(--border-strong);position:relative;display:inline-block;vertical-align:middle;flex:none}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(13,64,55,.25)}
+.switch.on{background:var(--primary)}
+.switch.on::after{left:18px}
+.check{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.check.on{background:var(--primary);border-color:var(--primary)}
+.radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.radio.on{border:5px solid var(--primary)}
+.av{width:28px;height:28px;border-radius:50%;display:inline-grid;place-items:center;font-size:12px;font-weight:700;background:var(--hl-soft);color:var(--hl-ink);flex:none}
+.ic{width:32px;height:32px;border-radius:9px;display:inline-grid;place-items:center;background:var(--primary-soft);color:var(--accent-ink);font-weight:700;flex:none}
+.muted{color:var(--muted)}
+small{font-size:12px}
+.small{font-size:12px}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--code);border:1px solid var(--tile-edge);border-radius:10px;padding:10px 12px;color:var(--body);white-space:pre;overflow:auto}
+.copy{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:0 4px 0 12px;height:36px;background:var(--card)}
+.copy .v{flex:1;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile{background:var(--tile);box-shadow:inset 0 0 0 1px var(--tile-edge);border-radius:12px;padding:10px 12px}
+.tile small{display:block;font-size:12px;color:var(--muted)}
+.tile b{font-size:16px}
+.list a,.li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--rule);color:var(--body);text-decoration:none}
+.li.on{background:var(--primary-soft);box-shadow:inset 2px 0 0 var(--primary)}
+.li b{font-size:14px;color:var(--ink);display:block}
+.li small{font-size:12px;color:var(--muted)}
+.li .end{margin-left:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+thead th{background:var(--band);color:var(--muted);font-weight:500;font-size:12px;text-align:left;padding:8px 14px;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:9px 14px;border-bottom:1px solid var(--rule);color:var(--body);white-space:nowrap}
+tbody tr.h td{background:var(--hover)}
+tbody tr.s td{background:var(--primary-soft)}
+.strip{display:grid;grid-auto-flow:column;grid-auto-columns:1fr}
+.strip > div{padding:10px 16px;border-left:1px solid var(--rule)}
+.strip > div:first-child{border-left:0}
+.strip small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.strip b{display:block;font-size:24px;font-weight:600;letter-spacing:-.02em}
+.steps{display:flex;gap:8px;align-items:center}
+.steps span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.steps span i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;background:var(--band);color:var(--muted)}
+.steps span.on{color:var(--ink);font-weight:600}
+.steps span.on i{background:var(--primary);color:var(--on-primary)}
+.steps span.done i{background:var(--primary-soft);color:var(--accent-ink)}
+.steps em{flex:1;height:1px;background:var(--border);min-width:16px}
+/* overlays */
+.scrim{position:absolute;inset:52px 0 0 0;background:var(--backdrop);z-index:5}
+.sheet{position:absolute;top:52px;right:0;bottom:0;width:480px;background:var(--card);border-left:1px solid var(--border);box-shadow:var(--overlay);z-index:6;display:flex;flex-direction:column}
+.sheet.wide{width:640px}
+.sheet-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--rule)}
+.sheet-h b{font-size:16px}
+.sheet-h .x{margin-left:auto;color:var(--muted);font-size:16px}
+.sheet-b{padding:16px 18px;overflow:auto;flex:1}
+.sheet-f{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--rule)}
+.dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:440px;background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--overlay);z-index:6;padding:18px}
+.dialog h4{margin:0 0 6px;font-size:16px}
+.dialog p{margin:0 0 12px;font-size:14px;color:var(--body)}
+.menu{background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:var(--overlay);padding:4px;width:220px}
+.menu div{padding:8px 10px;border-radius:6px;font-size:14px;color:var(--body);display:flex;justify-content:space-between}
+.menu div.h{background:var(--hover);color:var(--ink)}
+.menu hr{border:0;border-top:1px solid var(--rule);margin:4px 0}
+.toast{display:inline-flex;align-items:center;gap:10px;background:#0d4037;color:#f2f7f5;border-radius:999px;padding:10px 16px;font-size:14px}
+body.dark .toast{background:#f2f7f5;color:#0d4037}
+.toast i{width:8px;height:8px;border-radius:50%;background:#07d6a0}
+.skel{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--band),var(--hover),var(--band));margin:8px 0}
+.empty{text-align:center;padding:28px 16px}
+.empty .ic{margin:0 auto 10px}
+.empty b{display:block;font-size:16px}
+.empty p{font-size:14px;color:var(--muted);margin:4px 0 12px}
+/* state strip under a board section: loading / empty / error side by side */
+.states{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.states > .card{min-height:180px}
+@media (max-width:1100px){.app{grid-template-columns:56px 1fr}.srail{display:none}.states{grid-template-columns:1fr}.fgrid{grid-template-columns:1fr}}
+
+</style>
+<!--/kit-css-->
+<style>
+.app.adm{grid-template-columns:220px 1fr}
+.arail{background:var(--nav);padding:12px 10px;display:flex;flex-direction:column;gap:2px;overflow:auto}
+.arail a{display:flex;align-items:center;justify-content:space-between;gap:6px;color:var(--nav-ink);font-size:14px;padding:7px 10px;border-radius:8px}
+.arail a.on{background:rgba(7,214,160,.18);font-weight:600}
+.arail a.sub{padding-left:22px;color:var(--nav-muted)}
+.arail h6{font-size:12px;font-weight:600;color:var(--nav-muted);margin:12px 10px 4px}
+.arail .n{font-size:12px;font-weight:700;padding:0 6px;border-radius:6px;background:var(--hl);color:var(--on-hl)}
+.main{overflow:auto}
+.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.grid2{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:12px}
+.span2{grid-column:span 2}
+.gc{background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--shadow);padding:12px 14px 10px;min-width:0;display:flex;flex-direction:column}
+.gc .h{display:flex;align-items:baseline;gap:8px}
+.gc .h small{font-size:12px;color:var(--muted);font-weight:600}
+.gc .h .go{margin-left:auto;font-size:12px;color:var(--muted)}
+.gc .v{font-size:24px;font-weight:600;letter-spacing:-.02em;color:var(--ink);margin-top:2px}
+.gc .v.stale{color:var(--muted)}
+.gc .s{font-size:12px;color:var(--muted)}
+.gc .s .up{color:var(--hl-ink);font-weight:600}
+.gc .s .dn{color:var(--warn);font-weight:600}
+.gc svg{width:100%;height:120px;margin-top:8px;overflow:visible}
+.gc.tall svg{height:170px}
+.ln{fill:none;stroke:var(--primary);stroke-width:2}
+.ln.cmp{stroke:var(--hl-mark);stroke-dasharray:4 3;stroke-width:1.5}
+.area{fill:var(--primary);opacity:.12}
+.br{fill:var(--primary)}
+.br.b2{fill:var(--hl-mark)}
+.br.b3{fill:var(--warn)}
+.br.b4{fill:var(--border-strong)}
+.gl{stroke:var(--rule)}
+svg text{font-size:11px;fill:var(--muted)}
+.leg{display:flex;gap:12px;font-size:12px;color:var(--muted);margin-top:6px;flex-wrap:wrap}
+.leg i{display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--primary);vertical-align:-1px;margin-right:4px}
+.leg i.b2{background:var(--hl-mark)}.leg i.b3{background:var(--warn)}.leg i.b4{background:var(--border-strong)}
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:12px}
+.kpi{background:var(--card);border:1px solid var(--card-border);border-radius:16px;padding:12px 14px;box-shadow:var(--shadow)}
+.kpi small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.kpi b{font-size:24px;font-weight:600;color:var(--ink)}
+.kpi .d{font-size:12px;color:var(--muted)}
+.kpi .d .up{color:var(--hl-ink);font-weight:600}
+td.r,th.r{text-align:right}
+td b{color:var(--ink);font-weight:500}
+.go{color:var(--muted)}
+.funnel{display:grid;grid-template-columns:140px 1fr 40px 46px;gap:8px 10px;align-items:center;font-size:14px}
+.funnel .bar{height:14px;border-radius:5px;background:var(--primary)}
+.funnel .bar.drop{background:var(--warn)}
+.funnel .n{text-align:right;color:var(--ink);font-weight:500}
+.funnel .p{text-align:right;font-size:12px;color:var(--muted)}
+.inbox{display:grid;grid-template-columns:330px 1fr;gap:12px;min-height:520px}
+.qitem{display:flex;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--rule)}
+.qitem.on{background:var(--primary-soft);box-shadow:inset 3px 0 0 var(--primary)}
+.qitem b{display:block;font-size:14px;color:var(--ink);font-weight:500}
+.qitem small{display:block;font-size:12px;color:var(--muted)}
+.qitem .end{margin-left:auto}
+.qgroup{font-size:12px;font-weight:600;color:var(--muted);padding:8px 14px 4px;background:var(--band);border-bottom:1px solid var(--rule)}
+.stack{display:flex;flex-direction:column;gap:12px}
+.mapnote{font-size:12px;color:var(--muted);margin-top:6px}
+</style>
+</head>
+<body class="light" data-opt="A">
+<div class="board">
+  <h1>Admin › Dashboard: combined</h1>
+  <p class="lead">Your pick: a combination. The first tab is all graphs: the business at a glance, every graph opening the tab that explains it. Then one tab per thing an admin has to watch. "Needs you" is the work queue from B. Money, Customers, Platform health and Security &amp; staff each get A's figure cards, one-line tables and right-side sheets. Every graph reads data the platform already keeps: the daily metrics history (MRR and how it moved, collected, customers new and lost, trials, split by plan) and the sign-up funnel that Revenue already computes. Live values from Nov 17 where shown; trend shapes are illustrative until the nightly metrics run again.</p>
+  <div class="notes">
+    <div><b>Tabs on the title line</b>Overview · Needs you <small>9</small> · Money · Customers · Platform health · Security &amp; staff. The tab is in the address, so a link opens it. Roles see only their tabs: support has no Money.</div>
+    <div><b>Overview: graphs only</b>8 graph cards, each with its headline figure above its trend. Gold is only "last year" or a second series. No donuts (owner rule). Period switch: 30 days · 90 days · 12 months.</div>
+    <div><b>One status line for all tabs</b>"3 checks failing · revenue figures are 57 days old" stays under the title on every tab, and its link opens Needs you.</div>
+    <div><b>Moved off the home page</b>"Start here" goes to Help. "Admins by role" moves to Security &amp; staff. "Arrange" and "Press 1–9" are gone.</div>
+  </div>
+
+  <div class="bar" role="toolbar">
+    <div class="grp"><span>Theme</span><button data-theme-btn="light">Light</button><button data-theme-btn="dark">Dark</button></div>
+    <span class="hint">L / D theme · scroll for each tab</span>
+  </div>
+
+  <div class="opt A">
+  <!-- ═════════ 1 · Overview ═════════ -->
+  <div class="sec"><h2>1 · Overview: all graphs</h2><span>The first thing every admin sees. Click a graph to open its tab, already filtered.</span></div>
+  <div class="app adm" style="height:900px">
+    <div class="top"><span class="logo"></span><span class="search">Search customers, users, invoices…</span><span class="sp"></span><span class="me">QA</span></div>
+    <nav class="arail"><a class="on">Dashboard <span class="n">9</span></a><h6>Customers</h6><a class="sub">Customers</a><a class="sub">Users</a><h6>Billing</h6><a class="sub">Subscriptions</a><a class="sub">Invoices</a><a class="sub">Revenue</a><h6>Catalog</h6><a class="sub">Plans</a><a class="sub">Carriers</a><h6>Monitoring</h6><a class="sub">Login activity</a><a class="sub">Audit log</a><h6>Platform</h6><a class="sub">Maintenance</a><a class="sub">Admin users</a></nav>
+    <div class="main">
+      <div class="head"><h3>Dashboard</h3><nav class="tabs"><a class="on">Overview</a><a>Needs you <span class="c">9</span></a><a>Money</a><a>Customers</a><a>Platform health</a><a>Security &amp; staff</a></nav><div class="acts"><span class="seg"><span>30 days</span><span>90 days</span><span class="on">12 months</span></span></div></div>
+      <div class="status warn"><span class="dot"></span><u>3 checks failing</u> · revenue figures are 57 days old because nightly metrics stopped on Sep 21 · updated 11s ago</div>
+      <div class="grid4">
+        <div class="gc span2 tall"><div class="h"><small>MRR</small><span class="go">Money ›</span></div><div class="v stale">$3,480</div><div class="s">57 days old · ARR $41,760</div><svg data-line="20,24,26,31,38,47,58,66,72,74,74,74" data-cmp="8,9,10,11,12,13,15,16,18,19,20,21" data-x="Dec,,,,,Jun,,,,,,Nov"></svg><div class="leg"><span><i></i>This year</span><span><i class="b2"></i>Last year</span></div></div>
+        <div class="gc span2 tall"><div class="h"><small>How MRR moved</small><span class="go">Money ›</span></div><div class="v">+$420</div><div class="s">net this quarter</div><svg data-stack="8,2,1,1|10,3,1,0|12,2,2,1|6,4,1,2|9,2,0,1|7,1,1,0" data-x="Jun,Jul,Aug,Sep,Oct,Nov"></svg><div class="leg"><span><i></i>New</span><span><i class="b2"></i>Expansion</span><span><i class="b4"></i>Contraction</span><span><i class="b3"></i>Churned</span></div></div>
+        <div class="gc"><div class="h"><small>Active customers</small><span class="go">›</span></div><div class="v">20</div><div class="s"><span class="up">▲ 4</span> in 90 days · 331 suspended</div><svg data-line="9,10,11,12,12,14,15,16,16,18,19,20"></svg></div>
+        <div class="gc"><div class="h"><small>New vs lost customers</small><span class="go">›</span></div><div class="v">3 · 1</div><div class="s">this month</div><svg data-bars="2,3,1,4,2,3|1,0,1,0,2,1" data-x="Jun,,,,,Nov"></svg></div>
+        <div class="gc"><div class="h"><small>Collected</small><span class="go">›</span></div><div class="v">$99</div><div class="s">of $99 invoiced this month</div><svg data-bars1="320,410,380,520,99,99" data-x="Jun,,,,,Nov"></svg></div>
+        <div class="gc"><div class="h"><small>Trials in flight</small><span class="go">›</span></div><div class="v">27</div><div class="s">27 end within 2 days</div><svg data-line="6,8,9,12,15,17,19,20,22,23,25,27" data-area="1"></svg></div>
+        <div class="gc span2"><div class="h"><small>Customers by plan</small><span class="go">Money ›</span></div><div class="v">3 plans</div><div class="s">customers and MRR per plan</div><svg data-hbars="Individual:12:1188|Agency:6:1794|Agency Plus:2:498" style="height:96px"></svg></div>
+        <div class="gc"><div class="h"><small>Sign-up funnel</small><span class="go">Customers ›</span></div><div class="v">11%</div><div class="s">sign-up to paid · 90 days</div><svg data-funnel="18,16,13,8,2" style="height:110px"></svg></div>
+        <div class="gc"><div class="h"><small>Sign-ins per day</small><span class="go">Security ›</span></div><div class="v">14</div><div class="s">today · 1 failed</div><svg data-line="9,11,8,12,14,10,13,15,12,11,14,14" data-area="1"></svg></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════ 2 · Needs you ═════════ -->
+  <div class="sec"><h2>2 · Needs you</h2><span>B's work queue: the daily checks grouped by area, worst first, with the selected check's rows and its fix on the right.</span></div>
+  <div class="app adm" style="height:720px">
+    <div class="top"><span class="logo"></span><span class="search">Search customers, users, invoices…</span><span class="sp"></span><span class="me">QA</span></div>
+    <nav class="arail"><a class="on">Dashboard <span class="n">9</span></a><h6>Customers</h6><a class="sub">Customers</a><h6>Billing</h6><a class="sub">Trials</a><a class="sub">Invoices</a></nav>
+    <div class="main">
+      <div class="head"><h3>Dashboard</h3><nav class="tabs"><a>Overview</a><a class="on">Needs you <span class="c">9</span></a><a>Money</a><a>Customers</a><a>Platform health</a><a>Security &amp; staff</a></nav><div class="acts"><span class="seg"><span class="on">To do · 9</span><span>FYI · 4</span><span>Clear · 4</span></span></div></div>
+      <div class="status warn"><span class="dot"></span>3 failing · 6 to look at · checked 2 minutes ago · <u>check again</u></div>
+      <div class="inbox">
+        <div class="card"><div class="scroll">
+          <div class="qgroup">Money · 6</div>
+          <div class="qitem"><div><b>Payment events</b><small>2 waiting · oldest 64 days</small></div><span class="end chip bad">Failing</span></div>
+          <div class="qitem"><div><b>Billing run</b><small>Last ran Sep 13</small></div><span class="end chip bad">Failing</span></div>
+          <div class="qitem on"><div><b>Trials ending</b><small>27 within 2 days</small></div><span class="end chip warn">Look</span></div>
+          <div class="qitem"><div><b>Invoices that don't match</b><small>23 invoices</small></div><span class="end chip warn">Look</span></div>
+          <div class="qitem"><div><b>Overdue invoices</b><small>19 invoices</small></div><span class="end chip warn">Look</span></div>
+          <div class="qitem"><div><b>Failed payments</b><small>1 customer</small></div><span class="end chip warn">Look</span></div>
+          <div class="qgroup">Customers · 2</div>
+          <div class="qitem"><div><b>At their seat limit</b><small>27 customers</small></div><span class="end chip warn">Look</span></div>
+          <div class="qitem"><div><b>Invitations not accepted</b><small>72 users</small></div><span class="end chip warn">Look</span></div>
+          <div class="qgroup">Platform · 1</div>
+          <div class="qitem"><div><b>Nightly metrics</b><small>Last ran Sep 21</small></div><span class="end chip bad">Failing</span></div>
+        </div></div>
+        <div class="card">
+          <div class="card-h"><b>Trials ending within 2 days</b><span class="chip warn">Look</span><div class="r"><span class="btn o sm">Open in Trials</span><span class="btn o sm">Extend selected…</span><span class="btn p sm">Email a card reminder to 27</span></div></div>
+          <div class="scroll"><div class="card-b" style="padding-bottom:0"><p style="margin:0 0 10px">27 trials end by Nov 19 and none has a card on file. On the end date each moves to Expired and its workspace goes read-only. Nothing is deleted.</p></div>
+          <table><thead><tr><th><span class="check"></span></th><th>Customer</th><th>Plan</th><th>Ends</th><th>Signed in</th><th>Card</th></tr></thead><tbody>
+            <tr><td><span class="check on"></span></td><td><b>Blair Test Insurance</b></td><td>Agency</td><td>Tomorrow</td><td>2 days ago</td><td><span class="chip warn">No card</span></td></tr>
+            <tr><td><span class="check"></span></td><td><b>Docs Screenshots</b></td><td>Individual</td><td>Tomorrow</td><td>Never</td><td><span class="chip warn">No card</span></td></tr>
+            <tr><td><span class="check"></span></td><td><b>LA-1.6 QA</b></td><td>Individual</td><td>Nov 19</td><td>Nov 2</td><td><span class="chip warn">No card</span></td></tr>
+            <tr><td><span class="check"></span></td><td><b>System verify</b></td><td>Agency</td><td>Nov 19</td><td>Never</td><td><span class="chip warn">No card</span></td></tr>
+            <tr><td colspan="6" class="muted small">and 23 more</td></tr>
+          </tbody></table></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════ 3 · Money ═════════ -->
+  <div class="sec"><h2>3 · Money</h2><span>Billing ops' tab: figures, then what to chase. Each row opens the invoice or subscription in a sheet.</span></div>
+  <div class="app adm" style="height:720px">
+    <div class="top"><span class="logo"></span><span class="search">Search…</span><span class="sp"></span><span class="me">QA</span></div>
+    <nav class="arail"><a class="on">Dashboard <span class="n">9</span></a><h6>Billing</h6><a class="sub">Subscriptions</a><a class="sub">Invoices</a><a class="sub">Revenue</a></nav>
+    <div class="main">
+      <div class="head"><h3>Dashboard</h3><nav class="tabs"><a>Overview</a><a>Needs you <span class="c">9</span></a><a class="on">Money</a><a>Customers</a><a>Platform health</a><a>Security &amp; staff</a></nav><div class="acts"><span class="btn o">Open Revenue</span></div></div>
+      <div class="status warn"><span class="dot"></span>Billing run last finished Sep 13 · 19 invoices overdue · 23 don't match the provider</div>
+      <div class="kpis">
+        <div class="kpi"><small>MRR</small><b style="color:var(--muted)">$3,480</b><div class="d">57 days old</div></div>
+        <div class="kpi"><small>ARR</small><b style="color:var(--muted)">$41,760</b><div class="d">57 days old</div></div>
+        <div class="kpi"><small>Collected this month</small><b>$99</b><div class="d">100% of invoiced</div></div>
+        <div class="kpi"><small>Overdue</small><b>19</b><div class="d">invoices · $2,140</div></div>
+        <div class="kpi"><small>Net revenue churn</small><b>0%</b><div class="d">this month</div></div>
+      </div>
+      <div class="grid2">
+        <div class="card"><div class="card-h"><b>Invoices to chase</b><div class="r"><span class="seg"><span class="on">Overdue · 19</span><span>Don't match · 23</span><span>Past due · 1</span></span></div></div>
+          <table><thead><tr><th>Invoice</th><th>Customer</th><th class="r">Amount</th><th>Due</th><th>Status</th><th></th></tr></thead><tbody>
+            <tr><td><b>INV-1042</b></td><td>Admin Team</td><td class="r">$299.00</td><td>Oct 1</td><td><span class="chip warn">47 days late</span></td><td class="go">›</td></tr>
+            <tr><td><b>INV-1051</b></td><td>Blair Test Insurance</td><td class="r">$149.00</td><td>Oct 8</td><td><span class="chip warn">40 days late</span></td><td class="go">›</td></tr>
+            <tr><td><b>INV-1066</b></td><td>Ellery &amp; Fields</td><td class="r">$598.00</td><td>Nov 1</td><td><span class="chip warn">16 days late</span></td><td class="go">›</td></tr>
+            <tr><td colspan="6" class="muted small">and 16 more · Open in Invoices</td></tr>
+          </tbody></table></div>
+        <div class="stack">
+          <div class="card"><div class="card-h"><b>By plan</b></div><table><thead><tr><th>Plan</th><th class="r">Customers</th><th class="r">MRR</th><th class="r">Churn</th></tr></thead><tbody>
+            <tr><td><b>Individual</b></td><td class="r">12</td><td class="r">$1,188</td><td class="r">0%</td></tr><tr><td><b>Agency</b></td><td class="r">6</td><td class="r">$1,794</td><td class="r">0%</td></tr><tr><td><b>Agency Plus</b></td><td class="r">2</td><td class="r">$498</td><td class="r">0%</td></tr></tbody></table></div>
+          <div class="card"><div class="card-h"><b>Trials</b></div><table><tbody><tr><td>In flight</td><td class="r">27</td></tr><tr><td>Ending within 2 days</td><td class="r">27</td></tr><tr><td>Became paid · 30 days</td><td class="r">2 of 18</td></tr></tbody></table></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════ 4 · Customers ═════════ -->
+  <div class="sec"><h2>4 · Customers</h2><span>Where new agencies stop, and who needs a hand. Each funnel step opens the customers stuck at it.</span></div>
+  <div class="app adm" style="height:640px">
+    <div class="top"><span class="logo"></span><span class="search">Search…</span><span class="sp"></span><span class="me">QA</span></div>
+    <nav class="arail"><a class="on">Dashboard <span class="n">9</span></a><h6>Customers</h6><a class="sub">Customers</a><a class="sub">Users</a></nav>
+    <div class="main">
+      <div class="head"><h3>Dashboard</h3><nav class="tabs"><a>Overview</a><a>Needs you <span class="c">9</span></a><a>Money</a><a class="on">Customers</a><a>Platform health</a><a>Security &amp; staff</a></nav><div class="acts"><span class="seg"><span>30 days</span><span class="on">90 days</span></span></div></div>
+      <div class="status"><span class="dot"></span>Biggest drop: started a trial → finished setup (38% stop here)</div>
+      <div class="grid2">
+        <div class="card"><div class="card-h"><b>Sign-up funnel</b><div class="r small muted">90 days</div></div><div class="card-b"><div class="funnel">
+          <span>Signed up</span><div class="bar" style="width:100%"></div><span class="n">18</span><span class="p">100%</span>
+          <span>Verified email</span><div class="bar" style="width:89%"></div><span class="n">16</span><span class="p">89%</span>
+          <span>Started a trial</span><div class="bar" style="width:72%"></div><span class="n">13</span><span class="p">72%</span>
+          <span>Finished setup</span><div class="bar drop" style="width:44%"></div><span class="n">8</span><span class="p">44%</span>
+          <span>Became paid</span><div class="bar" style="width:11%"></div><span class="n">2</span><span class="p">11%</span>
+          <span>Active at day 30</span><div class="bar" style="width:11%"></div><span class="n">2</span><span class="p">11%</span></div></div></div>
+        <div class="stack">
+          <div class="card"><div class="card-h"><b>At their seat limit</b><span class="chip n hl">27</span></div><table><tbody><tr><td><b>Admin Team</b></td><td class="r">5 of 5</td><td class="go">›</td></tr><tr><td><b>Blair Test Insurance</b></td><td class="r">3 of 3</td><td class="go">›</td></tr><tr><td colspan="3" class="muted small">and 25 more</td></tr></tbody></table></div>
+          <div class="card"><div class="card-h"><b>Last 7 days</b></div><table><tbody><tr><td>New sign-ups</td><td class="r"><span class="chip n hl">1</span></td></tr><tr><td>Cancellations</td><td class="r">0</td></tr><tr><td>Invitations never accepted</td><td class="r">72</td></tr><tr><td>Suspended</td><td class="r">331</td></tr></tbody></table></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════ 5 · Platform health ═════════ -->
+  <div class="sec"><h2>5 · Platform health</h2><span>Every scheduled job and outside service, one line each: when it last ran and whether it worked. A row opens its history and how to fix it.</span></div>
+  <div class="app adm" style="height:560px">
+    <div class="top"><span class="logo"></span><span class="search">Search…</span><span class="sp"></span><span class="me">QA</span></div>
+    <nav class="arail"><a class="on">Dashboard <span class="n">9</span></a><h6>Platform</h6><a class="sub">Maintenance</a><a class="sub">Features</a></nav>
+    <div class="main">
+      <div class="head"><h3>Dashboard</h3><nav class="tabs"><a>Overview</a><a>Needs you <span class="c">9</span></a><a>Money</a><a>Customers</a><a class="on">Platform health</a><a>Security &amp; staff</a></nav></div>
+      <div class="status bad"><span class="dot"></span>3 of 7 jobs failing · maintenance mode off · 1 feature switched off for everyone</div>
+      <div class="card"><table><thead><tr><th>Job or service</th><th>What it does</th><th>Last worked</th><th>Should run</th><th>Status</th><th></th></tr></thead><tbody>
+        <tr><td><b>Nightly metrics</b></td><td>Revenue and customer figures</td><td>Sep 21</td><td>Every night</td><td><span class="chip bad">Failing</span></td><td class="go">›</td></tr>
+        <tr><td><b>Billing run</b></td><td>Raises invoices for the period</td><td>Sep 13</td><td>Every day</td><td><span class="chip bad">Failing</span></td><td class="go">›</td></tr>
+        <tr><td><b>Payment events</b></td><td>Reads what the provider sends</td><td>64 days ago</td><td>As they arrive</td><td><span class="chip bad">Failing</span></td><td class="go">›</td></tr>
+        <tr><td><b>Compliance sources</b></td><td>Do-not-call and consent lookups</td><td>12 min ago</td><td>Every hour</td><td><span class="chip ok">Working</span></td><td class="go">›</td></tr>
+        <tr><td><b>Callback reminders</b></td><td>Due-callback alerts to agents</td><td>1 min ago</td><td>Every minute</td><td><span class="chip ok">Working</span></td><td class="go">›</td></tr>
+        <tr><td><b>Unclaimed-transfer ladder</b></td><td>Escalates waiting transfers</td><td>1 min ago</td><td>Every minute</td><td><span class="chip ok">Working</span></td><td class="go">›</td></tr>
+        <tr><td><b>Email sending</b></td><td>Invites, receipts, alerts</td><td>3 min ago</td><td>As needed</td><td><span class="chip ok">Working</span></td><td class="go">›</td></tr>
+      </tbody></table></div>
+      <p class="mapnote">Jobs not watched today (callback reminders, the transfer ladder, email) would need a "last ran" record. <span class="tag-mig">needs a migration</span></p>
+    </div>
+  </div>
+
+  <!-- ═════════ 6 · Security & staff ═════════ -->
+  <div class="sec"><h2>6 · Security &amp; staff</h2><span>Sign-ins, failed attempts, what staff changed, and who the admins are (moved here from the home page).</span></div>
+  <div class="app adm" style="height:600px">
+    <div class="top"><span class="logo"></span><span class="search">Search…</span><span class="sp"></span><span class="me">QA</span></div>
+    <nav class="arail"><a class="on">Dashboard <span class="n">9</span></a><h6>Monitoring</h6><a class="sub">Login activity</a><a class="sub">Audit log</a></nav>
+    <div class="main">
+      <div class="head"><h3>Dashboard</h3><nav class="tabs"><a>Overview</a><a>Needs you <span class="c">9</span></a><a>Money</a><a>Customers</a><a>Platform health</a><a class="on">Security &amp; staff</a></nav></div>
+      <div class="status"><span class="dot"></span>1 failed sign-in of 3 today · 2 staff changes today · 5 active admins</div>
+      <div class="grid3">
+        <div class="gc"><div class="h"><small>Sign-ins per day</small></div><div class="v">14</div><div class="s">today</div><svg data-line="9,11,8,12,14,10,13,15,12,11,14,14" data-area="1"></svg></div>
+        <div class="card"><div class="card-h"><b>Staff changes today</b></div><table><tbody><tr><td><span class="av">QA</span></td><td>Switched off "AI assistant"</td><td>10:42</td></tr><tr><td><span class="av">RG</span></td><td>Extended a trial</td><td>09:15</td></tr></tbody></table></div>
+        <div class="card"><div class="card-h"><b>Admins</b><span class="chip n hl">5</span></div><table><tbody><tr><td>Super admin</td><td class="r">3</td></tr><tr><td>Support agent</td><td class="r">1</td></tr><tr><td>Platform config</td><td class="r">1</td></tr><tr><td class="muted">Deactivated</td><td class="r muted">50</td></tr></tbody></table></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec"><h2>7 · Loading, empty, couldn't load</h2><span>Frame first: title, tabs and status line show at once. Each graph card loads and fails on its own.</span></div>
+  <div class="states">
+    <div class="gc"><div class="h"><small>MRR</small></div><div class="skel" style="width:40%;height:22px"></div><div class="skel" style="height:90px"></div></div>
+    <div class="gc"><div class="h"><small>Sign-up funnel</small></div><div class="empty"><b>No sign-ups yet</b><p>Nobody signed up in the last 90 days.</p></div></div>
+    <div class="gc"><div class="h"><small>How MRR moved</small></div><div class="empty"><b>Couldn't load this graph</b><p>The daily figures didn't answer in 8 seconds. The rest of the page is current.</p><span class="btn o sm">Try again</span></div></div>
+  </div>
+  </div>
+
+  <div class="sec"><h2>What gets built</h2><span>Nothing until you say so</span></div>
+  <div class="pick"><div class="rec"><b>Combined dashboard (as drawn)</b><ul><li>Overview: 8 graphs from the daily metrics history and the funnel. No new data needed.</li><li>Needs you: the 17 existing daily checks as a work queue with a detail pane and their real actions.</li><li>Money, Customers, Security &amp; staff: from tables the admin already reads.</li><li>Platform health: the 3 watched jobs today; the other 4 need a "last ran" record <span class="tag-mig">needs a migration</span>.</li><li>Not mine to fix, but urgent: the nightly metrics job and the billing run have stopped on production.</li></ul></div></div>
+</div>
+<script>
+// Board-only chart drawing from data- attributes (kit tokens via CSS classes).
+(function(){
+  const NS="http://www.w3.org/2000/svg";
+  const el=(t,a)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);return e};
+  const W=300,H=100,P=14;
+  function axis(svg,labels,n){ if(!labels)return; labels.split(",").forEach((l,i)=>{ if(!l)return; const x=n>1?P+i*(W-2*P)/(n-1):W/2; const t=el("text",{x:x-8,y:H+12}); t.textContent=l; svg.appendChild(t);});}
+  function grid(svg){[0,.5,1].forEach(f=>svg.appendChild(el("line",{class:"gl",x1:0,x2:W,y1:P+f*(H-2*P),y2:P+f*(H-2*P)})));}
+  function pts(vals,max){return vals.map((v,i)=>[P+i*(W-2*P)/(vals.length-1),H-P-(v/max)*(H-2*P)]);}
+  document.querySelectorAll("svg[data-line]").forEach(svg=>{
+    svg.setAttribute("viewBox",`0 0 ${W} ${H+16}`);svg.setAttribute("preserveAspectRatio","none");grid(svg);
+    const v=svg.dataset.line.split(",").map(Number),c=svg.dataset.cmp?svg.dataset.cmp.split(",").map(Number):null;
+    const max=Math.max(...v,...(c||[]))*1.1;
+    if(svg.dataset.area){const p=pts(v,max);svg.appendChild(el("polygon",{class:"area",points:[[P,H-P],...p,[W-P,H-P]].map(q=>q.join(",")).join(" ")}));}
+    if(c)svg.appendChild(el("polyline",{class:"ln cmp",points:pts(c,max).map(q=>q.join(",")).join(" ")}));
+    svg.appendChild(el("polyline",{class:"ln",points:pts(v,max).map(q=>q.join(",")).join(" ")}));
+    axis(svg,svg.dataset.x,v.length);
+  });
+  document.querySelectorAll("svg[data-bars],svg[data-bars1]").forEach(svg=>{
+    svg.setAttribute("viewBox",`0 0 ${W} ${H+16}`);svg.setAttribute("preserveAspectRatio","none");grid(svg);
+    const sets=(svg.dataset.bars||svg.dataset.bars1).split("|").map(s=>s.split(",").map(Number));
+    const n=sets[0].length,max=Math.max(...sets.flat())*1.1,slot=(W-2*P)/n,bw=slot/(sets.length+1);
+    sets.forEach((s,j)=>s.forEach((v,i)=>{const h=(v/max)*(H-2*P);svg.appendChild(el("rect",{class:"br"+(j?" b3":""),x:P+i*slot+j*bw+bw/2,y:H-P-h,width:bw*.9,height:h,rx:2}));}));
+    if(svg.dataset.x)svg.dataset.x.split(",").forEach((l,i)=>{if(!l)return;const t=el("text",{x:P+i*slot,y:H+12});t.textContent=l;svg.appendChild(t);});
+  });
+  document.querySelectorAll("svg[data-stack]").forEach(svg=>{
+    svg.setAttribute("viewBox",`0 0 ${W} ${H+16}`);svg.setAttribute("preserveAspectRatio","none");grid(svg);
+    const cols=svg.dataset.stack.split("|").map(s=>s.split(",").map(Number));const max=Math.max(...cols.map(c=>c.reduce((a,b)=>a+b)))*1.1;
+    const slot=(W-2*P)/cols.length,cls=["br","br b2","br b4","br b3"];
+    cols.forEach((c,i)=>{let y=H-P;c.forEach((v,j)=>{const h=(v/max)*(H-2*P);y-=h;svg.appendChild(el("rect",{class:cls[j],x:P+i*slot+slot*.2,y,width:slot*.6,height:h}));});});
+    svg.dataset.x.split(",").forEach((l,i)=>{const t=el("text",{x:P+i*slot+slot*.25,y:H+12});t.textContent=l;svg.appendChild(t);});
+  });
+  document.querySelectorAll("svg[data-hbars]").forEach(svg=>{
+    const rows=svg.dataset.hbars.split("|").map(r=>r.split(":"));const max=Math.max(...rows.map(r=>+r[2]));
+    svg.setAttribute("viewBox",`0 0 600 ${rows.length*30}`);
+    rows.forEach((r,i)=>{const y=i*30;const t=el("text",{x:0,y:y+15});t.textContent=r[0];svg.appendChild(t);
+      const w=(+r[2]/max)*360;svg.appendChild(el("rect",{class:"br",x:110,y:y+4,width:w,height:14,rx:3}));
+      const v=el("text",{x:116+w,y:y+15});v.textContent=`$${(+r[2]).toLocaleString()} · ${r[1]} customers`;svg.appendChild(v);});
+  });
+  document.querySelectorAll("svg[data-funnel]").forEach(svg=>{
+    const v=svg.dataset.funnel.split(",").map(Number);svg.setAttribute("viewBox",`0 0 ${W} ${H+10}`);svg.setAttribute("preserveAspectRatio","none");
+    const bw=(W-2*P)/v.length;v.forEach((n,i)=>{const h=(n/v[0])*(H-P);svg.appendChild(el("rect",{class:"br"+(i===3?" b3":""),x:P+i*bw+4,y:H-h,width:bw-8,height:h,rx:3}));});
+  });
+})();
+</script>
+<!--kit-js-->
+<script>
+/* Settings round 8 board kit: option (A/B/C) and theme switching. Keys 1–3 pick an option, L / D the theme.
+   Buttons: <button data-opt="A">, <button data-theme="light">. The body carries class light|dark and data-opt. */
+(function () {
+  var body = document.body;
+  if (!body.dataset.opt) body.dataset.opt = "A";
+  if (!/\b(light|dark)\b/.test(body.className)) body.classList.add("light");
+  function sync() {
+    document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.optBtn === body.dataset.opt)); });
+    document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(body.classList.contains(b.dataset.themeBtn))); });
+  }
+  function opt(v) { body.dataset.opt = v; sync(); }
+  function theme(v) { body.classList.remove("light", "dark"); body.classList.add(v); sync(); }
+  document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.addEventListener("click", function () { opt(b.dataset.optBtn); }); });
+  document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.addEventListener("click", function () { theme(b.dataset.themeBtn); }); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "1") opt("A"); if (e.key === "2") opt("B"); if (e.key === "3") opt("C");
+    if (e.key === "l" || e.key === "L") theme("light"); if (e.key === "d" || e.key === "D") theme("dark");
+  });
+  sync();
+})();
+
+</script>
+<!--/kit-js-->
+</body>
+</html>
