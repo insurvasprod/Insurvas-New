@@ -1,5 +1,6 @@
 import { ViewTransition, type ReactNode } from "react";
 import Link from "next/link";
+import { AuthPhotoPanel } from "@/components/portal/auth-photo-panel";
 
 export type PortalAuthMode = "sign-in" | "sign-up";
 
@@ -12,34 +13,35 @@ export type PortalAuthMode = "sign-in" | "sign-up";
  * between doors (agent ↔ partner, sign-in ↔ sign-up). Without View Transitions support it simply
  * navigates; under reduced motion the CSS in globals.css turns these off.
  *
- * `story` is optional: without a panel the frame is one centred column on the brand field, the
- * form on a card (the agent sign-in, owner 2026-11-03: "remove this separation … centre the whole
- * process"). globals.css draws it from `data-layout`.
+ * `story` is optional: without a panel the frame is one centred column on the brand field.
+ * The agent sign-in and signup request the photo panel instead, with a real summary when supplied.
  */
 export function PortalAuthSplitShell({
   mode,
   form,
   story,
+  photo = false,
   className = "",
 }: {
   mode: PortalAuthMode;
   form: ReactNode;
   /** The brand panel. Omitted by a door that is one centred column and has no panel. */
   story?: ReactNode;
+  photo?: boolean;
   className?: string;
 }) {
   return (
-    <div className={`portal-auth-split-shell ${className}`.trim()} data-mode={mode} data-layout={story ? "split" : "single"}>
+    <div className={`portal-auth-split-shell ${className}`.trim()} data-mode={mode} data-layout={story || photo ? "split" : "single"} data-photo={photo ? "" : undefined}>
       <section className="portal-auth-split-form" aria-label={mode === "sign-in" ? "Sign in" : "Create an account"}>
         <ViewTransition name="auth-form" share="auth-swap" enter="auth-rise" exit="auth-fade" update="auth-swap" default="none">
           <div className="flex w-full flex-1 flex-col items-center justify-center">{form}</div>
         </ViewTransition>
       </section>
-      {story && (
+      {(story || photo) && (
         <aside className="portal-auth-split-story portal-auth-story-scene" aria-label="Insurvas workspace benefits">
           {/* A soft crossfade only: the panel does not rise or blink between steps (2026-10-28). */}
           <ViewTransition name="auth-story" share="auth-hold" enter="auth-rise" exit="auth-fade" update="auth-hold" default="none">
-            <div className="relative z-10 w-full">{story}</div>
+            {photo ? <AuthPhotoPanel>{story}</AuthPhotoPanel> : <div className="relative z-10 w-full">{story}</div>}
           </ViewTransition>
         </aside>
       )}

@@ -67,7 +67,7 @@ export function NewPasswordField({
           onChange={(event) => onChange(event.target.value)}
           aria-describedby={`${id}-strength`}
           // Only auth screens set a new password, so the field is the 44px auth field (auth-controls.tsx).
-          className={cn("h-11 border-[var(--border-strong)] bg-card pr-11 text-base md:text-base", inputClassName)}
+          className={cn("auth-h border-[var(--border-strong)] bg-card pr-11 text-base md:text-base", inputClassName)}
         />
         <button type="button" className="portal-auth-visibility" onClick={() => setShow((current) => !current)} aria-label={show ? "Hide password" : "Show password"} aria-pressed={show}>
           {show ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}

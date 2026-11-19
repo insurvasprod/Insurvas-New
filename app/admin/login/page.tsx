@@ -200,7 +200,7 @@ export default function AdminLoginPage() {
                 </div>
               </div>
               {errorBox}
-              <Button type="submit" className="mt-2 h-11 w-full" disabled={loading}>
+              <Button type="submit" className="auth-h mt-2 w-full" disabled={loading}>
                 {loading ? "Checking…" : "Continue"}
               </Button>
             </form>
@@ -245,7 +245,7 @@ export default function AdminLoginPage() {
                 onComplete={(typed) => void handleTotp(null, typed)}
               />
               {errorBox}
-              <Button type="submit" className="mt-2 h-11 w-full" disabled={loading || code.length !== 6}>
+              <Button type="submit" className="auth-h mt-2 w-full" disabled={loading || code.length !== 6}>
                 {loading ? "Verifying…" : "Verify and enter"}
               </Button>
               <button type="button" onClick={startOver} className="inline-flex items-center gap-1.5 self-start text-sm font-semibold text-muted-foreground hover:text-foreground">

@@ -124,7 +124,7 @@ export function ConfirmEmailPanel() {
         title="This link no longer works"
         lede="It has expired or was already used. Your email address is unchanged."
       >
-        <Button asChild className="mt-6 h-11 w-full"><Link href="/app/login">Sign in</Link></Button>
+        <Button asChild className="auth-h mt-6 w-full"><Link href="/app/login">Sign in</Link></Button>
         <p className="mt-4 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
           Still need the change? Ask for it again from your profile, or <a href={SUPPORT} className="font-semibold text-foreground underline underline-offset-2">contact your administrator</a>.
         </p>
@@ -155,7 +155,7 @@ export function ConfirmEmailPanel() {
         <AuthAlert>{error}</AuthAlert>
       )}
 
-      <Button onClick={confirm} disabled={loading} className="mt-6 h-11 w-full px-4">
+      <Button onClick={confirm} disabled={loading} className="auth-h mt-6 w-full px-4">
         {loading ? "Confirming…" : "Confirm email address"}
       </Button>
 

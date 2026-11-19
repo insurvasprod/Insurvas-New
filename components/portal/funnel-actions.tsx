@@ -28,7 +28,7 @@ export function FunnelActions({ back, children, className, onDark = false }: {
           asChild
           variant="outline"
           className={cn(
-            "h-11 shrink-0 px-5",
+            "auth-h shrink-0 px-5",
             onDark
               ? "border-white/30 bg-transparent text-[var(--on-dark)] hover:bg-white/10 hover:text-[var(--on-dark)] dark:border-white/30 dark:bg-transparent dark:hover:bg-white/10"
               : "border-[var(--border-strong)]",

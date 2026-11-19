@@ -73,6 +73,8 @@
 @media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
   .word { opacity: 0; transform: translateY(105%); animation: reveal-fallback 1ms linear 2.6s forwards; }
   .hero [data-enter] { opacity: 0; animation: reveal-fallback 1ms linear 2.6s forwards; }
+  /* The logo intro holds the hero back (landing-intro.tsx); the fallback waits for it too. */
+  :global(html[data-intro="play"]) .word, :global(html[data-intro="play"]) .hero [data-enter] { animation-delay: 4.3s; }
 }
 @keyframes reveal-fallback { to { opacity: 1; transform: none; } }
 

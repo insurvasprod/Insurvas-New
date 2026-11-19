@@ -1,0 +1,215 @@
+/* The three studies for the auth brand panel (development only).
+   Every colour lives here: a study names none of its own, it reads these off its canvas. */
+
+/* ── The mock screen ──────────────────────────────────────────────────────────────────────────
+   The real sign-in at the owner's 1536x826, so a study is judged where it will actually sit:
+   beside the form, at its real proportion, not as a poster. */
+.screen {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  aspect-ratio: 1536 / 826;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  container-type: inline-size;
+}
+.stage { display: flex; padding: 12px; }
+
+/* ── The panel ────────────────────────────────────────────────────────────────────────────── */
+.panel {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 24px;
+  background: rgb(4 18 15);
+  color: #eaf6f2;
+  padding: clamp(20px, 2.6cqw, 48px);
+}
+.panel canvas { position: absolute; inset: 0; z-index: -2; display: block; width: 100%; height: 100%; }
+
+/* The shade under the words. The studies are dark where the type sits, so this is light. */
+.shade {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgb(2 12 10 / 34%), rgb(2 12 10 / 0) 30%, rgb(2 12 10 / 72%));
+}
+/* Film grain and a vignette: what stops a canvas from looking like a canvas. The noise is an
+   inline SVG turbulence, so it costs no request and no bitmap. */
+.grain {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: .22;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.vignette {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(118% 92% at 50% 46%, transparent 52%, rgb(1 8 7 / 72%) 100%);
+}
+.copy { position: relative; max-width: 510px; margin-top: auto; margin-bottom: 8px; }
+.logo { display: inline-flex; width: fit-content; }
+.badge {
+  position: absolute;
+  z-index: 2;
+  right: clamp(20px, 2.6cqw, 48px);
+  bottom: 18px;
+  border: 1px solid rgb(255 255 255 / 34%);
+  border-radius: 999px;
+  background: rgb(4 24 20 / 72%);
+  padding: 5px 11px;
+  color: rgb(234 246 242 / 82%);
+  font: 600 10px/1 var(--font-sans);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+/* ── A · The Line ─────────────────────────────────────────────────────────────────────────────
+   Night, the brand's two greens for the traffic, and the soft green of the ramp for what issued. */
+.line {
+  --art-ink: rgb(3 14 11);
+  --art-trail: rgb(79 227 187);
+  --art-bright: rgb(7 214 160);
+  --art-crest: rgb(197 255 237);
+}
+/* The headlights carry most of the light, so the shade over the words is heavier here. */
+.line .shade { background: linear-gradient(180deg, rgb(2 12 10 / 52%), rgb(2 12 10 / 12%) 34%, rgb(2 12 10 / 86%)); }
+
+/* ── B · Guilloché ────────────────────────────────────────────────────────────────────────────
+   A plate of deep olive, cut in mint. The crest is the inking pass. */
+.guilloche {
+  --art-plate: rgb(5 26 21);
+  --art-line: rgb(79 227 187);
+  --art-ink: rgb(10 135 105);
+  --art-crest: rgb(197 255 237);
+}
+.guilloche .grain { opacity: .3; }
+
+/* ── C · The Floor ────────────────────────────────────────────────────────────────────────────
+   Dim seats, a live call in the bright green, a booked policy in the soft one. */
+.floor {
+  --art-ground: rgb(4 20 16);
+  --art-quiet: rgb(14 74 61);
+  --art-live: rgb(7 214 160);
+  --art-won: rgb(197 255 237);
+}
+.floor .grain { opacity: .16; }
+
+/* ── Today's panel, for the comparison ──────────────────────────────────────────────────────── */
+.photo { background: rgb(13 64 55); }
+.photo .image {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background: url('/marketing/auth-utah-road.webp') center / cover no-repeat;
+  animation: drift 18s ease-in-out infinite alternate;
+}
+.photo .shade { background: linear-gradient(180deg, rgb(5 33 25 / 46%), rgb(5 33 25 / 7%) 34%, rgb(5 33 25 / 85%)); }
+.photo .grain { opacity: 0; }
+.photo .vignette { background: none; }
+@keyframes drift {
+  from { transform: scale(1.035) translate3d(-1%, 1%, 0); }
+  to { transform: scale(1.13) translate3d(1%, -1%, 0); }
+}
+
+/* ── The form beside it: the real one's shape, drawn flat. It is scenery for the study. ─────── */
+.form { display: flex; flex-direction: column; justify-content: center; padding: 0 clamp(18px, 4cqw, 76px); background: var(--surface); }
+.formInner { width: 100%; max-width: 472px; margin: 0 auto; }
+.h1 { margin: 0 0 6px; color: var(--ink); font: 600 clamp(20px, 2.4cqw, 34px)/1.1 var(--font-display); letter-spacing: -.03em; }
+.sub { margin: 0 0 clamp(14px, 2cqw, 26px); color: var(--muted); font-size: clamp(11px, 1cqw, 14px); }
+.oauth { display: flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-alt); padding: clamp(8px, 1cqw, 12px); color: var(--ink); font-size: clamp(11px, 1cqw, 14px); font-weight: 600; }
+.or { display: flex; align-items: center; gap: 10px; margin: clamp(10px, 1.4cqw, 18px) 0; color: var(--muted); font-size: clamp(9px, .85cqw, 12px); }
+.or::before, .or::after { flex: 1; height: 1px; background: var(--border); content: ""; }
+.label { display: block; margin-bottom: 5px; color: var(--ink); font-size: clamp(10px, .9cqw, 13px); font-weight: 600; }
+.input { height: clamp(28px, 3cqw, 42px); border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); }
+.field { margin-bottom: clamp(8px, 1.2cqw, 16px); }
+.cta { display: flex; align-items: center; justify-content: center; height: clamp(28px, 3cqw, 42px); border-radius: 8px; background: var(--primary); color: var(--on-primary, #04231c); font-size: clamp(11px, 1cqw, 14px); font-weight: 650; }
+.formFoot { margin-top: clamp(8px, 1.2cqw, 16px); color: var(--muted); font-size: clamp(9px, .85cqw, 12px); }
+
+/* ── The page around the studies ──────────────────────────────────────────────────────────── */
+.page { max-width: 1180px; margin: 0 auto; padding: 40px 24px; }
+.eyebrow { margin: 0; color: var(--muted); font-size: .75rem; font-weight: 600; }
+.heading { margin: 6px 0 0; color: var(--ink); font: 600 1.75rem/1.15 var(--font-display); letter-spacing: -.03em; }
+.intro { max-width: 70ch; margin: 8px 0 0; color: var(--body); font-size: .9375rem; line-height: 1.6; }
+.tabs { margin: 18px 0; }
+.notes { display: grid; gap: 10px; margin-top: 22px; max-width: 70ch; }
+.notes h3 { margin: 0; color: var(--ink); font-size: 15px; font-weight: 650; }
+.notes p { margin: 0; color: var(--body); font-size: 14px; line-height: 1.6; }
+.notes dt { color: var(--ink); font-size: 12px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+.notes dd { margin: 2px 0 12px; color: var(--body); font-size: 14px; line-height: 1.6; }
+
+/* ── The words ────────────────────────────────────────────────────────────────────────────────
+   Three treatments against the one that ships. The faults they are fixing: four voices stacked in
+   a ladder, a caps kicker that reads as a grey bar, a paragraph that repeats the headline, and a
+   hairline that makes a footer inside a panel with no footer. */
+.copy[data-words] { margin-bottom: 6%; }
+
+/* The claim. One word in the accent serif, the landing page's own move, so the door and the page
+   it came from are set in the same voice. */
+.title {
+  max-width: 13ch;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2.375rem, 4cqw, 3.625rem);
+  font-weight: 600;
+  line-height: 1.02;
+  letter-spacing: -.045em;
+  text-wrap: balance;
+}
+.em {
+  padding-right: .02em;
+  font-family: var(--font-accent), Georgia, serif;
+  font-size: 1.1em;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -.01em;
+  color: rgb(143 245 213);
+}
+
+/* The small line above the claim: the kicker's own words, out of uppercase. Sentence case reads
+   as a sentence; fifty-two tracked capitals read as a texture. */
+.lede {
+  max-width: 52ch;
+  margin: 0 0 clamp(10px, 1.1cqw, 18px);
+  color: rgb(143 245 213);
+  font-size: clamp(.75rem, .86cqw, .875rem);
+  font-weight: 600;
+  line-height: 1.45;
+}
+/* The one line that makes the claim credible. No rule above it: a hairline here draws a footer. */
+.proof {
+  margin: clamp(14px, 1.5cqw, 22px) 0 0;
+  color: rgb(197 255 237 / 78%);
+  font-size: clamp(.75rem, .86cqw, .875rem);
+  line-height: 1.5;
+}
+
+/* Top set: the words under the logo, the picture taking the whole lower half, and the paragraph
+   surviving as one quiet line at the foot of the panel. */
+.copy[data-words="top"] { margin-top: clamp(14px, 2cqw, 30px); margin-bottom: auto; }
+.copy[data-words="top"] .title { max-width: 15ch; }
+.foot {
+  position: absolute;
+  right: clamp(20px, 2.6cqw, 48px);
+  bottom: clamp(16px, 2cqw, 30px);
+  left: clamp(20px, 2.6cqw, 48px);
+  max-width: 46ch;
+  margin: 0;
+  color: rgb(234 246 242 / 66%);
+  font-size: clamp(.75rem, .86cqw, .875rem);
+  line-height: 1.5;
+}

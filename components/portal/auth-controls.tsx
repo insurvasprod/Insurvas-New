@@ -17,11 +17,11 @@ export const authLabel = "text-sm font-semibold leading-normal tracking-[-0.02em
 
 /** Any native auth control (input, select) under a `<span className={authLabel}>`: 44px, 8px corners, the "type here" edge. */
 export const authControl =
-  "mt-1.5 box-border h-11 w-full rounded-md border border-[var(--border-strong)] bg-card px-3 text-base leading-normal tracking-[-0.02em] text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
+  "auth-h mt-1.5 box-border w-full rounded-md border border-[var(--border-strong)] bg-card px-3 text-base leading-normal tracking-[-0.02em] text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
 
 /** The shared Input at the auth height. */
 export function AuthInput({ className, ...props }: ComponentProps<typeof Input>) {
-  return <Input className={cn("h-11 rounded-md border-[var(--border-strong)] bg-card text-base md:text-base", className)} {...props} />;
+  return <Input className={cn("auth-h rounded-md border-[var(--border-strong)] bg-card text-base md:text-base", className)} {...props} />;
 }
 
 /** Label, control and an optional hint, stacked. `aside` sits right of the label ("Forgot password?"). */
@@ -52,12 +52,12 @@ export function AuthField({ label, htmlFor, aside, hint, children, className }: 
 /** The screen's primary action: full width, 44px. Secondary actions use variant="outline" at the same size. */
 export function AuthSubmit({ className, type = "submit", onClick, ...props }: ComponentProps<typeof Button>) {
   // onClick passes through by name so lib/design/contract.test.mjs sees the handler a caller gives.
-  return <Button type={type} onClick={onClick} className={cn("h-11 w-full", className)} {...props} />;
+  return <Button type={type} onClick={onClick} className={cn("auth-h w-full", className)} {...props} />;
 }
 
 /** The secondary full-width action ("Email me a sign-in link"), the same height as AuthSubmit. */
 export function AuthSecondary({ className, onClick, ...props }: ComponentProps<typeof Button>) {
-  return <Button type="button" variant="outline" onClick={onClick} className={cn("h-11 w-full border-[var(--border-strong)]", className)} {...props} />;
+  return <Button type="button" variant="outline" onClick={onClick} className={cn("auth-h w-full border-[var(--border-strong)]", className)} {...props} />;
 }
 
 const ALERT_TONE = {

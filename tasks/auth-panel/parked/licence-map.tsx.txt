@@ -1,0 +1,475 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+import { InsurvasLogo } from "@/components/shared/insurvas-logo";
+import ATLAS from "@/lib/geo/us-states.json";
+
+/**
+ * The licence map: the United States cut as panes of glass, with the Insurvas mark at the middle
+ * of the country opening satellite links out to six states at a time.
+ *
+ * **Every state is lit.** An agent holds a licence in as many states as they write in, so there is
+ * no shorter list to draw and no figure on this panel that could be wrong (owner, 13 Nov). There
+ * are no words either: a count and a line under the map read as a caption on a picture, and the
+ * owner struck them out the same day. The map is the whole statement.
+ *
+ * **The geography is real**, and precomputed: state boundaries from public US census outlines,
+ * projected in Albers conic equal area on the standard 29.5°/45.5° parallels — the projection an
+ * atlas uses for the States — with Alaska at 36% and Hawaii enlarged, placed where an atlas places
+ * them. 2,753 outline points in `lib/geo/us-states.json`, so the page carries no mapping library
+ * and the canvas only has to draw. Michigan keeps both peninsulas and Chesapeake Bay is cut out.
+ *
+ * **The links are straight runs.** They were curves first, then arcs lifting off the map over a
+ * dashed ground track; the owner did not want the bow at any depth (13 Nov), so what carries a
+ * link now is the signal travelling it with a bright head, the ring where it touches down, and the
+ * state answering. Six at a time, one per sector of the compass so a round fans out instead of
+ * bunching, and never the same six twice running. The signal runs out, the state answers, and the
+ * signal runs home down the same line.
+ *
+ * Colours come from CSS (§9): the component reads the tokens on `.licence-map` and composes its
+ * own alphas, exactly as `wave-field.tsx` does.
+ */
+
+type Raw = { n: string; a: string; g: string; c: number[]; r: number[][] };
+type Plotted = Raw & {
+  bb: { x0: number; y0: number; w: number; h: number };
+  /** Distance from the mark, measured on a slightly flattened circle so the light spreads over a
+   *  landscape instead of opening as a compass circle. */
+  dist: number;
+  /** True distance, for the arcs. */
+  raw: number;
+  /** Which sixth of the compass it lies in. */
+  ang: number;
+  inset: boolean;
+  u: number[];
+  /** Where a run from the mark meets this state. */
+  hit: number[];
+};
+
+const W = ATLAS.w;
+const H = ATLAS.h;
+const HUB = ATLAS.hub;
+
+const FILL = 4.2;
+const LEAD = 0.4;
+const OUT = 0.6;
+const HOLD = 1.6;
+const BACK = 0.48;
+const STAGGER = 0.09;
+const REST = 0.55;
+const SECTORS = 6;
+
+function pointIn(state: Raw, x: number, y: number): boolean {
+  let inside = false;
+  for (const ring of state.r) {
+    for (let i = 0, j = ring.length - 2; i < ring.length; j = i, i += 2) {
+      const xi = ring[i], yi = ring[i + 1], xj = ring[j], yj = ring[j + 1];
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+let PLAN: Plotted[] | null = null;
+
+/** Done once, on the first panel that needs it: about 200k point tests, a few milliseconds. */
+function plan(): Plotted[] {
+  if (PLAN) return PLAN;
+  PLAN = (ATLAS.states as Raw[]).map((s) => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const ring of s.r) {
+      for (let i = 0; i < ring.length; i += 2) {
+        if (ring[i] < x0) x0 = ring[i];
+        if (ring[i] > x1) x1 = ring[i];
+        if (ring[i + 1] < y0) y0 = ring[i + 1];
+        if (ring[i + 1] > y1) y1 = ring[i + 1];
+      }
+    }
+    const dx = s.c[0] - HUB[0];
+    const raw = Math.max(1, Math.hypot(dx, s.c[1] - HUB[1]));
+    const u = [dx / raw, (s.c[1] - HUB[1]) / raw];
+
+    // Where a straight run from the mark crosses into the state. A link that stops dead on the
+    // border leaves a stub for a state that starts close by, so it carries on in until it is a
+    // length worth drawing and stops the moment the ray would leave again.
+    let entry = -1;
+    for (let d = 30; d < raw; d += 2) {
+      if (pointIn(s, HUB[0] + u[0] * d, HUB[1] + u[1] * d)) { entry = d; break; }
+    }
+    let hit = [s.c[0], s.c[1]];
+    if (entry >= 0) {
+      const want = Math.max(entry, Math.min(raw, 168));
+      let best = entry;
+      for (let e = entry; e <= want; e += 3) {
+        if (!pointIn(s, HUB[0] + u[0] * e, HUB[1] + u[1] * e)) break;
+        best = e;
+      }
+      hit = [HUB[0] + u[0] * best, HUB[1] + u[1] * best];
+    }
+    return {
+      ...s,
+      bb: { x0, y0, w: x1 - x0, h: y1 - y0 },
+      dist: Math.hypot(dx, (s.c[1] - HUB[1]) / 0.92),
+      raw,
+      ang: Math.atan2(s.c[1] - HUB[1], dx),
+      inset: s.g !== "main",
+      u,
+      hit,
+    };
+  });
+  return PLAN;
+}
+
+/** Resolve a token through a canvas, so any CSS colour notation comes back in one known form. */
+function tokenRgb(probe: CanvasRenderingContext2D, host: Element, name: string, fallback: string): string {
+  const raw = getComputedStyle(host).getPropertyValue(name).trim();
+  // An unparseable value leaves `fillStyle` as it was, so a sentinel tells us whether it resolved.
+  const sentinel = "rgba(0, 0, 0, 0)";
+  probe.fillStyle = sentinel;
+  probe.fillStyle = raw || fallback;
+  if (probe.fillStyle === sentinel) probe.fillStyle = fallback;
+  return String(probe.fillStyle);
+}
+
+/** "#rrggbb" or "rgb(…)" from the token, plus an alpha, as a canvas style string. */
+function withAlpha(colour: string, alpha: number): string {
+  const hex = colour.trim();
+  if (hex.startsWith("rgb")) {
+    const nums = hex.replace(/[^\d.,]/g, "").split(",").map(Number);
+    return `rgba(${nums[0] || 0}, ${nums[1] || 0}, ${nums[2] || 0}, ${alpha})`;
+  }
+  const n = hex.replace("#", "");
+  const full = n.length === 3 ? n.split("").map((c) => c + c).join("") : n;
+  const v = parseInt(full.slice(0, 6), 16);
+  return `rgba(${(v >> 16) & 255}, ${(v >> 8) & 255}, ${v & 255}, ${alpha})`;
+}
+
+export function LicenceMap() {
+  const plotRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const host = plotRef.current;
+    if (!canvas || !host) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const states = plan();
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const probe = document.createElement("canvas").getContext("2d");
+    const read = (name: string, fallback: string) =>
+      probe ? tokenRgb(probe, host, name, fallback) : fallback;
+    const DIM = read("--map-dim", "rgb(146 210 190)");
+    const LIT = read("--map-lit", "rgb(126 252 214)");
+    const CORE = read("--map-core", "rgb(10 198 150)");
+    const FLOOR = read("--map-floor", "rgb(5 132 100)");
+    const EDGE = read("--map-edge", "rgb(228 255 246)");
+    const BEAM = read("--map-beam", "rgb(248 255 253)");
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    ctx.scale(dpr, dpr);
+
+    const layer = () => {
+      const c = document.createElement("canvas");
+      c.width = canvas.width;
+      c.height = canvas.height;
+      const x = c.getContext("2d");
+      x?.scale(dpr, dpr);
+      return { c, x: x as CanvasRenderingContext2D };
+    };
+
+    const trace = (x: CanvasRenderingContext2D, s: Plotted) => {
+      for (const ring of s.r) {
+        x.moveTo(ring[0], ring[1]);
+        for (let i = 2; i < ring.length; i += 2) x.lineTo(ring[i], ring[i + 1]);
+        x.closePath();
+      }
+    };
+
+    // The country at rest: every state a dark pane with a faint edge. Drawn once.
+    const base = layer();
+    for (const s of states) {
+      base.x.beginPath();
+      trace(base.x, s);
+      base.x.fillStyle = withAlpha(DIM, 0.085);
+      base.x.fill();
+      base.x.strokeStyle = withAlpha(DIM, 0.3);
+      base.x.lineWidth = 0.9;
+      base.x.stroke();
+    }
+
+    // Glass, baked once per state as the light reaches it: a gradient down the pane, a lit edge,
+    // and one sheen across the top-left. The sheen is what makes it read as glass, not paint.
+    const lit = layer();
+    const pane = (s: Plotted) => {
+      const x = lit.x;
+      x.save();
+      x.beginPath();
+      trace(x, s);
+      const g = x.createLinearGradient(0, s.bb.y0, 0, s.bb.y0 + s.bb.h + 1);
+      g.addColorStop(0, withAlpha(LIT, 0.33));
+      g.addColorStop(0.5, withAlpha(CORE, 0.27));
+      g.addColorStop(1, withAlpha(FLOOR, 0.17));
+      x.fillStyle = g;
+      x.shadowColor = withAlpha(LIT, 0.5);
+      x.shadowBlur = 10;
+      x.fill();
+      x.shadowBlur = 0;
+      x.clip();
+      const sheen = x.createLinearGradient(s.bb.x0, s.bb.y0, s.bb.x0 + s.bb.w * 0.95, s.bb.y0 + s.bb.h * 1.15);
+      sheen.addColorStop(0, withAlpha(EDGE, 0.26));
+      sheen.addColorStop(0.42, withAlpha(EDGE, 0.05));
+      sheen.addColorStop(1, withAlpha(EDGE, 0));
+      x.fillStyle = sheen;
+      x.fillRect(s.bb.x0 - 2, s.bb.y0 - 2, s.bb.w + 4, s.bb.h + 4);
+      x.restore();
+      x.beginPath();
+      trace(x, s);
+      x.strokeStyle = withAlpha(EDGE, 0.72);
+      x.lineWidth = 1;
+      x.stroke();
+    };
+
+    // The whole country as one path, so the light that fills it is clipped to the land: drawn
+    // unclipped, the front was a circle sitting on the panel.
+    const land = typeof Path2D === "function" ? new Path2D() : null;
+    if (land) {
+      for (const s of states) {
+        for (const ring of s.r) {
+          land.moveTo(ring[0], ring[1]);
+          for (let i = 2; i < ring.length; i += 2) land.lineTo(ring[i], ring[i + 1]);
+          land.closePath();
+        }
+      }
+    }
+
+    const queue = states.slice().sort((a, b) => a.dist - b.dist);
+    const reachable = states.filter((s) => !s.inset && s.raw > 118);
+    const far = queue.reduce((m, s) => Math.max(m, s.dist), 1) + 70;
+    const ease = (p: number) => p * p * (3 - 2 * p);
+
+    let at = 0;
+    let filled = false;
+    let round: Plotted[] = [];
+    let previous: Plotted[] = [];
+    let t0 = performance.now();
+    let live = true;
+    let raf = 0;
+
+    // Six at a time, one per sector of the compass, so a round fans out instead of bunching on one
+    // side. Nothing from the round before, so it keeps moving around the country.
+    const pick = () => {
+      const chosen: Plotted[] = [];
+      const used = new Set(previous.map((s) => s.a));
+      for (let k = 0; k < SECTORS; k++) {
+        const lo = -Math.PI + (k * 2 * Math.PI) / SECTORS;
+        const hi = lo + (2 * Math.PI) / SECTORS;
+        const pool = reachable.filter((s) => s.ang >= lo && s.ang < hi && !used.has(s.a));
+        if (!pool.length) continue;
+        const one = pool[Math.floor(Math.random() * pool.length)];
+        used.add(one.a);
+        chosen.push(one);
+      }
+      return chosen;
+    };
+
+    // The edge of the light: flattened, and breathing on two slow harmonics, so it reads as
+    // something spreading rather than as a radius being animated.
+    const front = (r: number, t: number) => {
+      ctx.beginPath();
+      for (let i = 0; i <= 72; i++) {
+        const th = (i / 72) * 2 * Math.PI;
+        const rr = r * (1 + 0.045 * Math.sin(3 * th + t * 0.8) + 0.028 * Math.sin(5 * th - t * 1.3));
+        const px = HUB[0] + Math.cos(th) * rr;
+        const py = HUB[1] + Math.sin(th) * rr * 0.92;
+        if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+      }
+      ctx.closePath();
+    };
+
+    // One satellite link: out, held while its state answers, then home down the same arc.
+    const link = (s: Plotted, p: number, phase: "out" | "hold" | "back") => {
+      const rx = 86, ry = 72;
+      const k = (rx * ry) / Math.max(1, Math.hypot(ry * s.u[0], rx * s.u[1]));
+      const a = [HUB[0] + s.u[0] * k, HUB[1] + s.u[1] * k];
+      const b = s.hit;
+      // Straight (owner, 13 Nov). It was an arc lifting off the map over a dashed ground track;
+      // flattened to a tenth of the run it still read as curved, and the owner asked for none. A
+      // straight run and its ground track are the same line, so the track went with the bow: what
+      // carries the link now is the signal travelling it, the ring where it touches down, and the
+      // state answering.
+      const at2 = (v: number) => [a[0] + (b[0] - a[0]) * v, a[1] + (b[1] - a[1]) * v];
+
+      ctx.save();
+      let from = 0, to = 1, head = 1;
+      if (phase === "out") { to = ease(p); head = to; }
+      else if (phase === "back") { from = 1 - ease(p); head = from; }
+      if (to - from <= 0.015) { ctx.restore(); return; }
+
+      const h0 = at2(from), h1 = at2(to);
+      const g = ctx.createLinearGradient(h0[0], h0[1], h1[0], h1[1]);
+      if (phase === "back") {
+        g.addColorStop(0, withAlpha(BEAM, 1));
+        g.addColorStop(0.5, withAlpha(LIT, 0.5));
+        g.addColorStop(1, withAlpha(LIT, 0.06));
+      } else {
+        g.addColorStop(0, withAlpha(LIT, 0.26));
+        g.addColorStop(0.5, withAlpha(EDGE, 0.75));
+        g.addColorStop(1, withAlpha(BEAM, 1));
+      }
+      ctx.strokeStyle = g;
+      ctx.lineWidth = 1.9;
+      ctx.lineCap = "round";
+      ctx.shadowColor = withAlpha(LIT, 0.75);
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.moveTo(h0[0], h0[1]);
+      ctx.lineTo(h1[0], h1[1]);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      if (phase === "hold") {
+        // The whole state answers: its glass warms and its own outline traces bright, so the eye
+        // lands on something that means something.
+        const warm = Math.min(1, p * 6) * Math.min(1, (1 - p) * 6);
+        ctx.globalAlpha = 0.26 * warm;
+        ctx.beginPath();
+        trace(ctx, s);
+        ctx.fillStyle = withAlpha(EDGE, 1);
+        ctx.fill();
+        ctx.globalAlpha = warm;
+        ctx.beginPath();
+        trace(ctx, s);
+        ctx.strokeStyle = withAlpha(EDGE, 0.95);
+        ctx.lineWidth = 1.9;
+        ctx.shadowColor = withAlpha(LIT, 0.9);
+        ctx.shadowBlur = 11;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+      }
+
+      const tip = at2(head);
+      ctx.beginPath();
+      ctx.arc(tip[0], tip[1], phase === "hold" ? 2.6 : 3, 0, 2 * Math.PI);
+      ctx.fillStyle = withAlpha(BEAM, 1);
+      ctx.shadowColor = withAlpha(EDGE, 0.95);
+      ctx.shadowBlur = phase === "hold" ? 6 : 12;
+      ctx.fill();
+
+      // The ground station: a small still ring where the link touches down.
+      if (phase !== "out" || p > 0.96) {
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.arc(b[0], b[1], 4.6, 0, 2 * Math.PI);
+        ctx.strokeStyle = withAlpha(EDGE, 0.6);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+      ctx.restore();
+    };
+
+    const finished = () => {
+      lit.x.clearRect(0, 0, W, H);
+      for (const s of queue) pane(s);
+      at = queue.length;
+      filled = true;
+      ctx.clearRect(0, 0, W, H);
+      ctx.drawImage(base.c, 0, 0, W, H);
+      ctx.drawImage(lit.c, 0, 0, W, H);
+    };
+
+    if (still) { finished(); return; }
+
+    const frame = (now: number) => {
+      if (!live) return;
+      const t = (now - t0) / 1000;
+      ctx.clearRect(0, 0, W, H);
+      ctx.drawImage(base.c, 0, 0, W, H);
+      ctx.drawImage(lit.c, 0, 0, W, H);
+
+      if (!filled) {
+        // The country lighting, once: a front out of the mark, clipped to the land.
+        const span = Math.max(0, (t - LEAD) / FILL);
+        const r = span >= 1 ? far : Math.pow(span, 0.82) * far;
+        while (at < queue.length && queue[at].dist <= r) { pane(queue[at]); at++; }
+        if (span >= 1) { filled = true; t0 = now; }
+        else {
+          ctx.save();
+          if (land) ctx.clip(land);
+          ctx.lineJoin = "round";
+          for (let b = 0; b < 3; b++) {
+            front(Math.max(1, r - b * 13), t);
+            ctx.strokeStyle = withAlpha(EDGE, 0.5 - b * 0.15);
+            ctx.lineWidth = 2.2 - b * 0.6;
+            if (!b) { ctx.shadowColor = withAlpha(LIT, 0.95); ctx.shadowBlur = 14; }
+            else ctx.shadowBlur = 0;
+            ctx.stroke();
+          }
+          ctx.globalCompositeOperation = "source-atop";
+          const glow = ctx.createRadialGradient(HUB[0], HUB[1], Math.max(1, r * 0.55), HUB[0], HUB[1], Math.max(2, r));
+          glow.addColorStop(0, withAlpha(EDGE, 0));
+          glow.addColorStop(1, withAlpha(EDGE, 0.3));
+          ctx.fillStyle = glow;
+          ctx.fillRect(0, 0, W, H);
+          ctx.restore();
+        }
+      } else {
+        const span = Math.max(0, round.length - 1) * STAGGER + OUT + HOLD + BACK;
+        let local = t;
+        if (!round.length || t > span + REST) {
+          previous = round;
+          round = pick();
+          t0 = now;
+          local = 0;
+        }
+        for (let i = 0; i < round.length; i++) {
+          const own = local - i * STAGGER;
+          if (own < 0) continue;
+          if (own < OUT) link(round[i], own / OUT, "out");
+          else if (own < OUT + HOLD) link(round[i], (own - OUT) / HOLD, "hold");
+          else if (own < OUT + HOLD + BACK) link(round[i], (own - OUT - HOLD) / BACK, "back");
+        }
+      }
+      raf = requestAnimationFrame(frame);
+    };
+
+    raf = requestAnimationFrame(frame);
+
+    // Off screen, it stops: a door on a phone scrolls, and this is decoration.
+    const watch = new IntersectionObserver((entries) => {
+      const on = Boolean(entries[0]?.isIntersecting);
+      if (on && !live) { live = true; t0 = performance.now(); raf = requestAnimationFrame(frame); }
+      if (!on) { live = false; cancelAnimationFrame(raf); }
+    }, { threshold: 0.01 });
+    watch.observe(canvas);
+
+    return () => {
+      live = false;
+      cancelAnimationFrame(raf);
+      watch.disconnect();
+    };
+  }, []);
+
+  return (
+    <div className="licence-map">
+      <div className="licence-map-plot" ref={plotRef}>
+        <canvas ref={canvasRef} width={W} height={H} aria-hidden="true" />
+        {/* The mark the links run from, at the middle of the country: the project's own isotype,
+            with no container. Measured, its ink fills 97% of its box across and 81% down, so a
+            round badge could only clip it or strand it (owner, 13 Nov). */}
+        <span
+          className="licence-map-mark"
+          aria-hidden="true"
+          style={{ left: `${(HUB[0] / W) * 100}%`, top: `${(HUB[1] / H) * 100}%` }}
+        >
+          <InsurvasLogo variant="symbol" size="compact" tone="dark" />
+        </span>
+      </div>
+    </div>
+  );
+}

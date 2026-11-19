@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 
 import { LandingFlow, type FlowGraph } from "@/components/marketing/landing-flow";
+import { SMOOTH_SCROLL_EVENT } from "@/components/marketing/smooth-scroll";
 import styles from "@/components/marketing/landing-features.module.css";
 import { titleCase } from "@/lib/marketing/titleCase";
 
@@ -287,10 +288,16 @@ export function LandingBento() {
       if (current !== lastActive) { lastActive = current; setActive(current); }
     };
     const schedule = () => { if (!frame) frame = window.requestAnimationFrame(update); };
+    // With smooth scrolling on, follow its own signal: it fires in the frame that moves the page, so
+    // the stack shrinks and dims in step with the scroll instead of one frame behind it. The plain
+    // scroll event (touch, the scrollbar, the keyboard) still schedules as before; a second pass in
+    // one frame writes nothing, because every value is written only when it changes.
+    const now = () => { window.cancelAnimationFrame(frame); update(); };
     update();
+    window.addEventListener(SMOOTH_SCROLL_EVENT, now);
     window.addEventListener("scroll", schedule, { passive: true });
     window.addEventListener("resize", schedule);
-    return () => { window.removeEventListener("scroll", schedule); window.removeEventListener("resize", schedule); window.cancelAnimationFrame(frame); };
+    return () => { window.removeEventListener(SMOOTH_SCROLL_EVENT, now); window.removeEventListener("scroll", schedule); window.removeEventListener("resize", schedule); window.cancelAnimationFrame(frame); };
   }, []);
 
   return (

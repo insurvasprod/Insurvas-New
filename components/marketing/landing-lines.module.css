@@ -3,8 +3,11 @@
    them follows the page. */
 /* A section of its own, edge to edge (owner, 10 Nov: "full width, remove the title"). The scenes are
    deep olive in both themes. */
-.band { position: relative; background: #0d4037; }
-:global(.dark) .band { background: #031310; }
+/* The ground of the sections either side (--canvas): the band dissolves into it rather than ending
+   on a straight edge (owner, 13 Nov: "not like a line there but fading away"). The fade is a mask on
+   the frame, eased along a sine curve so no stop shows as a step, and it runs into whatever the
+   page is in either theme. `--fade` is how tall each dissolve is. */
+.band { position: relative; --fade: clamp(40px, 9svh, 84px); background: var(--canvas); }
 /* The section's name, for screen readers only: the scenes carry it visually. */
 .eyebrow { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
@@ -13,9 +16,25 @@
   position: relative;
   isolation: isolate;
   /* owner, 10 Nov: "a bit smaller in length". Never taller than the screen (a phone on its side). */
-  height: clamp(min(500px, 100svh), 70svh, 700px);
+  /* Plus the bottom fade, so the words and chips keep the room they had before the dissolve. */
+  height: calc(clamp(min(500px, 100svh), 70svh, 700px) + var(--fade) * .6);
   overflow: hidden;
   background: #0d4037;
+  --mask: linear-gradient(180deg,
+    transparent 0,
+    rgb(0 0 0 / 10%) calc(var(--fade) * .2),
+    rgb(0 0 0 / 35%) calc(var(--fade) * .4),
+    rgb(0 0 0 / 65%) calc(var(--fade) * .6),
+    rgb(0 0 0 / 90%) calc(var(--fade) * .8),
+    #000 var(--fade),
+    #000 calc(100% - var(--fade)),
+    rgb(0 0 0 / 90%) calc(100% - var(--fade) * .8),
+    rgb(0 0 0 / 65%) calc(100% - var(--fade) * .6),
+    rgb(0 0 0 / 35%) calc(100% - var(--fade) * .4),
+    rgb(0 0 0 / 10%) calc(100% - var(--fade) * .2),
+    transparent 100%);
+  -webkit-mask-image: var(--mask);
+  mask-image: var(--mask);
   cursor: ew-resize;
   touch-action: pan-y;
   user-select: none;
@@ -35,9 +54,9 @@
   place-items: center;
   overflow: hidden;
   color: #eaf6f2;
-  /* The sky of Framer's Particle Wave Shader, sampled from its own demo: rgb(3 8 3). Flat on
-     purpose — the field supplies all the light, and a lit ground under it only greys it out. */
-  background: rgb(3 8 3);
+  /* What shows if WebGL does not start: the band's own night olive. The gradient is opaque, so
+     nothing of this is seen once it is running. */
+  background: rgb(3 19 16);
 }
 /* Light theme (owner, 12 Nov: "it should have different colours in light mode"): the ground is the
    brand's deep olive ink, #0d4037 — the green of the trust band's photo and the footer — and the
@@ -46,49 +65,69 @@
 :global(.dark) .frame { background: #031310; }
 
 /* ── The background ────────────────────────────────────────────────────────────────────────────
-   A rolling landscape of particles, each hanging a line to a floor far below, drawn with WebGL —
-   `particles-waves.tsx` has the picture and why it is a shader now. The owner asked for Framer's
-   Particle Wave Shader, exactly (12 Nov). Earlier passes here were a Canvas 2D version of it, a
-   field of dots, a cove of light trails, blurred ribbons, and a lit floor in perspective.
+   A fluid gradient: four colours poured through a noise field that warps itself, so the bands fold
+   and swell and never repeat — `wave-field.tsx` has the picture and how it is made. The owner
+   asked for Framer's New Wave Gradient, exactly (12 Nov). Earlier passes here were that studio's
+   Particle Wave Shader rebuilt the same way, a Canvas 2D version of it, a field of dots, a cove of
+   light trails, blurred ribbons, and a lit floor in perspective.
 
-   The palette is sampled from the reference's own particles, left to right: the median hue of
-   single lit points (87°, 104°, 134°), at full value. The shader scales them, and where thousands
-   overlap, additive blending carries them towards white by itself — the bright seams. This leaves
-   the brand ramp on purpose: the owner asked for the reference exactly, and the brand green (164°)
-   is teal-er than anything in it. The canvas reads them as tokens, so the component names no
-   colour (§9). */
+   The palette is the brand's own ramp, darkest first: the shader walks it from `--wave-1` to
+   `--wave-4` as the field rises, so the first two are the ground the band sits on and the last is
+   the crest that only the brightest sliver reaches. The canvas reads them as tokens, so the
+   component names no colour (§9).
+
+   The two scenes are told apart here by colour, and in `wave-field.tsx` by how fast and how far
+   the field folds (owner, 12 Nov: "differentiate them a bit"). */
 .field {
-  --wave-1: rgb(188 255 105);
-  --wave-2: rgb(153 255 118);
-  --wave-3: rgb(100 255 137);
-
   position: absolute;
   z-index: 0;
   inset: 0;
   overflow: hidden;
   pointer-events: none;
 }
-/* Light theme: the light end of the brand ramp — soft mint, light mint, soft mint — so the particles
-   read as light against the deep green rather than green on green (owner, 12 Nov: "make the dots
-   brighter, you can't tell anything"). The gain and size are read by the canvas: more light per
-   particle and a slightly larger dot, since this ground is far brighter than the night. */
-:global(html:not(.dark)) .field {
-  --wave-1: rgb(197 255 237);
-  --wave-2: rgb(143 245 213);
-  --wave-3: rgb(197 255 237);
-  --wave-gain: 1.7;
-  --wave-size: 1.25;
+/* "Then": life alone. Night olive to the institutional mid green, with the mint crest held back —
+   one line of business, a closed-in field. */
+.scene[data-side="then"] .field {
+  --wave-1: rgb(3 20 16);
+  --wave-2: rgb(7 53 43);
+  --wave-3: rgb(9 124 97);
+  --wave-4: rgb(96 233 193);
+}
+/* "Now": life and health. The same night, opened out — the bright brand green through it and the
+   soft green of the ramp's light end at the crest. */
+.scene[data-side="now"] .field {
+  --wave-1: rgb(3 24 20);
+  --wave-2: rgb(8 88 70);
+  --wave-3: rgb(7 214 160);
+  --wave-4: rgb(197 255 237);
+}
+/* Light theme (owner, 12 Nov: "it should have different colours in light mode"): the band is the
+   brand's deep olive ink in daylight, not night, so both scenes start a step up the ramp and run
+   brighter — the field has to read against a lit ground rather than a dark sky. */
+:global(html:not(.dark)) .scene[data-side="then"] .field {
+  --wave-1: rgb(8 46 38);
+  --wave-2: rgb(14 78 65);
+  --wave-3: rgb(11 148 115);
+  --wave-4: rgb(160 249 221);
+}
+:global(html:not(.dark)) .scene[data-side="now"] .field {
+  --wave-1: rgb(10 56 46);
+  --wave-2: rgb(12 128 101);
+  --wave-3: rgb(86 232 191);
+  --wave-4: rgb(226 253 244);
 }
 /* Edge to edge, as the reference runs. */
 .field canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
-/* A scrim under the words. The light moves, so without it the headline's contrast would move with
-   it; this holds the middle of the frame dark enough for white type whatever the trails do. */
+/* A scrim under the words, and only the half of that job the shader cannot do. The gradient holds
+   the middle of the frame back down its own ramp (`u_hold` in `wave-field.tsx`), which keeps the
+   centre a deep green of the picture rather than a grey veil over it; this adds the last of the
+   contrast for white type, and is light enough not to read as a patch. */
 .bloom {
   position: absolute;
   inset: 0;
-  background: radial-gradient(60% 40% at 50% 38%, rgb(2 12 10 / 44%), rgb(2 12 10 / 0) 78%);
+  background: radial-gradient(68% 46% at 50% 40%, rgb(2 12 10 / 20%), rgb(2 12 10 / 0) 78%);
 }
-:global(html:not(.dark)) .bloom { background: radial-gradient(60% 40% at 50% 38%, rgb(8 44 38 / 50%), rgb(8 44 38 / 0) 78%); }
+:global(html:not(.dark)) .bloom { background: radial-gradient(68% 46% at 50% 40%, rgb(5 36 30 / 28%), rgb(5 36 30 / 0) 78%); }
 
 
 /* Film grain and a vignette, so the light reads as photographed rather than drawn. */
@@ -99,21 +138,28 @@
   /* A vignette only. This used to carry a white fractal noise as well, at 5% — film grain, for a
      drawn floor. Over a field of light it was a grey haze across the whole band: it is what
      raised ours above the reference's mean brightness while halving its highlights. */
-  background: radial-gradient(120% 100% at 50% 50%, transparent 60%, rgb(3 8 3 / 70%) 100%);
+  /* Tall enough that it only shades the sides: darkening the top and bottom as well turned the
+     dissolve into the page grey (13 Nov). */
+  background: radial-gradient(120% 190% at 50% 50%, transparent 60%, rgb(2 12 10 / 70%) 100%);
   opacity: .55;
   pointer-events: none;
 }
-:global(html:not(.dark)) .grain { background: radial-gradient(120% 100% at 50% 50%, transparent 60%, rgb(6 33 28 / 70%) 100%); }
+:global(html:not(.dark)) .grain { background: radial-gradient(120% 190% at 50% 50%, transparent 60%, rgb(6 33 28 / 70%) 100%); }
 
-.tag { position: absolute; z-index: 2; bottom: clamp(20px, 3vw, 36px); display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgb(234 246 242 / 18%); border-radius: 999px; background: rgb(3 19 16 / 45%); padding: 6px 12px; color: rgb(234 246 242 / 86%); font: 650 12px/1 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; }
+.tag { position: absolute; z-index: 2; bottom: calc(var(--fade) * .7); display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgb(234 246 242 / 18%); border-radius: 999px; background: rgb(3 19 16 / 45%); padding: 6px 12px; color: rgb(234 246 242 / 86%); font: 650 12px/1 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; }
 .tag::before { width: 6px; height: 6px; border-radius: 50%; background: currentColor; content: ""; }
 .scene[data-side="then"] .tag { left: clamp(20px, 3vw, 40px); }
 .scene[data-side="now"] .tag { right: clamp(20px, 3vw, 40px); color: #4fe3bb; border-color: rgb(79 227 187 / 40%); }
 .scene[data-side="now"] .tag::before { box-shadow: 0 0 10px #4fe3bb; }
 
-.content { position: relative; z-index: 2; display: grid; align-self: center; justify-items: center; gap: 0; max-width: 940px; padding: 0 clamp(24px, 5vw, 64px) clamp(70px, 12vh, 120px); text-align: center; }
-.headline { margin: 0; color: #f3fbf8; font: 600 clamp(34px, 4.6vw, 68px)/1.02 var(--font-brand); letter-spacing: -.035em; text-wrap: balance; text-shadow: 0 10px 40px rgb(2 12 10 / 55%); }
-.headline em { padding-right: .015em; font-family: var(--font-accent-serif); font-size: 1.12em; font-style: italic; font-weight: 400; letter-spacing: -.01em; background: linear-gradient(180deg, #c5ffed 0%, #07d6a0 85%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.content { position: relative; z-index: 2; display: grid; align-self: center; justify-items: center; gap: 0; max-width: 940px; padding: 0 clamp(24px, 5vw, 64px); text-align: center; }
+/* Centred in the frame (owner, 13 Nov: "put the text in the center"). It used to sit above the middle
+   on a bottom padding, which the dissolve made read as high. */
+.headline { margin: 0; color: #f3fbf8; font: 600 clamp(34px, 4.6vw, 68px)/1.02 var(--font-brand); letter-spacing: -.035em; text-wrap: balance; text-shadow: 0 0 10px rgb(2 12 10 / 86%), 0 0 26px rgb(2 12 10 / 72%), 0 2px 8px rgb(2 12 10 / 70%), 0 10px 40px rgb(2 12 10 / 50%); }
+.headline em { padding-right: .015em; font-family: var(--font-accent-serif); font-size: 1.12em; font-style: italic; font-weight: 400; letter-spacing: -.01em; background: linear-gradient(180deg, #f2fffb 0%, #8ff5d5 55%, #4fe3bb 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
+  /* Brighter (owner, 13 Nov). The headline's dark text-shadow showed through the clipped gradient
+     and muddied it, so the accent words drop it and take their halo as a drop-shadow instead. */
+  text-shadow: none; filter: drop-shadow(0 0 10px rgb(2 12 10 / 80%)) drop-shadow(0 2px 6px rgb(2 12 10 / 60%)); }
 
 .groups { display: grid; justify-items: center; gap: 10px; margin-top: 26px; }
 .group { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; margin: 0; padding: 0; list-style: none; }
@@ -158,7 +204,8 @@
 /* Phones: a taller frame, the type and chips a step smaller. */
 @media (max-width: 760px) {
   .frame { height: clamp(560px, 78svh, 680px); }
-  .tag { bottom: 16px; font-size: 11px; }
+  .band { --fade: clamp(32px, 6svh, 48px); }
+  .tag { bottom: calc(var(--fade) * .7); font-size: 11px; }
   .scene[data-side="then"] .tag { left: 16px; }
   .scene[data-side="now"] .tag { right: 16px; }
   /* Centred in the frame (owner, 12 Nov: "more in the center"); the knob and the tag sit below. */
@@ -168,7 +215,7 @@
   .group { gap: 6px; }
   .chip { padding: 6px 10px 6px 8px; font-size: 12.5px; }
   /* Low on the frame, in the light below the chips, so it never sits on the words. */
-  .knob { top: 86%; width: 46px; height: 46px; left: -23px; margin-top: -23px; }
+  .knob { top: calc(100% - var(--fade) - 44px); width: 46px; height: 46px; left: -23px; margin-top: -23px; }
 }
 /* A phone on its side: the frame is the whole screen, and the floating header sits over its top, so
    the words start below it and take a step down in size. */
@@ -177,6 +224,8 @@
   .headline { font-size: clamp(26px, 6.5vh, 34px); }
   .groups { margin-top: 14px; gap: 6px; }
   .chip { padding: 5px 10px 5px 8px; font-size: 12px; }
+  .band { --fade: 28px; }
+  .frame { height: 100svh; }
   .tag { bottom: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {

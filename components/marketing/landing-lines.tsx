@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 import { ChevronLeft, ChevronRight, HandHeart, HeartPulse, Hospital, Hourglass, Infinity as InfinityIcon, ShieldCheck, Stethoscope, TrendingUp, type LucideIcon } from "lucide-react";
 
-import { ParticlesWaves } from "@/components/marketing/particles-waves";
+import { WaveField } from "@/components/shared/wave-field";
 import styles from "@/components/marketing/landing-lines.module.css";
 
 /**
@@ -14,11 +14,12 @@ import styles from "@/components/marketing/landing-lines.module.css";
  * When the band arrives the slider rests on "Then", then glides across to reveal "Now". Anyone can
  * take the handle and drag it back.
  *
- * The scenes are drawn rather than photographed: a field of particles on an undulating plane
- * (`particles-waves.tsx`), one green for "Then" and a denser field reaching the pale crest for
+ * The scenes are drawn rather than photographed: a fluid gradient of four colours folding through
+ * itself (`wave-field.tsx`), deep and slow for "Then", broader and reaching the pale crest for
  * "Now" — the business grew.
- * Earlier passes used a lit sales floor in perspective and then blurred ribbons; both are recorded
- * in the stylesheet and in tasks/landing-corner-cue/todo.md.
+ * Earlier passes used a field of particles over an undulating plane, a lit sales floor in
+ * perspective and blurred ribbons; all are recorded in the stylesheet, in the history and in
+ * tasks/landing-corner-cue/todo.md.
  *
  * Life lines are the app's product catalogue. Medicare Advantage is in the catalogue; Medicare
  * Supplement and ACA Marketplace are TO CONFIRM (owner): an Insurvas admin adds them to the product
@@ -59,11 +60,11 @@ function Scene({ side }: { side: "then" | "now" }) {
   const scene = SCENES[side];
   return (
     <div className={styles.scene} data-side={side}>
-      {/* The background: a field of particles on a plane that undulates, seen in perspective with
-          the depth of field of a camera. See `particles-waves.tsx`. "Then" runs the smaller field
-          in one green, "Now" a denser one reaching the pale crest: the second line of business. */}
+      {/* The background: a gradient of four colours poured through a noise field that warps itself,
+          so the bands keep folding and never repeat. See `wave-field.tsx`. "Then" is the deeper,
+          slower field; "Now" opens out and reaches the pale crest: the second line of business. */}
       <span className={styles.field} aria-hidden="true">
-        <ParticlesWaves side={side} />
+        <WaveField look={side} />
         <span className={styles.bloom} />
       </span>
       <span className={styles.grain} aria-hidden="true" />
@@ -178,7 +179,7 @@ export function LandingLines() {
     const seen = new IntersectionObserver(([entry]) => {
       const on = Boolean(entry?.isIntersecting);
       // The background used to be CSS animations gated on this attribute. It is a canvas now, and
-      // `ParticlesWaves` watches for itself, so nothing reads it any more — the observer stays only to
+      // `WaveField` watches for itself, so nothing reads it any more — the observer stays only to
       // start the glide the first time enough of the band is in view.
       if (on && !played && entry.intersectionRatio >= 0.55) { played = true; wait = window.setTimeout(glide, 800); }
     }, { threshold: [0, 0.55] });

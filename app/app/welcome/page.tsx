@@ -66,8 +66,8 @@ export default async function WelcomePage() {
             <p className="mt-2 text-sm text-[var(--nav-muted)]">{found.count.toLocaleString("en-US")} open item{found.count === 1 ? "" : "s"}: missing, short-paid or charged back twice</p>
           </section>
           <div className="mt-6 flex flex-wrap gap-3">
-            <Button asChild className="h-11 flex-1 px-5"><Link href="/app/discrepancies">See what is owed</Link></Button>
-            <Button asChild variant="outline" className="h-11 border-[var(--border-strong)] px-5"><Link href="/app/setup">Continue setup</Link></Button>
+            <Button asChild className="auth-h flex-1 px-5"><Link href="/app/discrepancies">See what is owed</Link></Button>
+            <Button asChild variant="outline" className="auth-h border-[var(--border-strong)] px-5"><Link href="/app/setup">Continue setup</Link></Button>
           </div>
         </>
       ) : (

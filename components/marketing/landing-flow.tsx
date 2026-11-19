@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Check, Workflow } from "lucide-react";
@@ -106,7 +106,11 @@ function format(value: NonNullable<FlowNode["value"]>, n: number) {
   return `${value.prefix ?? ""}${n.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })}${value.suffix ?? ""}`;
 }
 
-export function LandingFlow({ graph, playing }: { graph: FlowGraph; playing: boolean }) {
+/**
+ * Memoised (13 Nov, owner: "make the scrolling on these cards smoother"): when the card in front
+ * changes, only the two diagrams whose `playing` flips re-render, not all seven in the scroll frame.
+ */
+export const LandingFlow = memo(function LandingFlow({ graph, playing }: { graph: FlowGraph; playing: boolean }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const swayRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -186,6 +190,45 @@ export function LandingFlow({ graph, playing }: { graph: FlowGraph; playing: boo
     const T = at + 3000;
     const RESET = T - 520;
 
+    // Measuring a wire (getTotalLength, getPointAtLength) is the costly part of a build, and it was
+    // done afresh every time the card came to the front, inside that scroll frame. Each wire is
+    // measured once, the first time it is needed or in a quiet moment after the page settles.
+    const rideCache = new Map<number, DOMPoint[]>();
+    const streamCache = new Map<number, Keyframe[]>();
+    const ridePoints = (edge: number, lit: SVGPathElement) => {
+      let points = rideCache.get(edge);
+      if (!points) {
+        const total = lit.getTotalLength();
+        const SAMPLES = 32;
+        points = Array.from({ length: SAMPLES + 1 }, (_, i) => {
+          const u = i / SAMPLES;
+          return lit.getPointAtLength(total * (u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2));
+        });
+        rideCache.set(edge, points);
+      }
+      return points;
+    };
+    const streamFrames = (index: number, lit: SVGPathElement) => {
+      let frames = streamCache.get(index);
+      if (!frames) {
+        const total = lit.getTotalLength();
+        const SAMPLES = 16;
+        frames = Array.from({ length: SAMPLES + 1 }, (_, k) => {
+          const u = k / SAMPLES;
+          return { ...move(lit.getPointAtLength(total * u)), opacity: u < 0.15 ? u / 0.15 : u > 0.85 ? (1 - u) / 0.15 : 1, offset: u };
+        });
+        streamCache.set(index, frames);
+      }
+      return frames;
+    };
+    const idle = (run: () => void) => {
+      const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
+      if (w.requestIdleCallback) { const id = w.requestIdleCallback(run, { timeout: 400 }); return () => w.cancelIdleCallback?.(id); }
+      const id = window.setTimeout(run, 120);
+      return () => window.clearTimeout(id);
+    };
+    const warm = idle(() => { legs.forEach(({ edge }) => { if (lits[edge]) ridePoints(edge, lits[edge]); }); lits.forEach((lit, i) => streamFrames(i, lit)); });
+
     let anims: Animation[] = [];
     // One looping animation per element, its keyframes placed on the shared T-long loop.
     const loop = (el: Element, frames: Array<[number, Keyframe]>) => {
@@ -228,13 +271,10 @@ export function LandingFlow({ graph, playing }: { graph: FlowGraph; playing: boo
         if (layer) loop(layer, [[0, { opacity: 0 }], [t0 + 150, { opacity: 0, easing: IN_OUT }], [t0 + RUN, { opacity: 1 }], [RESET, { opacity: 1, easing: IN_OUT }], [T - 60, { opacity: 0 }], [T, { opacity: 0 }]]);
         // The record's path, baked into transform keyframes with the ease built in, so the compositor
         // carries it; it shows only once clear of the box it leaves and is gone before the next.
-        const total = lit.getTotalLength();
-        const pointAt = (u: number) => lit.getPointAtLength(total * (u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2));
-        const SAMPLES = 32;
-        const ride = move;
-        const moves: Array<[number, Keyframe]> = [[0, ride(pointAt(0))]];
-        for (let i = 0; i <= SAMPLES; i++) moves.push([t0 + (RUN * i) / SAMPLES, ride(pointAt(i / SAMPLES))]);
-        moves.push([T, ride(pointAt(1))]);
+        const ride = ridePoints(edge, lit);
+        const moves: Array<[number, Keyframe]> = [[0, move(ride[0])]];
+        ride.forEach((point, i) => moves.push([t0 + (RUN * i) / (ride.length - 1), move(point)]));
+        moves.push([T, move(ride[ride.length - 1])]);
         loop(record, moves);
         const pill = record.firstElementChild;
         if (pill) loop(pill, [[0, { opacity: 0 }], [t0 + 120, { opacity: 0, easing: OUT }], [t0 + 320, { opacity: 1 }], [t0 + RUN - 320, { opacity: 1, easing: IN_OUT }], [t0 + RUN - 120, { opacity: 0 }], [T, { opacity: 0 }]]);
@@ -243,13 +283,7 @@ export function LandingFlow({ graph, playing }: { graph: FlowGraph; playing: boo
       // The stream: STREAM lights per wire, evenly spaced, riding it end to end at a steady pace and
       // fading in and out at its ends; their own short loop, independent of the run's.
       lits.forEach((lit, i) => {
-        const total = lit.getTotalLength();
-        const frames: Keyframe[] = [];
-        const SAMPLES = 16;
-        for (let k = 0; k <= SAMPLES; k++) {
-          const u = k / SAMPLES;
-          frames.push({ ...move(lit.getPointAtLength(total * u)), opacity: u < 0.15 ? u / 0.15 : u > 0.85 ? (1 - u) / 0.15 : 1, offset: u });
-        }
+        const frames = streamFrames(i, lit);
         dots.slice(i * STREAM, i * STREAM + STREAM).forEach((dot, k) => {
           anims.push(dot.animate(frames, { duration: STREAM_MS, iterations: Infinity, delay: (-k * STREAM_MS) / STREAM }));
         });
@@ -276,11 +310,19 @@ export function LandingFlow({ graph, playing }: { graph: FlowGraph; playing: boo
       if (figure && outcome?.value) figure.textContent = format(outcome.value, outcome.value.to);
       shown = "";
     };
+    // Starting is deferred to the frame after the one that brought the card forward, so the scroll
+    // frame only flips a flag; stopping is immediate (it only cancels).
+    let starting = 0;
     controlRef.current = (on: boolean) => {
       cancelAnimationFrame(raf);
+      cancelAnimationFrame(starting);
       if (!on) { settle(); return; }
-      if (!anims.length) build();
-      if (figure) raf = requestAnimationFrame(tickFigure);
+      starting = requestAnimationFrame(() => {
+        starting = requestAnimationFrame(() => {
+          if (!anims.length) build();
+          if (figure) raf = requestAnimationFrame(tickFigure);
+        });
+      });
     };
     syncRef.current();
 
@@ -291,6 +333,8 @@ export function LandingFlow({ graph, playing }: { graph: FlowGraph; playing: boo
     io.observe(stage);
     return () => {
       io.disconnect();
+      warm();
+      cancelAnimationFrame(starting);
       cancelAnimationFrame(raf);
       controlRef.current = null;
       settle();
@@ -412,4 +456,4 @@ export function LandingFlow({ graph, playing }: { graph: FlowGraph; playing: boo
       </div>
     </div>
   );
-}
+});

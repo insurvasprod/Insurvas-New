@@ -130,7 +130,7 @@ export function VerifyEmailPanel({ ttlHours, back, withHeading = true }: { ttlHo
                 <span className={authLabel}>Correct email</span>
                 <input type="email" required autoComplete="email" autoFocus className={authControl} value={newEmail} onChange={(event) => setNewEmail(event.target.value)} />
               </label>
-              <Button type="submit" className="mt-3 h-11 w-full" disabled={submitting || cooldown > 0 || !newEmail.trim() || newEmail.trim() === email}>
+              <Button type="submit" className="auth-h mt-3 w-full" disabled={submitting || cooldown > 0 || !newEmail.trim() || newEmail.trim() === email}>
                 {submitting ? "Sending…" : "Update and send a new link"}
               </Button>
             </form>
@@ -139,7 +139,7 @@ export function VerifyEmailPanel({ ttlHours, back, withHeading = true }: { ttlHo
           {/* The two inboxes most agents use, as two equal buttons in one row. */}
           <div className="mt-4 grid grid-cols-2 gap-3">
             {INBOXES.map((inbox) => (
-              <Button key={inbox.label} asChild variant="outline" className="h-11 justify-center gap-2 border-[var(--border-strong)]">
+              <Button key={inbox.label} asChild variant="outline" className="auth-h justify-center gap-2 border-[var(--border-strong)]">
                 <a href={inbox.href} target="_blank" rel="noopener noreferrer">
                   <Mail className="size-4" aria-hidden="true" />
                   {inbox.label}
@@ -156,7 +156,7 @@ export function VerifyEmailPanel({ ttlHours, back, withHeading = true }: { ttlHo
           {/* Footer: Back on the left; sending again is a quiet text action, not a second big button. */}
           <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
             {back ? (
-              <Button asChild variant="outline" className="h-11 border-[var(--border-strong)] px-5">
+              <Button asChild variant="outline" className="auth-h border-[var(--border-strong)] px-5">
                 <Link href={back}><ArrowLeft aria-hidden="true" />Back</Link>
               </Button>
             ) : <span />}

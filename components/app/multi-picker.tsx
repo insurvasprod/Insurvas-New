@@ -78,6 +78,21 @@ export function PickerPortal({ anchor, children }: { anchor: RefObject<HTMLEleme
   return createPortal(children, portalTarget(anchor.current));
 }
 
+/** Closes an open picker on a press outside its field and its (portalled) list. Both pickers use it. */
+function useCloseOnOutside(open: boolean, fieldRef: RefObject<HTMLElement | null>, panelRef: RefObject<HTMLElement | null>, close: () => void) {
+  const latestClose = useRef(close);
+  useEffect(() => { latestClose.current = close; }, [close]);
+  useEffect(() => {
+    if (!open) return;
+    const onPress = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!fieldRef.current?.contains(target) && !panelRef.current?.contains(target)) latestClose.current();
+    };
+    document.addEventListener("pointerdown", onPress);
+    return () => document.removeEventListener("pointerdown", onPress);
+  }, [open, fieldRef, panelRef]);
+}
+
 /** The box in front of a multi-select row: empty, or filled with a check. */
 function Tick({ on }: { on: boolean }) {
   return (
@@ -150,15 +165,7 @@ export function MultiPicker({ options, value, onChange, placeholder, label, desc
     return () => { window.cancelAnimationFrame(frame); observer.disconnect(); };
   }, [value]);
 
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!fieldRef.current?.contains(target) && !panelRef.current?.contains(target)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", close);
-    return () => document.removeEventListener("pointerdown", close);
-  }, [open]);
+  useCloseOnOutside(open, fieldRef, panelRef, () => setOpen(false));
 
   function show() {
     setActive(0);
@@ -287,6 +294,123 @@ export function MultiPicker({ options, value, onChange, placeholder, label, desc
                 Clear
               </button>
             </div>
+          </div>
+        </PickerPortal>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One answer from a short fixed list, in the same 44px field and list as MultiPicker (owner,
+ * 2026-11-13: "Business focus … as a dropdown as well", beside "Where your leads come from").
+ * The field shows the choice, or the placeholder; picking a row closes the list.
+ */
+export function SinglePicker<T extends string>({ options, value, onChange, placeholder, label, describedBy }: {
+  options: readonly { value: T; label: string }[];
+  value: T | "";
+  onChange: (next: T) => void;
+  placeholder: string;
+  label: string;
+  describedBy?: string;
+}) {
+  const listId = `${useId()}-list`;
+  const fieldRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const panelStyle = useAnchoredPanel(fieldRef, open, options.length * ROW + 8 + 2);
+  const picked = options.find((option) => option.value === value);
+
+  useCloseOnOutside(open, fieldRef, panelRef, () => setOpen(false));
+
+  useEffect(() => {
+    if (open) listRef.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [active, open]);
+
+  function show() {
+    setActive(Math.max(0, options.findIndex((option) => option.value === value)));
+    setOpen(true);
+    window.requestAnimationFrame(() => listRef.current?.focus());
+  }
+
+  function hide(refocus = true) {
+    setOpen(false);
+    if (refocus) buttonRef.current?.focus();
+  }
+
+  function choose(index: number) {
+    const option = options[index];
+    if (!option) return;
+    onChange(option.value);
+    hide();
+  }
+
+  function onListKey(event: KeyboardEvent<HTMLUListElement>) {
+    if (event.key === "ArrowDown") { event.preventDefault(); setActive((index) => Math.min(options.length - 1, index + 1)); }
+    else if (event.key === "ArrowUp") { event.preventDefault(); setActive((index) => Math.max(0, index - 1)); }
+    else if (event.key === "Home") { event.preventDefault(); setActive(0); }
+    else if (event.key === "End") { event.preventDefault(); setActive(options.length - 1); }
+    else if (event.key === " " || event.key === "Enter") { event.preventDefault(); choose(active); }
+    else if (event.key === "Escape") { event.preventDefault(); hide(); }
+    else if (event.key === "Tab") hide();
+  }
+
+  return (
+    <div
+      ref={fieldRef}
+      className={cn(authControl, "relative flex items-center bg-transparent p-0 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--ring-color)]", open && "border-[var(--accent-ink)]")}
+    >
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => (open ? hide() : show())}
+        onKeyDown={(event) => { if (event.key === "ArrowDown" && !open) { event.preventDefault(); show(); } }}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-label={picked ? `${label}: ${picked.label}` : label}
+        aria-describedby={describedBy}
+        className="flex h-full w-full cursor-pointer items-center gap-2 rounded-md pl-3 pr-3 text-left outline-none"
+      >
+        <span className={cn("min-w-0 flex-1 truncate", picked ? "text-foreground" : "text-muted-foreground")}>{picked ? picked.label : placeholder}</span>
+        <ChevronDown aria-hidden="true" className={cn("size-4 shrink-0 text-muted-foreground transition-transform duration-150", open && "rotate-180")} />
+      </button>
+      {open && panelStyle && (
+        <PickerPortal anchor={fieldRef}>
+          <div ref={panelRef} style={panelStyle} className={pickerPanel}>
+            <ul
+              ref={listRef}
+              id={listId}
+              role="listbox"
+              aria-label={label}
+              tabIndex={-1}
+              aria-activedescendant={`${listId}-${options[active]?.value}`}
+              onKeyDown={onListKey}
+              className={pickerList}
+            >
+              {options.map((option, index) => {
+                const on = option.value === value;
+                return (
+                  <li
+                    key={option.value}
+                    id={`${listId}-${option.value}`}
+                    data-index={index}
+                    role="option"
+                    aria-selected={on}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => choose(index)}
+                    onMouseEnter={() => setActive(index)}
+                    className={pickerOption(index === active, on)}
+                  >
+                    <span className="min-w-0 flex-1">{option.label}</span>
+                    {on && <Check aria-hidden="true" className="size-4 shrink-0 text-[var(--accent-ink)]" />}
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         </PickerPortal>
       )}

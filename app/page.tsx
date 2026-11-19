@@ -4,6 +4,7 @@ import { SiteFooter } from "@/components/public/site-footer";
 import { SiteHeader } from "@/components/public/site-header";
 import { SmoothScroll } from "@/components/marketing/smooth-scroll";
 import { LandingHero } from "@/components/marketing/landing-hero";
+import { LandingIntro } from "@/components/marketing/landing-intro";
 import { LandingRoadmap } from "@/components/marketing/landing-roadmap";
 import { LandingContact } from "@/components/marketing/landing-contact";
 import { LandingBento } from "@/components/marketing/landing-bento";
@@ -33,6 +34,8 @@ export default async function Home() {
   const plans: PublicPlan[] = await fetchPublicPlans().catch(() => []);
   return (
     <div className="type-brand landing-type min-h-screen bg-background">
+      {/* The logo intro: first, so its cover is painted before anything under it. */}
+      <LandingIntro />
       <SmoothScroll />
       <SiteHeader current="home" floating />
       <main>
