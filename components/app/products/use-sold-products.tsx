@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { ToggleChip } from "@/components/ui/toggle-chip";
+import { readableProductCode } from "@/lib/dealFlow/display";
 
 export type SoldProduct = { code: string; name: string; category: string };
 
@@ -36,7 +37,7 @@ export function useSoldProducts(): SoldProduct[] | null {
 
 /** A product's name from the sold list, else the code made readable. */
 export function productName(products: SoldProduct[] | null, code: string) {
-  return products?.find((product) => product.code === code)?.name ?? code.replace(/_/g, " ").replace(/^\w/, (letter) => letter.toUpperCase());
+  return products?.find((product) => product.code === code)?.name ?? readableProductCode(code);
 }
 
 /**

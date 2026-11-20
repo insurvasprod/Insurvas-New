@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { FactTable } from "@/components/ui/fact-table";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { Pager } from "@/components/ui/pager";
+import { RowAction } from "@/components/ui/row-action";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { notify } from "@/lib/notify";
@@ -131,7 +132,7 @@ export function TcpaScreeningAudit({ className, pageSize = 10 }: { className?: s
             <td className={td}><StatusChip tone={OUTCOME_TONE[row.outcome] ?? "neutral"}>{SCREENING_OUTCOME_LABELS[row.outcome] ?? row.outcome}</StatusChip></td>
             <td className={td} title={vendorLabel(row.vendor)}>{row.cached ? "24-hour cache" : "Live check"}</td>
             <td className={`${td} max-w-[180px] truncate`} title={row.origin ? `${row.who} · ${row.origin}` : row.who}>{row.who}</td>
-            <td className={`${td} text-right`}><button type="button" className="outline-none hover:underline focus-visible:underline" title="Open the raw response" onClick={() => setOpen(row)}>Raw ›</button></td>
+            <td className={`${td} w-px text-right`}><RowAction title="Open the raw response" onClick={() => setOpen(row)}>Raw</RowAction></td>
           </tr>)}</tbody>
         </table>}
 

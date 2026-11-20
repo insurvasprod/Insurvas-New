@@ -16,6 +16,7 @@ import { LeaveGuard } from "@/components/ui/leave-guard";
 import { MoreMenu } from "@/components/ui/more-menu";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
@@ -319,7 +320,7 @@ export function ExpensesBoard({ expenses, view, readOnly, initialQuery = "", ini
           : <EmptyState title="Nothing booked yet" hint="Expenses you add, and monthly bills you OK, are listed here." action={addLink(false)} />
       ) : view === "confirm" ? (
         <table className="portal-lead-table w-full min-w-190 text-left text-sm">
-          <thead><tr><th>What</th><th>Bucket</th><th>For</th><th className="text-right">Amount</th><th>Counts as</th><th>Next step</th><th><span className="sr-only">Open</span></th></tr></thead>
+          <thead><tr><th>What</th><th>Bucket</th><th>For</th><th className="text-right">Amount</th><th>Counts as</th><th className="text-right">Next step</th><th><span className="sr-only">Open</span></th></tr></thead>
           <tbody>
             {shown.rows.map((e) => (
               <ClickRow key={e.id} href={expenseHref(e.id, "confirm")} label={`Open ${e.vendorName}`}>
@@ -328,7 +329,7 @@ export function ExpensesBoard({ expenses, view, readOnly, initialQuery = "", ini
                 <td className="whitespace-nowrap tabular-nums text-muted-foreground">{expenseFor(e)}</td>
                 <td className="whitespace-nowrap text-right tabular-nums">{money(e.amountCents)}</td>
                 <CountsAs e={e} />
-                <td className="whitespace-nowrap" title="Waiting for OK: OK it, or skip this month, on the expense's page">{nextStepFor(e)} ›</td>
+                <RowActionCell><RowAction href={expenseHref(e.id, "confirm")} title="Waiting for OK: OK it, or skip this month, on the expense's page">{nextStepFor(e)}</RowAction></RowActionCell>
               </ClickRow>
             ))}
           </tbody>
@@ -565,12 +566,12 @@ export function ExpenseFacts({ row, defaults, readOnly, template, pnlHref }: { r
                   <td className="whitespace-nowrap font-medium text-foreground">{fact.label}</td>
                   <td className="whitespace-nowrap" {...saved.props(fact.key)}>{fact.value}</td>
                   <td className="whitespace-nowrap">{fact.usedBy === "—" ? <span className="text-muted-foreground">—</span> : fact.usedBy}</td>
-                  <td className="whitespace-nowrap text-right">
+                  <RowActionCell>
                     {!action ? null
                       : fact.off ? <span title={fact.off} className="cursor-not-allowed">{action.label}</span>
-                      : "href" in action ? <Link href={action.href} className="group-hover:underline">{action.label} ›</Link>
-                      : <button type="button" onClick={action.run} className="group-hover:underline">{action.label} ›</button>}
-                  </td>
+                      : "href" in action ? <RowAction href={action.href}>{action.label}</RowAction>
+                      : <RowAction onClick={action.run}>{action.label}</RowAction>}
+                  </RowActionCell>
                 </tr>
               );
             })}

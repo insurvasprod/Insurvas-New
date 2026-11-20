@@ -30,7 +30,7 @@ export default async function PublicPricingPage({ searchParams }: { searchParams
     <div className="type-brand landing-type min-h-screen bg-[var(--color-page-bg)]">
       <SmoothScroll />
       <SiteHeader current="pricing" floating />
-      <PricingPage plans={plans} addons={addons} initialAudience={query.for === "agency" ? "agency" : "individual"} loadError={plansResult.status === "rejected" ? "Pricing is temporarily unavailable. Please try again shortly." : null} />
+      <PricingPage plans={plans} addons={addons} initialAudience={query.for === "agency" || query.for === "imo" ? query.for : "individual"} loadError={plansResult.status === "rejected" ? "Pricing is temporarily unavailable. Please try again shortly." : null} />
       <SiteFooter />
     </div>
   );

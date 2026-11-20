@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
 import { audit } from "@/lib/audit/log";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { partnerSchema } from "@/lib/partners/schemas";
 import { createPartnerWithLimits, listPartners, transitionPartner } from "@/lib/partners/service";
+import { ensurePartnerTypePipeline } from "@/lib/pipelines/partnerTypePipeline";
 import { friendlyPartnerDbError } from "@/lib/partners/dbErrors";
 import { listPartnerUsers } from "@/lib/partnerUsers/service";
 import { parsePartnerLimitError, partnerLimitBody } from "@/lib/partnerLimits/copy";
@@ -73,6 +74,13 @@ export async function POST(request: Request) {
         activationRefused = error instanceof Error ? error.message : "Could not activate the lead source";
       }
     }
+    // Owner 2026-11-19: the agency's first partner of a type brings that type's own pipeline (publisher, marketing,
+    // affiliate), so its leads land on their own board. A failure leaves the partner made; the Sales pipeline catches the leads.
+    // After the response (it makes the stages and joins each to the starter rules, one write at a time): the
+    // partner is saved at once, and its board is there a few seconds later.
+    const pipelineFor = { tenantId, userId: auth.context.userId };
+    const pipelineType = partner.partner_type;
+    after(() => ensurePartnerTypePipeline(pipelineFor, pipelineType).catch((error) => console.error("[partners] partner pipeline", error)));
     return NextResponse.json({ partner, activationRefused }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not create partner";

@@ -100,7 +100,7 @@ export const SETTINGS_DOCS: SettingsDocPage[] = [
         },
         {
           label: "Licensed states",
-          what: "Shows the states you are licensed in. Read-only here: change them on your producer record, or your owner records them on Team & access."
+          what: "Shows the states you are licensed in. Read-only here: your owner sets them, with each licence's end date, in Settings › Team & Access."
         }
       ]
     },
@@ -997,7 +997,7 @@ export const SETTINGS_DOCS: SettingsDocPage[] = [
         },
         {
           label: "Person",
-          what: "Shows their name, and \"Owner\", \"Team lead\" or \"you\" where it applies."
+          what: "Shows their name, and \"Owner\", \"Manager\" or \"you\" where it applies."
         },
         {
           label: "Access",
@@ -1093,7 +1093,7 @@ export const SETTINGS_DOCS: SettingsDocPage[] = [
           what: "Gives them everything, including billing."
         },
         {
-          label: "Team lead",
+          label: "Manager",
           what: "For an agent: they see their team's calls and are told when a transfer escalates.",
           default: "Off",
           who: "Shown only when Agent is picked; on an agency plan"
@@ -1161,7 +1161,7 @@ export const SETTINGS_DOCS: SettingsDocPage[] = [
         },
         {
           label: "<State> licence valid through",
-          what: "The date the licence ends. After it, they get no leads in that state. Optional."
+          what: "The date the licence ends. After it, they get no leads in that state. Needed before an agency producer can submit applications."
         },
         {
           label: "Remove <state>",

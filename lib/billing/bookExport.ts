@@ -33,7 +33,7 @@ export async function bookExportCsv(tenantId: string, part: BookExportPart): Pro
   if (part === "policies") {
     type Row = { policy_number: string | null; insured_name: string | null; carrier: string | null; product: string | null; status: string | null; effective_date: string | null; renewal_date: string | null; annual_premium_cents: number | null; source: string | null; created_at: string };
     const rows = await readAll<Row>((from, to) =>
-      db().from("tenant_policies").select("policy_number, insured_name, carrier, product, status, effective_date, renewal_date, annual_premium_cents, source, created_at").eq("tenant_id", tenantId).order("created_at").order("id").range(from, to));
+      db().from("tenant_policies").select("policy_number, insured_name, carrier, product, status, effective_date, renewal_date, annual_premium_cents, source, created_at").eq("tenant_id", tenantId).neq("source", "carrier_file").order("created_at").order("id").range(from, to));
     return [
       line(["Policy number", "Insured", "Carrier", "Product", "Status", "Effective date", "Renewal date", "Annual premium (cents)", "Source", "Added"]),
       ...rows.map((r) => line([r.policy_number, r.insured_name, r.carrier, r.product, r.status, r.effective_date, r.renewal_date, r.annual_premium_cents, r.source, r.created_at])),

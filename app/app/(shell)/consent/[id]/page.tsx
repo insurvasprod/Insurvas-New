@@ -17,6 +17,7 @@ import { ComplianceFlowPage } from "@/components/app/compliance/compliance-flow"
 import { RecordStepper, neighboursOf } from "@/components/app/accounting/record-stepper";
 import { Button } from "@/components/ui/button";
 import { MoreMenu } from "@/components/ui/more-menu";
+import { RowAction } from "@/components/ui/row-action";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -130,7 +131,7 @@ export default async function ConsentRecordPage({ params, searchParams }: { para
               ))}
               <tr className="m-row">
                 <th scope="row" className="w-56 border-t border-border px-4 py-2.5 text-left font-medium text-muted-foreground">Lead</th>
-                <td className="border-t border-border px-4 py-2.5"><Link href={`/app/leads/${leadId}`} className="text-[var(--ink)] hover:underline">Open the lead ›</Link></td>
+                <td className="border-t border-border px-4 py-2.5"><RowAction href={`/app/leads/${leadId}`}>Open the Lead</RowAction></td>
               </tr>
             </tbody>
           </table>

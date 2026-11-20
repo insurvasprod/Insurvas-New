@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { ClearFiltersButton, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { useArrivals } from "@/components/ui/use-arrivals";
@@ -37,8 +38,8 @@ export function payIssueState(issue: Pick<PayIssue, "status" | "statusWord" | "o
 /**
  * Pay issues › Open and Closed (round 7, 2·A). "By carrier and kind" (the default on Open) is one row per group, each
  * opening the group's page; "One by one" is the flat list, each row opening the issue's page. "Not checked" lists the
- * carriers missing commission is not checked for (no pay trigger or lag); "Imported by hand" narrows to statements
- * imported by hand. The rows hold no decisions: those are on the issue's and the group's pages.
+ * carriers missing commission is not checked for (no pay trigger or lag); "From statements" narrows to the statements
+ * the agency imported (whatever the policy came from: typed in, a CSV or a carrier file). The rows hold no decisions: those are on the issue's and the group's pages.
  */
 export function PayIssuesList({ issues, tab, unchecked, summary, initialSource, today, unavailable = false }: {
   issues: PayIssue[];
@@ -95,7 +96,7 @@ export function PayIssuesList({ issues, tab, unchecked, summary, initialSource, 
         <ToggleChip role="radio" selected={mode === "flat"} count={visible.length} onClick={() => setMode("flat")}>One by one</ToggleChip>
       </span>
       {tab === "open" && unchecked.length > 0 && <ToggleChip selected={mode === "unchecked"} count={unchecked.length} countTone="warning" onClick={() => setMode(mode === "unchecked" ? "groups" : "unchecked")}>Not checked</ToggleChip>}
-      {(handCount > 0 || source === "hand") && <ToggleChip selected={source === "hand"} count={handCount} onClick={() => setSource(source === "hand" ? "" : "hand")}>Imported by hand</ToggleChip>}
+      {(handCount > 0 || source === "hand") && <ToggleChip selected={source === "hand"} count={handCount} onClick={() => setSource(source === "hand" ? "" : "hand")}>From statements</ToggleChip>}
       <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={filterCount} controls="pay-issue-filters" />
     </DataToolbar>
   );
@@ -111,8 +112,8 @@ export function PayIssuesList({ issues, tab, unchecked, summary, initialSource, 
       </select></FilterField>
       <FilterField label="Source" htmlFor="issue-source"><select id="issue-source" className={toolbarControl} value={source} onChange={(e) => setSource(e.target.value as "" | "carrier" | "hand")}>
         <option value="">Every source</option>
-        <option value="carrier">From carrier files</option>
-        <option value="hand">Statements imported by hand</option>
+        <option value="carrier">From carrier commission files</option>
+        <option value="hand">From statements you imported</option>
       </select></FilterField>
     </FilterPanel>
   );
@@ -127,7 +128,7 @@ export function PayIssuesList({ issues, tab, unchecked, summary, initialSource, 
     return (
       <PagedTableCard key="unchecked" toolbar={toolbar} filters={filters} total={unchecked.length} noun={unchecked.length === 1 ? "carrier" : "carriers"} footer={<span className="text-sm text-muted-foreground">Missing commission is not checked for these carriers until their pay trigger and lag are set.</span>}>
         <table className="portal-lead-table w-full text-left text-sm">
-          <thead><tr><th>Carrier</th><th className="text-right">Policies in force</th><th>Not set</th><th>What to do</th></tr></thead>
+          <thead><tr><th>Carrier</th><th className="text-right">Policies in force</th><th>Not set</th><th className="text-right">What to do</th></tr></thead>
           <PagedBody>
             {unchecked.map((gap) => {
               const href = `/app/book-setup/carrier-rules/${gap.carrierId}`;
@@ -136,7 +137,7 @@ export function PayIssuesList({ issues, tab, unchecked, summary, initialSource, 
                   <td className="whitespace-nowrap font-medium text-foreground"><Link href={href} className="hover:underline" onClick={(e) => e.stopPropagation()}>{gap.carrierName}</Link></td>
                   <td className="text-right tabular-nums">{gap.inForce.toLocaleString("en-US")}</td>
                   <td className="whitespace-nowrap">{gap.missing.length === 2 ? "Pay trigger and lag" : gap.missing[0] === "trigger" ? "Pay trigger" : "Payment lag"}</td>
-                  <td className="whitespace-nowrap">Set timing ›</td>
+                  <RowActionCell><RowAction href={href}>Set Timing</RowAction></RowActionCell>
                 </tr>
               );
             })}
@@ -159,7 +160,7 @@ export function PayIssuesList({ issues, tab, unchecked, summary, initialSource, 
                 <th className="text-right">How many</th>
                 <th>Oldest</th>
                 <th>Status</th>
-                <th>Next step</th>
+                <th className="text-right">Next step</th>
               </tr>
             </thead>
             <PagedBody>
@@ -180,7 +181,7 @@ export function PayIssuesList({ issues, tab, unchecked, summary, initialSource, 
                     <td className="text-right tabular-nums">{group.count.toLocaleString("en-US")}</td>
                     <td className="whitespace-nowrap tabular-nums text-muted-foreground" title={age !== null ? `${age.toLocaleString("en-US")} ${age === 1 ? "day" : "days"} ago` : undefined}>{fileDay(group.oldest)}</td>
                     <td><StatusChip tone={chip.tone} title={both ? `${money(group.owedToYouCents)} owed to you · ${money(group.owedToCarrierCents)} owed to the carrier` : undefined}>{chip.text}</StatusChip></td>
-                    <td className="whitespace-nowrap">{tab === "closed" ? "Open" : group.next === "Add the rate first" ? "Add rate" : "Decide"} ›</td>
+                    <RowActionCell><RowAction href={href}>{tab === "closed" ? "Open" : group.next === "Add the rate first" ? "Add Rate" : "Decide"}</RowAction></RowActionCell>
                   </tr>
                 );
               })}

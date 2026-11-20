@@ -48,6 +48,9 @@ export function DealFlowFunnel({ from, to, agentId, isToday }: { from: string; t
     let cancelled = false;
     const params = new URLSearchParams({ from, to });
     if (agentId) params.set("agent_id", agentId);
+    // The browser's zone, which the page's "today" falls back to when the agency has no day of its own: the
+    // server counts the same day with it (app/api/app/deal-flow/funnel/route.ts).
+    try { params.set("tz", Intl.DateTimeFormat().resolvedOptions().timeZone); } catch { /* the server falls back to UTC */ }
     fetch(`/api/app/deal-flow/funnel?${params.toString()}`, { cache: "no-store" })
       .then(async (response) => {
         const body = await response.json().catch(() => null);

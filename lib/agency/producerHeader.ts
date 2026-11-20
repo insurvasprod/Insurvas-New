@@ -9,7 +9,7 @@ import type { TenantContext } from "@/lib/tenantAuth/requireTenant";
 const db = () => getSupabaseServiceClient() as any;
 
 export type ProducerHeader = {
-  id: string; userId: string; displayName: string; status: ProducerStatus; role: string | null; managerName: string; hiredOn: string | null;
+  id: string; userId: string; displayName: string; status: ProducerStatus; role: string | null; managerProducerId: string | null; managerName: string; hiredOn: string | null;
   offboardedOn: string | null; reactivatableUntil: string | null; canSubmit: boolean; email: string | null; isSelf: boolean;
 };
 
@@ -38,6 +38,7 @@ export async function readProducerHeader(context: TenantContext, producerId: str
     displayName: p.display_name,
     status: p.status,
     role: membership.data?.agency_role ?? membership.data?.role ?? null,
+    managerProducerId: current?.parent_producer_id ?? null,
     managerName: manager ? manager.data?.display_name ?? "Manager" : "Owner",
     hiredOn: p.hired_on,
     offboardedOn: p.offboarded_on,

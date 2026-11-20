@@ -19,14 +19,15 @@
  * One-line rule (owner 2026-11-11): every row is one line in one text colour, with colour only in the
  * Status chip. Six columns at most: Lead, Campaign, Owner, Annualised premium, Status, Next step. The
  * customer's state rides on the Lead tooltip and the vendor on the Campaign tooltip (both are in the
- * deal panel too); the premium is a plain figure (no bar); "Open lead" is the short "Open ›" link.
+ * deal panel too); the premium is a plain figure (no bar); "Open lead" is the short "Open" RowAction button.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { BadgeCheck, Copy, Download, Handshake, Hourglass, Plus, XCircle } from "lucide-react";
 
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+import { RowAction } from "@/components/ui/row-action";
 import { ActiveFilters, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DetailPanel } from "@/components/ui/detail-panel";
@@ -40,6 +41,7 @@ import { DealFlowFunnel } from "@/components/app/deal-flow-funnel";
 import { IssuedPolicyPanel } from "@/components/app/issued-policy-panel";
 import { Callout, Field, KeyValues, control, st } from "@/components/app/settings/primitives";
 import { intakeLocalDate } from "@/lib/dealFlow/localDate";
+import { dealProductText, faceAmountText } from "@/lib/dealFlow/display";
 import {
   DEAL_FLOW_PAGE_SIZE,
   DEAL_FLOW_STAGE_TYPES,
@@ -191,15 +193,18 @@ function Alert({ tone, children }: { tone: "info" | "warning" | "error"; childre
   return <Callout tone={tone} title={children} />;
 }
 
-/** The deal's money at a glance at the top of its panel: annualised, monthly and face, tabular. */
+/**
+ * The deal's money at a glance at the top of its panel: annualised, monthly and face, tabular. Each column is at
+ * least as wide as its figure, so a face amount is never cut off ("$250,0…", walk 2026-11-20).
+ */
 function MoneyTrio({ row }: { row: DealFlowRow }) {
-  const cells: Array<[string, string]> = [["Annualised", annualised(row.monthly_premium_cents)], ["Monthly", money(row.monthly_premium_cents)], ["Face amount", money(row.face_amount_cents)]];
+  const cells: Array<[string, string]> = [["Annualised", annualised(row.monthly_premium_cents)], ["Monthly", money(row.monthly_premium_cents)], ["Face amount", faceAmountText(row.face_amount_cents)]];
   return (
-    <dl className="m-0 grid shrink-0 grid-cols-3 gap-px overflow-hidden rounded-lg border border-border bg-border">
+    <dl className="m-0 grid shrink-0 grid-cols-[repeat(3,minmax(min-content,1fr))] gap-px overflow-hidden rounded-lg border border-border bg-border">
       {cells.map(([label, value]) => (
-        <div key={label} className="min-w-0 bg-card px-3 py-2.5">
+        <div key={label} className="bg-card px-3 py-2.5">
           <dt className="text-xs text-muted-foreground">{label}</dt>
-          <dd className="m-0 mt-0.5 truncate font-[family-name:var(--font-display)] text-base font-semibold tabular-nums text-foreground">{value}</dd>
+          <dd className="m-0 mt-0.5 whitespace-nowrap font-[family-name:var(--font-display)] text-base font-semibold tabular-nums text-foreground">{value}</dd>
         </div>
       ))}
     </dl>
@@ -242,8 +247,12 @@ function queryFor(active: Filters, search: string, page: number | null, focusLea
   return params.toString();
 }
 
-export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadId?: string | null; timeZone?: string | null }) {
-  const today = todayFor(timeZone);
+/**
+ * `timeZone` shows times (the viewer's own zone, LA-8.2). `dayZone` starts "today": the zone the deals are filed
+ * in (lib/dealFlow/dayZone.ts), else the browser's day.
+ */
+export function DealFlowWorkspace({ focusLeadId, timeZone = null, dayZone = null }: { focusLeadId?: string | null; timeZone?: string | null; dayZone?: string | null }) {
+  const today = todayFor(dayZone);
   const focus = focusLeadId ?? null;
   const [filters, setFilters] = useState<Filters>(() => todaysFilters(today));
   const [active, setActive] = useState<Filters>(filters);
@@ -446,7 +455,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
     active.agent_id && { key: "agent", label: "Agent", value: data.options.agents.find((agent) => agent.id === active.agent_id)?.name ?? "Unknown agent", onRemove: () => applyFilter({ agent_id: "" }) },
     search && { key: "search", label: "Search", value: search, onRemove: () => { setSearchTerm(""); setSearch(""); setPage(1); } },
   ].filter((chip): chip is ActiveFilter => Boolean(chip));
-  const dayTitle = `Dates are the agent’s local day${timeZone ? `; today is ${formatDay(today)} in ${timeZone}` : ""}`;
+  const dayTitle = `Dates are the agent’s local day${dayZone ? `; today is ${formatDay(today)} in ${dayZone}` : ""}`;
   // applyFilter holds an incomplete or reversed range without applying it; say so while it is held.
   const rangeProblem = !filters.from || !filters.to ? "Choose both a From and a To date" : filters.from > filters.to ? "From must be on or before To" : null;
   const showPanel = panelOpen && tab === "deals" && selectedRow !== null;
@@ -571,7 +580,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
                     <th scope="col" className={st.th}>Owner</th>
                     <th scope="col" className={cn(st.th, "text-right")}>Annualised premium</th>
                     <th scope="col" className={st.th}>Status</th>
-                    <th scope="col" className={cn(st.th, "w-[110px]")}>Next step</th>
+                    <th scope="col" className={cn(st.th, "w-[110px] text-right")}>Next step</th>
                   </tr>
                 </thead>
                 <tbody className="m-seq">
@@ -598,8 +607,8 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
                         <td className={cn(st.td, "whitespace-nowrap")}>
                           <StagePill row={row} />
                         </td>
-                        <td className={cn(st.td, "whitespace-nowrap")}>
-                          <Link href={`/app/leads/${row.lead_id}`} onClick={(event) => event.stopPropagation()} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")} title={`Open ${customerName(row)}'s lead`}>Open</Link>
+                        <td className={cn(st.td, "w-px whitespace-nowrap text-right")}>
+                          <RowAction href={`/app/leads/${row.lead_id}`} title={`Open ${customerName(row)}'s lead`}>Open</RowAction>
                         </td>
                       </tr>
                     );
@@ -650,7 +659,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
                 <div className="mt-3">
                   <KeyValues
                     items={[
-                      { label: "Product", value: selectedRow.product_type ? `${productName(soldProducts, selectedRow.product_line)} · ${selectedRow.product_type}` : selectedRow.product_line ? productName(soldProducts, selectedRow.product_line) : "—" },
+                      { label: "Product", value: dealProductText(selectedRow.product_line, selectedRow.product_type, (code) => productName(soldProducts, code)) },
                       { label: "Draft date", value: formatDay(selectedRow.draft_date) },
                       { label: "Phone", value: selectedRow.phone ?? "—" },
                       { label: "Vendor", value: selectedRow.vendor_name ?? "—" },

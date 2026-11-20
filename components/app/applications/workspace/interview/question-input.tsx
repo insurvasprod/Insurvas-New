@@ -15,6 +15,7 @@ import { control } from "@/components/app/settings/primitives";
 import { useDictation } from "@/components/app/dialer/use-dictation";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
+import { feetAndInches, isHeightQuestion, totalInches } from "@/lib/applications/heightInput";
 import type { InterviewQuestion, InterviewView, MedicationRow } from "@/lib/applications/types";
 import { cn } from "@/lib/utils";
 
@@ -110,6 +111,7 @@ function Control({ q, value, labelId, readOnly, onAnswer, toneFor }: {
       );
     }
     case "number":
+      if (isHeightQuestion(q.key, q.type)) return <HeightAnswer id={id} labelId={labelId} value={value} readOnly={readOnly} onAnswer={onAnswer} />;
       return <input id={id} aria-labelledby={labelId} type="number" inputMode="decimal" className={cn(control, "mt-0 w-32")} value={typeof value === "number" ? value : ""} disabled={readOnly} onChange={(e) => onAnswer(e.target.value === "" ? null : Number(e.target.value))} />;
     case "date":
       return <input id={id} aria-labelledby={labelId} type="date" className={cn(control, "mt-0 w-44")} value={typeof value === "string" ? value : ""} disabled={readOnly} onChange={(e) => onAnswer(e.target.value || null)} />;
@@ -121,6 +123,39 @@ function Control({ q, value, labelId, readOnly, onAnswer, toneFor }: {
     default:
       return null;
   }
+}
+
+/**
+ * The height question as feet and inches, like the Application step's build cell; the answer is
+ * still total inches, the number the application, QA and the client card read. A box being typed in
+ * keeps its text until the other is filled, so "5" then "8" never jumps; a new answer from the
+ * server (a re-read, a colleague) resets both.
+ */
+function HeightAnswer({ id, labelId, value, readOnly, onAnswer }: {
+  id: string; labelId: string; value: AnswerValue | undefined; readOnly: boolean; onAnswer: (value: AnswerValue) => void;
+}) {
+  const [boxes, setBoxes] = useState(() => feetAndInches(value));
+  const [seen, setSeen] = useState(value);
+  if (value !== seen) {
+    setSeen(value);
+    if (value !== totalInches(boxes.feet, boxes.inches)) setBoxes(feetAndInches(value));
+  }
+  function change(feet: string, inches: string) {
+    setBoxes({ feet, inches });
+    const total = totalInches(feet, inches);
+    setSeen(total);
+    onAnswer(total);
+  }
+  const box = cn(control, "mt-0 w-16 min-w-0 text-right");
+  const unit = "text-sm text-[var(--muted)]";
+  return (
+    <span role="group" aria-labelledby={labelId} className="inline-flex flex-wrap items-center gap-2">
+      <input id={id} type="number" inputMode="numeric" min={3} max={8} aria-label="Height, feet" placeholder="5" className={box} value={boxes.feet} disabled={readOnly} onChange={(e) => change(e.target.value, boxes.inches)} />
+      <span className={unit}>ft</span>
+      <input id={`${id}.inches`} type="number" inputMode="numeric" min={0} max={11} aria-label="Height, inches" placeholder="8" className={box} value={boxes.inches} disabled={readOnly} onChange={(e) => change(boxes.feet, e.target.value)} />
+      <span className={unit}>in</span>
+    </span>
+  );
 }
 
 /** Types whose control sits to the right of the question on one line. */

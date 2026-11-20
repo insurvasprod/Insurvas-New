@@ -153,6 +153,8 @@ async function searchPolicies(tenantId: string, term: string, scope: ProducerSco
     .from("tenant_policies")
     .select("id, policy_number, insured_name, carrier, annual_premium_cents, status")
     .eq("tenant_id", tenantId)
+    // A carrier-file policy's statement mirror (lib/ledger/statementMirror.ts) is not a second policy.
+    .neq("source", "carrier_file")
     .or([`policy_number.ilike.${like}`, `insured_name.ilike.${like}`].join(",")), "created_by", scope)
     .order("effective_date", { ascending: false })
     .limit(5);

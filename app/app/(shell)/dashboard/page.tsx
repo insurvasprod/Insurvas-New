@@ -10,7 +10,7 @@ import { applyKillSwitches } from "@/lib/features/killSwitchRules";
 import { setupChecklistForState } from "@/lib/dashboard/checklist";
 import { loadSetupGuideState, loadSetupProfile, loadSetupProgress, recordSetupFinished } from "@/lib/dashboard/setupProgress";
 import { getDashboardOnboardingState } from "@/lib/dashboard/service";
-import { firstOpenable, HOME_SECTIONS, resolveRoleHome, type HomeMoneyKey } from "@/lib/dashboard/roleHome";
+import { firstOpenable, HOME_SECTIONS, isLedgerHome, resolveRoleHome, type HomeMoneyKey } from "@/lib/dashboard/roleHome";
 import { greeting } from "@/lib/dashboard/todayMath";
 import { homeRole, type AttentionLinks } from "@/lib/dashboard/homeView";
 import { dashboardViews, pickDashboardView, type DashboardViewKey } from "@/lib/dashboard/views";
@@ -31,6 +31,7 @@ import { readBalances } from "@/lib/agency/ledgerStore";
 import { SetupCelebration } from "@/components/app/setup/setup-celebration";
 import { NextCallback } from "@/components/app/dashboard-today";
 import { HomeView } from "@/components/app/home/views/overview-view";
+import { LedgerView } from "@/components/app/home/views/ledger-view";
 import { LeadsView } from "@/components/app/home/views/leads-view";
 import { RetentionView } from "@/components/app/home/views/retention-view";
 import { BookView } from "@/components/app/home/views/book-view";
@@ -168,6 +169,8 @@ export default async function AgentDashboardPage({ searchParams }: { searchParam
   // LA-0.3: the setup checklist stays on Home until done, folded into Needs you as one tile opening Get set up.
   const setupOpen = shown.has("setup") && !checklist.complete && setupGuide.hiddenAt === null;
   const nothing = available.length === 0;
+  // The plan itself is a money plan (Ledger) and this is its owner: the Ledger Home.
+  const ledgerHome = home.profile === "money" && isLedgerHome({ code: entitlement.plan_code, features: entitlement.features }, context.role);
   // The role's daily pages (the audit: never surfaced), each only when this reader can open it.
   const pages = Object.fromEntries((Object.keys(HOME_PAGES) as HomePageKey[]).map((key) => [key, open(HOME_PAGES[key])])) as Record<HomePageKey, string | null>;
   // The goal ring's stored goal (migration 20261118610000); before it is applied the read answers "missing".
@@ -186,6 +189,11 @@ export default async function AgentDashboardPage({ searchParams }: { searchParam
       {nothing ? (
         // A plan granting nothing is the owner's to fix.
         <Card><EmptyState title="No workspace feature is active yet" hint="Ask your account owner to activate one." /></Card>
+      ) : ledgerHome ? (
+        // The Ledger plan (no CRM): the agency dashboard's frame with the book's money in it (owner 2026-11-19).
+        <Suspense fallback={<PageLoading />}>
+          <LedgerView props={viewProps} setup={setupOpen ? { left: Math.max(0, checklist.total - checklist.completed), href: "/app/setup" } : null} />
+        </Suspense>
       ) : (
         <Suspense fallback={<PageLoading />}>
           <HomeView

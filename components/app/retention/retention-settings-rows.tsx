@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { SettingSheet, type Affect, type HistoryItem } from "@/components/app/settings/money/setting-kit";
 import { control, Field } from "@/components/ui/field";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { cn } from "@/lib/utils";
 
 /**
@@ -20,9 +21,9 @@ import { cn } from "@/lib/utils";
 const opensFrom = (event: MouseEvent<HTMLElement>) => !(event.target as HTMLElement).closest("a, button, input, select, textarea, label");
 
 /**
- * A row that opens its dialog (or, with `href`, its page): one click anywhere on it, a hover tint and a short verb
- * with › at its end (Edit › for the owner, View › for everyone else, Open › for a page; owner 2026-11-11, one line
- * and one colour per row). The label is the row's button (or link), so the keyboard has one way in.
+ * A row that opens its dialog (or, with `href`, its page): one click anywhere on it, a hover tint and a RowAction
+ * button at its end (Edit for the owner, View for everyone else, Open for a page; owner 2026-11-19: a row's next step
+ * is a button, not a link).
  */
 export function OpenRow({ id, label, sub, onOpen, href, canEdit = true, children }: {
   id?: string;
@@ -47,7 +48,7 @@ export function OpenRow({ id, label, sub, onOpen, href, canEdit = true, children
         )}
       </td>
       {children}
-      <td className="w-[1%] whitespace-nowrap text-right" aria-hidden="true">{href ? "Open" : canEdit ? "Edit" : "View"} ›</td>
+      <RowActionCell>{href ? <RowAction href={href}>Open</RowAction> : <RowAction onClick={open}>{canEdit ? "Edit" : "View"}</RowAction>}</RowActionCell>
     </tr>
   );
 }

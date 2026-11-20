@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { RowAction } from "@/components/ui/row-action";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
@@ -224,7 +225,7 @@ export function ConsentLockerWorkspace() {
                   <TableHead>Provider</TableHead>
                   <TableHead>Consent given</TableHead>
                   <TableHead>Evidence</TableHead>
-                  <TableHead>Next step</TableHead>
+                  <TableHead className="text-right">Next step</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
                   {loaded.rows.map((row) => {
@@ -242,8 +243,8 @@ export function ConsentLockerWorkspace() {
                         <TableCell className="max-w-[200px] truncate whitespace-nowrap" title={row.captured !== "—" ? `${row.providerName} · ${row.captured}` : row.providerName}>{row.providerName}</TableCell>
                         <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground" title={row.consentGivenAt ? when(row.consentGivenAt) : undefined}>{day ?? "—"}</TableCell>
                         <TableCell className="whitespace-nowrap"><span title={EVIDENCE_LABEL[row.level]}><StatusChip tone={evidenceChipTone(row.level)}>{EVIDENCE_CHIP[row.level]}</StatusChip></span></TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          <Link href={href} onClick={(event) => event.stopPropagation()} className="hover:underline" title={missing ? "Open the consent record to attach the vendor's certificate or our stored copy" : "Open the consent record"}>{missing ? "Add proof ›" : "Open ›"}</Link>
+                        <TableCell className="w-px whitespace-nowrap text-right">
+                          <RowAction href={href} title={missing ? "Open the consent record to attach the vendor's certificate or our stored copy" : "Open the consent record"}>{missing ? "Add Proof" : "Open"}</RowAction>
                         </TableCell>
                       </TableRow>
                     );

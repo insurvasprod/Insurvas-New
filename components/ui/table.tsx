@@ -5,11 +5,16 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 import { titleCaseNode } from "@/components/ui/title-case"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+/**
+ * `containerClassName` styles the scrolling wrapper. A table whose header sticks to the page while
+ * the page scrolls (the public pricing comparison) sets `lg:overflow-visible` there: an overflow
+ * wrapper is its own scroll box, and a sticky header inside one never sticks to the page.
+ */
+function Table({ className, containerClassName, ...props }: React.ComponentProps<"table"> & { containerClassName?: string }) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      className={cn("relative w-full overflow-x-auto", containerClassName)}
     >
       <table
         data-slot="table"

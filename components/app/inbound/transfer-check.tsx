@@ -16,10 +16,11 @@ import { Button } from "@/components/ui/button";
 import { PageLoading } from "@/components/ui/page-loading";
 import { Callout } from "@/components/app/settings/primitives";
 import { CallerCard, callerFacts, useNow } from "@/components/app/inbound/caller-card";
+import { callerValue, type CallerField } from "@/components/app/inbound/caller-value";
 import { ago } from "@/components/app/applications/outcome/model";
 import { notify } from "@/lib/notify";
 
-type Field = { field_key: string; label: string };
+type Field = CallerField;
 type Panel = Parameters<typeof callerFacts>[0] & { sections: Array<{ section_key: string; label: string; fields: Field[] }> };
 type Caller = {
   notes: Array<{ id: string; body: string; author: string; createdAt: string }> | null;
@@ -30,12 +31,6 @@ type Caller = {
 const shown = (value: unknown) => (Array.isArray(value) ? value.join(", ") : value === null || value === undefined || value === "" ? null : typeof value === "boolean" ? (value ? "Yes" : "No") : String(value));
 /** What the caller card on the left already says: not repeated in the partner's list. */
 const ON_THE_CARD = /^(full_?name|name|first_?name|last_?name|date_?of_?birth|dob|birth_?date|city|state|zip|zip_?code|postal_?code|address.*|street.*|email.*|phone.*|mobile.*|cell.*)$/i;
-/** A value as a person reads it: dollars for an amount, a date for an ISO date. */
-function readable(key: string, label: string, value: string) {
-  if (/^\d{4}-\d{2}-\d{2}/.test(value)) { const d = new Date(value); if (!Number.isNaN(d.getTime())) return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }); }
-  if (/amount|premium|coverage|income|salary|benefit/i.test(`${key} ${label}`) && /^\d+(\.\d+)?$/.test(value)) return Number(value).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-  return value;
-}
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 function Stat({ icon: Icon, label, value, detail }: { icon: typeof PhoneCall; label: string; value: string; detail?: string | null }) {
@@ -120,12 +115,16 @@ export function TransferCheck({ workItemId, onNext }: { workItemId: string; onNe
             <p className="m-0 text-sm text-[var(--body)]">Nothing more than what is on the left.</p>
           ) : (
             <dl className="m-0 grid gap-x-6 gap-y-2.5 sm:grid-cols-2">
-              {details.map((f) => (
-                <div key={f.field_key} className="flex min-w-0 flex-col border-b border-[var(--border)] pb-2">
-                  <dt className="text-xs text-[var(--body)]">{f.label}</dt>
-                  <dd className="m-0 truncate text-sm font-semibold text-[var(--ink)]" title={shown(values[f.field_key]) ?? undefined}>{readable(f.field_key, f.label, shown(values[f.field_key]) ?? "")}</dd>
-                </div>
-              ))}
+              {details.map((f) => {
+                // A currency field is stored in cents (caller-value.ts); the tooltip shows the same dollars.
+                const text = callerValue(f, shown(values[f.field_key]) ?? "");
+                return (
+                  <div key={f.field_key} className="flex min-w-0 flex-col border-b border-[var(--border)] pb-2">
+                    <dt className="text-xs text-[var(--body)]">{f.label}</dt>
+                    <dd className="m-0 truncate text-sm font-semibold text-[var(--ink)]" title={text}>{text}</dd>
+                  </div>
+                );
+              })}
             </dl>
           )}
         </div>

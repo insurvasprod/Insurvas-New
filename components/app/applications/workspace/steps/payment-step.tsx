@@ -21,7 +21,8 @@ import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Callout, Field, control } from "@/components/app/settings/primitives";
-import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL, type IncomeType, type PaymentMethod } from "@/lib/applications/constants";
+import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL, WORKSPACE_STEPS, type IncomeType, type PaymentMethod, type WorkspaceStep } from "@/lib/applications/constants";
+import { nextOpenStep } from "@/lib/applications/stepFlow";
 import { cardBrand, cardDigitsFor, cardExpiryInFuture, cardNumberProblem, digitsOnly, isValidAbaRouting, isValidBankAccount, maskLast4, type CardBrand } from "@/lib/applications/formats";
 import type { PaymentView } from "@/lib/applications/types";
 import type { PayFrequency } from "@/lib/draftDates/optimiser";
@@ -36,7 +37,7 @@ import { ordinal } from "@/components/app/applications/parts";
 import { SharedWithPrimary } from "@/components/app/applications/household/shared-detail";
 import { useReveal } from "@/components/app/applications/workspace/use-reveal";
 import { AcceptedCards, CARD_BRAND_LABEL as BRAND_LABEL, CardBrandMark } from "@/components/app/applications/workspace/card-brand-mark";
-
+
 import { CheckBox } from "@/components/ui/check-box";
 const METHOD_SHORT: Record<PaymentMethod, string> = { ach: "ACH", direct_express: "Direct Express", debit_card: "Debit card", credit_card: "Credit card", direct_bill: "Direct bill" };
 
@@ -180,6 +181,9 @@ function PartHeading({ n, title }: { n: number; title: string }) {
     </header>
   );
 }
+
+const STEP_KEYS: readonly WorkspaceStep[] = WORKSPACE_STEPS.map((s) => s.key);
+const STEP_LABEL = new Map<WorkspaceStep, string>(WORKSPACE_STEPS.map((s) => [s.key, s.label]));
 
 function PaymentStepFor() {
   const { attempt, interview, readOnly: closed, sample, updateAttempt, actions, goTo } = useWorkspace();
@@ -346,11 +350,20 @@ function PaymentStepFor() {
   useEffect(() => { onLeave.current = () => { autosave(); flushDraft(storedDrafts || sample); }; });
   useEffect(() => { const leave = onLeave; return () => leave.current(); }, []);
 
-  async function continueToDisclosures() {
+  // Continue goes to the next step that still needs work: Disclosures while one is still to be given,
+  // else straight on to Review (walk 2026-11-20: it sat on a finished Disclosures step). Read from the
+  // latest attempt, since a save re-reads the case before Continue moves on.
+  const disclosuresOpen = (a: typeof attempt) => a.disclosures.some((d) => d.status === "required");
+  const latestAttempt = useRef(attempt);
+  useEffect(() => { latestAttempt.current = attempt; });
+  const nextFor = (a: typeof attempt): WorkspaceStep => nextOpenStep(STEP_KEYS, "payment", "review", (s) => (s === "disclosures" ? !disclosuresOpen(a) : true));
+  const nextStep = nextFor(attempt);
+
+  async function continueOn() {
     // A save the blur already started covers what was on screen.
     if (inFlight.current) {
-      if (!(await inFlight.current)) return;
-      goTo("disclosures");
+      if (!(await inFlight.current)) { notify.block("The payment details weren't saved", { detail: "Fix what the step marks, then continue." }); return; }
+      goTo(nextFor(latestAttempt.current));
       return;
     }
     if (!readOnly && dirty && method) {
@@ -358,7 +371,7 @@ function PaymentStepFor() {
       if (invalid) { notify.block("Fix the payment details first", { detail: "The field with the problem says what is wrong." }); return; }
       if (!(await savePayment(form))) return;
     }
-    goTo("disclosures");
+    goTo(nextFor(latestAttempt.current));
   }
 
   /** The section's Save button: check the fields, then save what is on screen. */
@@ -597,7 +610,7 @@ function PaymentStepFor() {
       )}
       <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[var(--border)] pt-3">
         <Button type="button" variant="outline" onClick={() => goTo("beneficiaries")}><ArrowLeft aria-hidden="true" />Back to Beneficiaries</Button>
-        <Button type="button" onClick={() => { void continueToDisclosures(); }} disabled={busy} title={busy ? "Saving the payment details…" : undefined}>Continue to Disclosures<ArrowRight aria-hidden="true" /></Button>
+        <Button type="button" onClick={() => { void continueOn(); }} disabled={busy} title={busy ? "Saving the payment details…" : nextStep === "review" ? "No disclosure is waiting to be given" : undefined}>Continue to {STEP_LABEL.get(nextStep) ?? "Review"}<ArrowRight aria-hidden="true" /></Button>
       </div>
     </section>
   );

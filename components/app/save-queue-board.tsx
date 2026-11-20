@@ -20,8 +20,7 @@ import { REQUEST_FOR_FIX, REQUEST_LABELS, STATUS_LABELS, type RequestType } from
 import { coverageText } from "@/lib/retention/income";
 import type { SaveCard, SaveQueue } from "@/lib/retention/queueStore";
 import { cardHref, HoldDialog } from "@/components/app/retention/save-card";
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { RowAction } from "@/components/ui/row-action";
 
 // Whole dollars, rounded (it used to cut the cents off: $0.99 read $0).
 const money = (cents: number | null) => {
@@ -183,7 +182,7 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
                 <th>Why</th>
                 {showWorth && <th className="w-[96px] text-right" title="Unearned advance the carrier takes back if this policy dies (from the commission ledger)">Worth</th>}
                 {showDraft && <th className="w-[96px] text-right">Next draft</th>}
-                <th>Next step</th>
+                <th className="text-right">Next step</th>
               </tr>
             </thead>
             <tbody className="m-seq">
@@ -210,13 +209,13 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
                         {card.nextDraftDays === null ? <span className="text-muted-foreground" title="The draft day is known only for sales written in the app">—</span> : card.nextDraftDays === 0 ? "Today" : `${card.nextDraftDays} ${card.nextDraftDays === 1 ? "day" : "days"}`}
                       </td>
                     )}
-                    <td className="whitespace-nowrap">
-                      {readOnly ? <Link href={href} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Open</Link> : (
+                    <td className="w-px whitespace-nowrap text-right">
+                      {readOnly ? <RowAction href={href}>Open</RowAction> : (
                         <span className="inline-flex items-center gap-1">
                           {/* The fix is the row's job (spec card: [Call] [Start the fix]); without one, the call. A short verb, the fix named in its tooltip. */}
                           {firstType
-                            ? <Link href={`${href}?tab=fix&fix=${firstType}`} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")} title={`Start the fix: ${first!.label}${fixes.length > 1 ? ` (+${fixes.length - 1} more)` : ""}`}>Fix</Link>
-                            : <Link href={`${href}?tab=calls`} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")} title={first ? `Log call · then ${first.label}` : "Log call"}>Call</Link>}
+                            ? <RowAction href={`${href}?tab=fix&fix=${firstType}`} title={`Start the fix: ${first!.label}${fixes.length > 1 ? ` (+${fixes.length - 1} more)` : ""}`}>Fix</RowAction>
+                            : <RowAction href={`${href}?tab=calls`} title={first ? `Log call · then ${first.label}` : "Log call"}>Call</RowAction>}
                           <MoreMenu row label={`More for ${name}`} items={[
                             ...fixes.slice(1).map((f) => { const type = startable(card, f.action); return type ? { label: `Start: ${f.label}`, href: `${href}?tab=fix&fix=${type}` } : null; }),
                             firstType && { label: "Log call", href: `${href}?tab=calls` },

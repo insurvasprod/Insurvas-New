@@ -1,14 +1,14 @@
 "use client";
 
 import { Fragment, useMemo, useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { ClickRow } from "@/components/app/book/policy/click-row";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
@@ -17,7 +17,6 @@ import { FILE_STAGES, STAGE_LABELS } from "@/lib/ingestion/dailyRun";
 import type { FindingRow, RunRow, StageRow } from "@/lib/ingestion/dailyRunStore";
 import { findingHref } from "@/lib/ingestion/trace";
 import { notify } from "@/lib/notify";
-import { cn } from "@/lib/utils";
 
 /**
  * LA-4.19 (Notion sprint) · Carrier files › Runs and › Agent findings. A run lists each file with
@@ -156,7 +155,7 @@ export function AgentFindings({ findings, accuracy, available, canReview }: { fi
           : visible.length === 0 ? <NoMatches noun="problems" onClear={clear} />
           : (
             <table className="portal-lead-table w-full min-w-[980px] text-left text-sm">
-              <thead><tr><th>Agent</th><th>What it saw</th><th>File</th><th>Severity</th><th>When</th><th>Next step</th></tr></thead>
+              <thead><tr><th>Agent</th><th>What it saw</th><th>File</th><th>Severity</th><th>When</th><th className="text-right">Next step</th></tr></thead>
               <tbody>
                 {shown.rows.map((f) => (
                   <ClickRow key={f.id} href={findingHref(f.id)} label={`Open the problem: ${f.reasoning}`}>
@@ -168,11 +167,11 @@ export function AgentFindings({ findings, accuracy, available, canReview }: { fi
                     <td><StatusChip tone={SEVERITY_TONE[f.severity] ?? "neutral"}>{f.severity === "blocking" ? "Blocking" : f.severity === "warning" ? "Warning" : "Note"}</StatusChip></td>
                     <td className="whitespace-nowrap tabular-nums text-muted-foreground">{when(f.createdAt)}</td>
                     {/* Round 5 (walk 2026-11-03): the question is on the problem's own page; the list only links to it. */}
-                    <td className="whitespace-nowrap">
+                    <RowActionCell>
                       {f.status === "open" && canReview
-                        ? <Link href={findingHref(f.id)} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Review</Link>
+                        ? <RowAction href={findingHref(f.id)}>Review</RowAction>
                         : <>{STATUS_WORD[f.status] ?? f.status}</>}
-                    </td>
+                    </RowActionCell>
                   </ClickRow>
                 ))}
               </tbody>

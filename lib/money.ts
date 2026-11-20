@@ -41,7 +41,16 @@ export function formatCentsAsCurrency(cents: number): string {
   return `${negative ? "-" : ""}$${whole}.${frac}`;
 }
 
-export const BILLING_CYCLES = ["monthly", "quarterly", "yearly"] as const;
+/**
+ * A cost per record, which is often a fraction of a cent: "$25.00", "$0.13", and a third decimal only when the
+ * figure has one ("$0.125", "$4.875"). Never "$25.000". Display only; en-US so the server and the browser agree.
+ */
+export function formatPerRecordCents(cents: number | null | undefined): string {
+  if (cents === null || cents === undefined || !Number.isFinite(Number(cents))) return "—";
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 3 }).format(Number(cents) / 100);
+}
+
+export const BILLING_CYCLES =["monthly", "quarterly", "yearly"] as const;
 export type BillingCycle = (typeof BILLING_CYCLES)[number];
 
 export const BILLING_CYCLE_LABELS: Record<BillingCycle, string> = {

@@ -10,6 +10,7 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { ActiveFilters, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { EmptyState, ErrorState, NoMatches } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { RowAction } from "@/components/ui/row-action";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { MoreMenu } from "@/components/ui/more-menu";
@@ -56,7 +57,7 @@ export function HierarchyBoard({ rows, trend, month, currentMonth, months, canCh
   /** The owner: Change a manager is on More (disabled while the account is read-only). */
   canChangeManager: boolean;
   readOnly: boolean;
-  /** The owner on a writable account: rows carry their next step ("Set level ›"). */
+  /** The owner on a writable account: rows carry their next step (a "Set Level" RowAction). */
   canEdit: boolean;
   error?: string | null;
 }) {
@@ -310,7 +311,7 @@ function TableView({ rows, toolbar, canEdit, onClear, onManager }: { rows: Hiera
                   <td className="whitespace-nowrap text-right tabular-nums">{r.overrideCents === null ? <span className="text-muted-foreground">—</span> : dollars(r.overrideCents)}</td>
                   <td className="whitespace-nowrap">
                     <StatusChip tone={state.tone}>{state.text}</StatusChip>
-                    {canEdit && state.next && <Link href={href} className="ml-2 hover:underline" onClick={(e) => e.stopPropagation()}>{state.next} ›</Link>}
+                    {canEdit && state.next && <RowAction href={href} className="ml-2">{state.next}</RowAction>}
                   </td>
                 </tr>
               );

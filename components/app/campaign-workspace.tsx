@@ -62,6 +62,8 @@ import { LeaveGuard } from "@/components/ui/leave-guard";
 import { StatusChip } from "@/components/ui/status-chip";
 import { UnderlineTabs } from "@/components/ui/view-tabs";
 import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
+import { useHydrating } from "@/lib/client/use-resource";
+import { formatPerRecordCents } from "@/lib/money";
 
 /**
  * Lead sources › 1 · Source (owner pick "A · Vendor first", canvas M2 · Vendors & campaigns,
@@ -113,19 +115,17 @@ type VendorsBody = { vendors?: Vendor[]; rollup?: Rollup[]; speed?: Speed[]; con
 const CAMPAIGNS_KEY = "/api/app/campaigns";
 const VENDORS_KEY = "/api/app/vendors";
 
-/** Cents to dollars. Costs per record are fractional cents, so they keep three decimal places. */
+/** Cents to dollars, en-US on the server and in the browser alike (a browser locale would not match the server's HTML). */
 function money(cents: number | null | undefined) {
   if (cents === null || cents === undefined) return "—";
-  return `$${(Number(cents) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `$${(Number(cents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
-function perRecord(cents: number | null | undefined) {
-  if (cents === null || cents === undefined) return "—";
-  return `$${(Number(cents) / 100).toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`;
-}
+/** A cost per record: two decimals, a third only for a fraction of a cent ("$25.00", "$0.125"; lib/money.ts). */
+const perRecord = formatPerRecordCents;
 
 /** A count the database has not computed yet is "—", never 0. Zero is a measurement. */
 function count(value: number | null | undefined) {
-  return value === null || value === undefined ? "—" : Number(value).toLocaleString();
+  return value === null || value === undefined ? "—" : Number(value).toLocaleString("en-US");
 }
 
 /** "$4.12" — a per-record figure at the board's two decimals, for the table and the headline. */
@@ -170,7 +170,7 @@ function typedCount(text: string) {
   if (!clean) return null;
   return /^\d+$/.test(clean) ? Number(clean) : Number.NaN;
 }
-/** Spend over records as you type, at three decimals; "—" until both make sense. */
+/** Spend over records as you type ("$25.00", a third decimal only for a fraction of a cent); "—" until both make sense. */
 function liveCostPerRecord(spendText: string, recordsText: string) {
   const spend = typedCents(spendText);
   const records = typedCount(recordsText);
@@ -262,7 +262,11 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
 } = {}) {
   const router = useRouter();
   // The kept answers on a client navigation (nothing while hydrating a fresh document): the page draws them at once.
+  // `hydrating` and not `seed` alone decides: this page hydrates after the shell has marked the app hydrated
+  // (lib/client/use-resource.ts), and a kept answer here would not match the server's HTML.
+  const hydrating = useHydrating();
   const [kept] = useState(() => {
+    if (hydrating) return { campaigns: undefined, vendors: undefined };
     const campaignBody = seed<CampaignsBody>(CAMPAIGNS_KEY, true)?.data;
     const vendorBody = seed<VendorsBody>(VENDORS_KEY, true)?.data;
     return campaignBody && vendorBody ? { campaigns: campaignBody, vendors: vendorBody } : { campaigns: undefined, vendors: undefined };
@@ -1197,6 +1201,7 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
       tabRequest={panelTab}
       campaign={openCampaign}
       vendor={vendorName.get(openCampaign.vendor_id) ?? "Unknown vendor"}
+      productName={openCampaign.product_code ? soldProducts?.find((product) => product.code === openCampaign.product_code)?.name ?? null : null}
       lead={progress?.[id] ?? null}
       reach={funnel?.[id] ?? null}
       outcome={outcomes?.[id] ?? null}
@@ -1231,10 +1236,12 @@ type PanelTab = "numbers" | "cost" | "targeting";
  * Cost & weight, and Targeting, edited together and saved with one Save; its status actions; and
  * its list and cadence.
  */
-function CampaignPanel({ tabRequest, campaign, vendor, lead, reach, outcome, isTest, savedStates, otherActiveWeight, busy, stage, scrub, onSave, onActivate, onPause, onExhaust, deleteBlocked, onDelete, onTestBatch, onClose }: {
+function CampaignPanel({ tabRequest, campaign, vendor, productName, lead, reach, outcome, isTest, savedStates, otherActiveWeight, busy, stage, scrub, onSave, onActivate, onPause, onExhaust, deleteBlocked, onDelete, onTestBatch, onClose }: {
   /** The section to show; a new `at` moves to it again (the row's pen on a panel already open). */
   tabRequest: { tab: PanelTab; at: number };
   campaign: Campaign;
+  /** The product's own name (owner 2026-11-19: never the code, "term_life"). */
+  productName?: string | null;
   vendor: string;
   lead: CampaignProgress | null;
   reach: Funnel | null;
@@ -1312,7 +1319,7 @@ function CampaignPanel({ tabRequest, campaign, vendor, lead, reach, outcome, isT
   const servingShare = campaign.status === "active" ? shareOf(String(campaign.mixing_weight), otherActiveWeight) : null;
   const draftShare = shareOf(weight, otherActiveWeight);
   const figures: PanelFigure[] = [
-    { key: "type", icon: <Layers />, label: "Type", value: `${campaign.lead_type}${campaign.product_code ? ` · ${campaign.product_code}` : ""}`, meaning: "Lead type and product" },
+    { key: "type", icon: <Layers />, label: "Type", value: `${LEAD_TYPE[campaign.lead_type] ?? campaign.lead_type}${campaign.product_code ? ` · ${productName ?? campaign.product_code}` : ""}`, meaning: "Lead type and product" },
     { key: "records", icon: <Package />, label: "Records", value: campaign.records_purchased > 0 ? campaign.records_purchased.toLocaleString() : null, meaning: "Rows bought" },
     { key: "rejected", icon: <XCircle />, label: "Rejected", value: campaign.records_rejected === null ? null : count(campaign.records_rejected), tone: (campaign.records_rejected ?? 0) > 0 ? "danger" : null, meaning: "Rows rejected at the scrub" },
     { key: "usable", icon: <CheckCircle2 />, label: "Usable", value: campaign.records_usable === null ? null : count(campaign.records_usable), meaning: "Rows that can be dialled" },
@@ -1340,7 +1347,7 @@ function CampaignPanel({ tabRequest, campaign, vendor, lead, reach, outcome, isT
   // Owner 2026-10-29: a full-height sheet, wider, portalled to the body (the page's entrance
   // animation leaves a transform that would trap a fixed panel). The bin sits in the header behind
   // the kit's confirm; the list and cadence are buttons; the footer is Save alone.
-  const panel = <DetailPanel mode="overlay" className="top-0 lg:w-[600px]" title={campaign.name} subtitle={`${vendor} · ${campaign.lead_type}${campaign.product_code ? ` · ${campaign.product_code}` : ""}`} status={stage} onClose={() => void close()}
+  const panel = <DetailPanel mode="overlay" className="top-0 lg:w-[600px]" title={campaign.name} subtitle={`${vendor} · ${LEAD_TYPE[campaign.lead_type] ?? campaign.lead_type}${campaign.product_code ? ` · ${productName ?? campaign.product_code}` : ""}`} status={stage} onClose={() => void close()}
     actions={<span className="inline-flex" title={deleteBlocked ?? "Delete campaign"}>
       <Button type="button" variant="ghost" size="icon" className="text-[var(--error-ink)] hover:bg-[var(--error-surface)] hover:text-[var(--error-ink)]" aria-label={deleteBlocked ? `Delete campaign — ${deleteBlocked}` : "Delete campaign"} disabled={busy || deleteBlocked !== null} onClick={onDelete}><Trash2 aria-hidden="true" /></Button>
     </span>}

@@ -341,6 +341,16 @@ export function PartnerLeadForm({
   >([]);
   const [duplicateJustification, setDuplicateJustification] = useState("");
   const [formRefresh, setFormRefresh] = useState(0);
+  // Walk 2026-11-20: after a 201 the form came back as "Draft resumed" with the submitted answers.
+  // A reload that started before the submit (the tab regaining focus) or an autosave in flight
+  // answered after it and put the submitted draft back. Every submit bumps the generation, so an
+  // answer from before it is dropped, and a submitted draft id is never resumed or saved again.
+  const submitGeneration = useRef(0);
+  const submittingRef = useRef(false);
+  const submittedDraftIds = useRef<Set<string>>(new Set());
+  // The done state: shown in place of the form until the partner starts another lead.
+  const [submitted, setSubmitted] = useState<{ leadId: string | null; replayed: boolean } | null>(null);
+  const submittedRef = useRef(false);
   // The rest of the form opens once the number has been screened (and a DNC warning acknowledged).
   // After that it stays open: changing the number re-screens it in place, as the board draws it.
   const [formOpened, setFormOpened] = useState(false);
@@ -381,7 +391,7 @@ export function PartnerLeadForm({
 
   useEffect(() => {
     const refresh = () => {
-      if (!dirtyRef.current) setFormRefresh((value) => value + 1);
+      if (!dirtyRef.current && !submittingRef.current && !submittedRef.current) setFormRefresh((value) => value + 1);
     };
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
@@ -407,6 +417,9 @@ export function PartnerLeadForm({
     // a slow server its answer lands after the partner has typed. Answers typed since it started win
     // (QA pass 2026-10-22: the screened number was wiped and the draft saved "0 answers").
     const startedAtRevision = editRevision.current;
+    const startedAtSubmit = submitGeneration.current;
+    // A submitted draft is gone: never ask for it again.
+    if (draftIdRef.current && submittedDraftIds.current.has(draftIdRef.current)) draftIdRef.current = null;
     void Promise.all([
       fetch(`/api/partner/forms/${encodeURIComponent(productCode)}`, {
         cache: "no-store",
@@ -426,6 +439,8 @@ export function PartnerLeadForm({
       .then(({ form, draft, formResponse, draftResponse }) => {
         if (cancelled) return;
         if (formRefresh > 0 && editRevision.current !== startedAtRevision) return;
+        // Started before a submit (or during one): its draft is the one just submitted.
+        if (submitGeneration.current !== startedAtSubmit || submittingRef.current || submittedRef.current) return;
         if (!formResponse.ok) {
           setStatus(form?.error ?? "This product form is unavailable");
           onFormVersion?.(null);
@@ -555,9 +570,13 @@ export function PartnerLeadForm({
     (visibleStatus = true, pause?: { reason: string; notes: string }) => {
     const saveDraftNow = async () => {
       if (!template) return false;
+      // A save queued behind a submit must not touch (or bring back) the draft being submitted.
+      if (submittingRef.current || submittedRef.current) return false;
+      if (draftIdRef.current && submittedDraftIds.current.has(draftIdRef.current)) return false;
       // What is sent is what is on screen when this save actually runs (saves are queued).
       const payload = valuesRef.current;
       const sentRevision = editRevision.current;
+      const sentAtSubmit = submitGeneration.current;
       if (preview) {
         if (visibleStatus) setStatus("Preview: drafts are not saved");
         return false;
@@ -579,6 +598,9 @@ export function PartnerLeadForm({
           },
         );
         const saved = (await response.json().catch(() => null)) as { id?: string; error?: string; code?: string } | null;
+        // The lead was submitted while this save was in flight: its answer describes a draft that
+        // no longer exists, so it changes nothing on screen.
+        if (submitGeneration.current !== sentAtSubmit) return false;
         if (response.ok) {
           setSaveFailed(false);
           if (editRevision.current === sentRevision) dirtyRef.current = false;
@@ -1069,6 +1091,13 @@ export function PartnerLeadForm({
       notify.done("Preview: every check passed. Nothing was submitted");
       return;
     }
+    // From here no autosave or reload may touch this draft: let a save already running finish
+    // first, so it cannot land after the submit has consumed the draft.
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSaving(true);
+    await saveQueue.current.catch(() => undefined);
+    // That save's own `finally` cleared the busy flag: Submit stays disabled while the lead is sent.
     setSaving(true);
     try {
       const response = await fetch("/api/partner/leads", {
@@ -1088,6 +1117,7 @@ export function PartnerLeadForm({
       const body = await response.json().catch(() => null);
       setSaving(false);
       if (!response.ok) {
+        submittingRef.current = false;
         const message = body?.error ?? "Could not submit lead";
         if (body?.code === "duplicate_lead") {
           setDuplicateMatches(Array.isArray(body.matches) ? body.matches.map((match: { matchedOn?: unknown }) => ({ matchedOn: Array.isArray(match.matchedOn) ? match.matchedOn.map(String) : [] })) : []);
@@ -1114,9 +1144,15 @@ export function PartnerLeadForm({
         notify.fail(message);
         return;
       }
+      // Submitted: any reload or save that started before this answer is now stale.
+      submitGeneration.current += 1;
+      if (draftIdRef.current) submittedDraftIds.current.add(draftIdRef.current);
+      submittedRef.current = true;
+      submittingRef.current = false;
       setValues({});
       valuesRef.current = {};
       dirtyRef.current = false;
+      onHasAnswersChange?.(false);
       setFieldErrors({});
       setDuplicateMatches([]);
       setDuplicateJustification("");
@@ -1131,13 +1167,26 @@ export function PartnerLeadForm({
       draftIdRef.current = null;
       onDraftChange?.(null);
       submissionId.current = crypto.randomUUID();
+      // A page opened from Drafts carries ?draft_id=: a reload must not try to open the submitted draft.
+      try {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has("draft_id")) {
+          url.searchParams.delete("draft_id");
+          window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+        }
+      } catch { /* the address stays as it was */ }
       setStatus(body?.replayed ? "Already submitted" : "Submitted");
+      setSubmitted({
+        leadId: typeof body?.lead?.id === "string" ? body.lead.id : null,
+        replayed: body?.replayed === true,
+      });
       notify.win(
         body?.replayed
           ? "This lead was already submitted"
           : "Lead submitted to the agent",
       );
     } catch {
+      submittingRef.current = false;
       setSaving(false);
       setSubmitError(
         "Could not submit lead. Check your connection and try again.",
@@ -1158,7 +1207,42 @@ export function PartnerLeadForm({
     }
     void submit(event);
   }
+  function startAnother() {
+    submittedRef.current = false;
+    setSubmitted(null);
+    setSubmitError(null);
+    setScreeningError(null);
+    setRejectionNotice(null);
+    lastScreenedPhone.current = null;
+    setStatus("Enter a phone number to begin screening");
+  }
   const loading = status.startsWith("Loading");
+  // Walk 2026-11-20: the partner sees that it went through, never the form again as a "resumed draft".
+  if (submitted)
+    return (
+      <section className="m-glass mx-auto flex w-full max-w-xl flex-col gap-3 rounded-lg border border-border p-6" role="status">
+        <CheckCircle2 className="size-8 text-[var(--success-ink)]" aria-hidden="true" />
+        <h2 className="m-0 text-base font-semibold text-foreground">
+          {submitted.replayed ? "Already Submitted" : "Lead Submitted"}
+        </h2>
+        <p className="m-0 text-sm text-[var(--body)]">
+          {submitted.replayed
+            ? "This lead had already reached your agent. Nothing was sent twice."
+            : "Your agent has it. Follow what happens to it in your Lead Pipeline."}
+        </p>
+        <div className="flex flex-wrap gap-2 pt-2">
+          <Button type="button" onClick={startAnother}>
+            <Send aria-hidden="true" />
+            Submit Another
+          </Button>
+          <Button asChild variant="outline">
+            <Link href={submitted.leadId ? `/partner/pipeline/${submitted.leadId}` : "/partner/pipeline"}>
+              {submitted.leadId ? "Open in Lead Pipeline" : "Open Lead Pipeline"}
+            </Link>
+          </Button>
+        </div>
+      </section>
+    );
   if (!template)
     return loading ? (
       <div className="overflow-hidden rounded-lg border border-border bg-card">

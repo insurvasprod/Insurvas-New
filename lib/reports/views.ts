@@ -7,7 +7,7 @@
 /** The Reports menu collapsed or open, remembered for a year; the frame reads it on the server so the page draws at the right width. */
 export const REPORTS_RAIL_COOKIE = "insurvas_reports_rail";
 
-export type ReportsView = "sales" | "activity" | "scoring" | "book" | "cpa" | "partner" | "retention" | "retentionResults" | "producers" | "hierarchy";
+export type ReportsView = "sales" | "activity" | "scoring" | "book" | "cpa" | "partner" | "sources" | "callbacks" | "retention" | "retentionResults" | "producers" | "hierarchy";
 
 /**
  * `offRail`: still a Reports view at its address, but not listed on the rail (it shows only while you are on it).
@@ -25,6 +25,11 @@ export const REPORTS_VIEWS: { key: ReportsView; menuKey: string; label: string; 
   { key: "hierarchy", menuKey: "team.hierarchy", label: "Hierarchy & overrides", sub: "Who reports to whom, and the override", href: "/app/hierarchy", sharesPeriod: false },
   { key: "cpa", menuKey: "insight.true-cpa", label: "True CPA", sub: "Cost per issued policy", href: "/app/true-cpa", sharesPeriod: true },
   { key: "partner", menuKey: "partners.review", label: "Partner quality", sub: "Lead quality, by partner", href: "/app/partner-quality", sharesPeriod: true },
+  // Basic's modules with no report of their own (owner 2026-11-19: "more reports, since there are more modules"):
+  // what each vendor and campaign's leads became (outbound_dialing; spend only with True CPA), and whether booked
+  // callbacks were kept (callback_calendar). Both read the shared period.
+  { key: "sources", menuKey: "insight.lead-sources", label: "Lead sources", sub: "What each vendor's leads became", href: "/app/source-results", sharesPeriod: true },
+  { key: "callbacks", menuKey: "insight.callbacks", label: "Callbacks kept", sub: "Booked, kept and missed", href: "/app/callback-results", sharesPeriod: true },
   // Module 5's two report pages (owner 2026-11-02: "this can go into reports"), each with its own period. Round 7
   // (owner pick 0·A/5·A/6·A, 2026-11-10; docs/la4/mockups-r7/retention.html): both moved to the Retention rail as
   // Scorecard and Results; Reports keeps its two rows, which open them there at the same addresses. Results is

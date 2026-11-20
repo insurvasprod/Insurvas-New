@@ -2,6 +2,7 @@ import "server-only";
 
 import { startApplicationFromLead } from "@/lib/outboundApplication/service";
 import { appointmentIsActiveAt } from "@/lib/appointments/eligibility";
+import { leadFaceCents } from "./quoteFace";
 import { maskFromLast4, normaliseProse } from "./formats";
 import { applicationKeysForLeadKeys, clientStateOf, prefillFromLead } from "./prefill";
 import { encryptSensitive } from "./crypto";
@@ -19,6 +20,7 @@ import type {
 import { PRODUCT_LABEL } from "./constants";
 import type { ApplicationOutcome, ApplicationStatus, InsuredRole, OutcomeReasonCode, PaymentMethod, ValueSource } from "./constants";
 import { loadAnswers, loadMedications } from "./healthSeal";
+import { submitGateFor } from "./submitGate";
 
 /**
  * LA-3 reads: the case the workspace renders, and the Applications list. Every query names the
@@ -26,7 +28,7 @@ import { loadAnswers, loadMedications } from "./healthSeal";
  * the only place ciphertext is read back.
  */
 
-type CaseRow = { id: string; tenant_id: string; lead_id: string; work_item_id: string | null; product_line: string; source: "inbound" | "outbound" | "manual"; status: string; campaign_id: string | null; opened_at: string };
+type CaseRow = { id: string; tenant_id: string; lead_id: string; work_item_id: string | null; opened_by: string | null; product_line: string; source: "inbound" | "outbound" | "manual"; status: string; campaign_id: string | null; opened_at: string };
 type AttemptRow = {
   id: string; case_id: string; lead_id: string; insured_role: InsuredRole; attempt_no: number; carrier_id: string | null; product_code: string | null;
   carrier_product_id: string | null; quote_id: string | null; status: ApplicationStatus; outcome: ApplicationOutcome | null; outcome_reason_code: string | null;
@@ -130,7 +132,7 @@ export async function scrubLeadSsn(tenantId: string, leadId: string, application
 
 export async function getCaseView(tenantId: string, caseId: string): Promise<CaseView> {
   const client = db();
-  const kase = await client.from("tenant_application_cases").select("id, tenant_id, lead_id, work_item_id, product_line, source, status, campaign_id, opened_at").eq("tenant_id", tenantId).eq("id", caseId).maybeSingle();
+  const kase = await client.from("tenant_application_cases").select("id, tenant_id, lead_id, work_item_id, opened_by, product_line, source, status, campaign_id, opened_at").eq("tenant_id", tenantId).eq("id", caseId).maybeSingle();
   if (kase.error && !isMissingSchema(kase.error)) throw new ApplicationError("APPLICATION_UNAVAILABLE", kase.error.message, 500);
   if (!kase.data) throw new ApplicationError("CASE_NOT_FOUND", "That case could not be found.", 404);
   const c = kase.data as CaseRow;
@@ -144,7 +146,7 @@ export async function getCaseView(tenantId: string, caseId: string): Promise<Cas
   const inIds = ids.length ? ids : none;
 
   const [lead, campaign, values, payments, beneficiaries, disclosures, quotes, requirements, counteroffers, submissions, packs, interviews] = await Promise.all([
-    client.from("agent_leads").select("values").eq("tenant_id", tenantId).eq("id", c.lead_id).maybeSingle(),
+    client.from("agent_leads").select("values, tenant_template_id").eq("tenant_id", tenantId).eq("id", c.lead_id).maybeSingle(),
     c.campaign_id ? client.from("tenant_campaigns").select("name").eq("tenant_id", tenantId).eq("id", c.campaign_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
     optional<ValueRow>(client.from("tenant_application_values").select("application_id, field_key, value, value_last4, source, linked_to_primary, reviewed_at").eq("tenant_id", tenantId).in("application_id", inIds)),
     optional<PaymentRow>(client.from("tenant_application_payment_methods").select(PAYMENT_COLUMNS).eq("tenant_id", tenantId).in("application_id", inIds)),
@@ -167,6 +169,12 @@ export async function getCaseView(tenantId: string, caseId: string): Promise<Cas
   ]);
 
   const leadValues = ((lead as { data: { values?: Record<string, unknown> } | null }).data?.values ?? {}) as Record<string, unknown>;
+  // The lead form's currency fields hold cents (the partner portal stores dollars × 100); read as dollars, a
+  // $300,000 hot lead opened the Quote step at $30,000,000 (manager walk 2026-11-20).
+  const leadTemplateId = (lead as { data: { tenant_template_id?: string | null } | null }).data?.tenant_template_id ?? null;
+  const currencyKeys = leadTemplateId
+    ? new Set<string>(((await client.from("tenant_template_fields").select("field_key").eq("tenant_template_id", leadTemplateId).eq("type", "currency")).data ?? []).map((row: { field_key: string }) => row.field_key))
+    : new Set<string>();
 
   // Carriers, products, appointments, disclosure library, portal accounts, field sets, templates.
   const carrierIds = [...new Set([...attempts.map((a) => a.carrier_id), ...quotes.map((q) => q.carrier_id)].filter((x): x is string => Boolean(x)))];
@@ -191,11 +199,16 @@ export async function getCaseView(tenantId: string, caseId: string): Promise<Cas
     carrierIds.length ? optional<{ carrier_id: string; product_code: string; contract_level_bp: number; policy_year: number; rate_bp: number; effective_from: string }>(client.from("commission_schedules").select("carrier_id, product_code, contract_level_bp, policy_year, rate_bp, effective_from").eq("tenant_id", tenantId).eq("policy_year", 1).in("carrier_id", carrierIds)) : Promise.resolve([]),
   ]);
   const ackUserIds = [...new Set(disclosures.map((d) => d.acknowledged_by).filter((x): x is string => Boolean(x)))];
+  // AG-1.10 · read beside the batch below; it never fails the case view (null when it can't be read).
+  const submitGateRead = submitGateFor(tenantId, c.opened_by ?? null);
   const [contracts, advances, verificationRows, ackUsers, salesSettings] = await Promise.all([
     carrierIds.length ? optional<{ carrier_id: string; contract_level_bp: number; effective_from: string; is_active: boolean }>(client.from("tenant_carriers").select("carrier_id, contract_level_bp, effective_from, is_active").eq("tenant_id", tenantId).in("carrier_id", carrierIds)) : Promise.resolve([]),
     carrierIds.length ? optional<{ carrier_id: string; product_code: string; advance_months: number; advance_pct_bp: number; effective_from: string }>(client.from("advance_rules").select("carrier_id, product_code, advance_months, advance_pct_bp, effective_from").eq("tenant_id", tenantId).in("carrier_id", carrierIds)) : Promise.resolve([]),
-    // The LA-1.11 verification session this case was opened with: complete when every required field was confirmed.
-    c.work_item_id ? optional<{ id: string; progress_percentage: number | null; completed_at: string | null; started_at: string }>(client.from("tenant_verification_sessions").select("id, progress_percentage, completed_at, started_at").eq("tenant_id", tenantId).eq("work_item_id", c.work_item_id).order("started_at", { ascending: false }).limit(1)) : Promise.resolve([]),
+    // The LA-1.11 verification session of the lead's latest call: complete when every required field was
+    // confirmed. Not only the work item that first opened the case — the open case is reused for the
+    // lead's next call (start_application_from_lead), and that call's Verification is the one just done.
+    optional<{ id: string; work_item_id: string | null; progress_percentage: number | null; completed_at: string | null; started_at: string }>(client.from("tenant_verification_sessions").select("id, work_item_id, progress_percentage, completed_at, started_at").eq("tenant_id", tenantId)
+      .or(c.work_item_id ? `lead_id.eq.${c.lead_id},work_item_id.eq.${c.work_item_id}` : `lead_id.eq.${c.lead_id}`).order("started_at", { ascending: false }).limit(1)),
     ackUserIds.length ? optional<{ id: string; name: string | null }>(client.from("users").select("id, name").in("id", ackUserIds)) : Promise.resolve([]),
     optional<{ settings: unknown }>(client.from("tenant_sales_settings").select("settings").eq("tenant_id", tenantId).limit(1)),
   ]);
@@ -207,9 +220,10 @@ export async function getCaseView(tenantId: string, caseId: string): Promise<Cas
   const draftDayLinked = new Set(draftLinks.filter((r) => r.draft_day_linked).map((r) => r.id));
   const verificationComplete = Boolean(verificationRows[0] && (verificationRows[0].completed_at || verificationRows[0].progress_percentage === 100));
   // Field by field, what the agent already confirmed or corrected on the call (LA-1.11), so a
-  // partly verified call still counts on the Verify step (LA-2.14: verify once). The session row
-  // was read under the tenant filter above; its fields are keyed by that session.
-  const verifiedFields = verificationRows[0] && !verificationComplete
+  // partly verified call still counts on the Verify step (LA-2.14: verify once) — read for a finished
+  // one too, since the address counts only when its street was confirmed (./verifyConfirm.ts). The
+  // session row was read under the tenant filter above; its fields are keyed by that session.
+  const verifiedFields = verificationRows[0]
     ? await optional<{ field_key: string }>(client.from("verification_fields").select("field_key").eq("session_id", verificationRows[0].id).in("state", ["confirmed", "corrected"])).catch(() => [])
     : [];
   const confirmedKeys = [...applicationKeysForLeadKeys(verifiedFields.map((f) => f.field_key))];
@@ -345,9 +359,10 @@ export async function getCaseView(tenantId: string, caseId: string): Promise<Cas
   return {
     caseId: c.id, leadId: c.lead_id, status: (["open", "won", "lost"].includes(c.status) ? c.status : "open") as CaseView["status"], source: c.source,
     clientName: leadName(leadValues), clientState: clientStateOf(attemptViews.find((x) => x.insuredRole === "primary" && x.status !== "closed")?.values["addr.state"]?.value ?? attemptViews.find((x) => x.insuredRole === "primary")?.values["addr.state"]?.value, leadValues), clientPhone: typeof leadValues.phone === "string" ? leadValues.phone : null,
-    campaignName: (campaign as { data: { name?: string } | null }).data?.name ?? null, openedAt: c.opened_at,
-    interviews: interviewViews, attempts: attemptViews, verification: { workItemId: c.work_item_id, complete: verificationComplete, confirmedKeys },
+    campaignName: (campaign as { data: { name?: string } | null }).data?.name ?? null, requestedFaceCents: leadFaceCents(leadValues, currencyKeys), openedAt: c.opened_at,
+    interviews: interviewViews, attempts: attemptViews, verification: { workItemId: verificationRows[0]?.work_item_id ?? c.work_item_id, complete: verificationComplete, confirmedKeys },
     qaSettings: { appointmentBlocks: qa.appointmentBlocks, per1000Band: qa.per1000Band },
+    submitGate: await submitGateRead,
   };
 }
 

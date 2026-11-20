@@ -301,7 +301,7 @@ export async function loadBookView(props: DashViewProps): Promise<BookViewData> 
   const keys = monthKeys(today, 12);
   const count = (table: string) => db().from(table).select("id", { count: "exact", head: true }).eq("tenant_id", tenantId);
 
-  const [bookRead, hand, issued, failedFiles, missingFiles, toPick, noCarrier, fileList, changeList, lapseRows, chargebackRows] = await Promise.all([
+  const [bookRead, hand, issued, failedFiles, missingFiles, toPick, noCarrier, fileList, changeList, lapseRows, fileChargebacks, statementChargebacks] = await Promise.all([
     policiesHref ? safe(bookStore.loadBook(viewer)) : null,
     policiesHref ? safe(bookStore.loadHandPolicies(viewer)) : null,
     policiesHref ? safe(bookStore.loadIssuedAwaiting(viewer)) : null,
@@ -315,7 +315,14 @@ export async function loadBookView(props: DashViewProps): Promise<BookViewData> 
     changesHref && full ? safe(snapshots.listPolicyChanges(tenantId, 300)) : null,
     policiesHref ? safe(pages(() => db().from("policy_change").select("carrier_id, policy_number, to_snapshot_date").eq("tenant_id", tenantId).eq("field_name", "status_normalized").eq("new_value", "lapsed").gte("to_snapshot_date", `${keys[0]}-01`).order("to_snapshot_date").order("id"))) : null,
     policiesHref && ledgerHref && full ? safe(pages(() => db().from("commission_entry").select("carrier_id, policy_number, entry_type, corrects_type, amount_cents").eq("tenant_id", tenantId).or("entry_type.eq.chargeback,corrects_type.eq.chargeback").order("id"))) : null,
+    // 2026-11-19 (Ledger walk): a chargeback the agent accepted on a carrier statement is one too, not only a carrier
+    // file's ("Charged back 0" beside $684 taken back).
+    policiesHref && ledgerHref && full ? safe(pages(() => db().from("tenant_commission_statement_lines").select("policy_number, kind, amount_cents, tenant_commission_statements!inner(carrier_id, tenant_id)").eq("tenant_id", tenantId).eq("tenant_commission_statements.tenant_id", tenantId).eq("review_status", "accepted").eq("kind", "chargeback").order("id"))) : null,
   ]);
+  const chargebackRows = fileChargebacks || statementChargebacks ? [
+    ...(fileChargebacks ?? []),
+    ...((statementChargebacks ?? []) as Loose[]).map((line) => ({ carrier_id: line.tenant_commission_statements?.carrier_id, policy_number: line.policy_number, entry_type: "chargeback", corrects_type: null, amount_cents: line.amount_cents })),
+  ] : null;
 
   // The book: exactly the rows the Policies list shows this reader.
   const rows: BookRow[] | null = bookRead && hand && issued ? [...(bookRead.available ? bookRead.rows : []), ...hand, ...issued] : null;

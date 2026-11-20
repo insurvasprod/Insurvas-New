@@ -249,13 +249,32 @@ export function useFloor({ readOnly, heartbeat = true }: { readOnly: boolean; he
     return () => window.clearInterval(timer);
   }, [availability, readOnly, heartbeat]);
 
-  /** Take a caller: the claim is atomic; someone faster gets a plain refusal and the line re-reads. */
+  // The front caller's call page is fetched ahead (up to its loading.tsx), so Take this call opens it at once.
+  const front = floor?.waiting.length ? [...floor.waiting].sort((a, b) => new Date(a.queuedAt).getTime() - new Date(b.queuedAt).getTime())[0].id : null;
+  useEffect(() => {
+    if (front && !readOnly) router.prefetch(callHref(front));
+  }, [front, readOnly, router]);
+
+  /**
+   * Take a caller: the claim is atomic; someone faster gets a plain refusal and the line re-reads.
+   *
+   * The button keeps "Taking…" until the call page replaces this one (Basic walk 2026-11-20): it used to
+   * go back to "Take this call" the moment the claim answered, while the call page was still being
+   * fetched, and the realtime re-read then dropped the caller from the line, so the click looked like
+   * it did nothing.
+   */
   async function claim(workItemId: string) {
     setSaving(workItemId);
-    const response = await fetch("/api/app/inbound/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ work_item_id: workItemId }) });
+    let response: Response;
+    try {
+      response = await fetch("/api/app/inbound/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ work_item_id: workItemId }) });
+    } catch {
+      setSaving(null);
+      notify.fail("Could not reach Insurvas. Nothing has changed; try again.");
+      return;
+    }
     const body = await response.json().catch(() => null);
-    setSaving(null);
-    if (!response.ok) { notify.block(body?.error ?? "Someone else took this caller first."); void load(); return; }
+    if (!response.ok) { setSaving(null); notify.block(body?.error ?? "Someone else took this caller first."); void load(); return; }
     notify.arrive(body?.chatPosted === false ? "Call taken; the partner update could not be posted" : "Call taken. Verification is ready");
     router.push(callHref(workItemId));
   }
@@ -282,8 +301,8 @@ export function useFloor({ readOnly, heartbeat = true }: { readOnly: boolean; he
     setSaving(`handoff:${handoffId}`);
     const response = await fetch("/api/app/inbound/handoff", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "accept", handoff_id: handoffId }) });
     const body = await response.json().catch(() => null);
-    setSaving(null);
-    if (!response.ok) { notify.block(body?.error ?? "Could not take over this call."); return; }
+    // As with claim: "Taking over…" stays until the call page replaces this one.
+    if (!response.ok) { setSaving(null); notify.block(body?.error ?? "Could not take over this call."); return; }
     notify.arrive("You have the call. Verification picks up where it was");
     router.push(callHref(body?.handoff?.work_item_id ?? workItemId, "verify"));
   }

@@ -21,6 +21,7 @@ import { LeaveGuard } from "@/components/ui/leave-guard";
 import { MoreMenu } from "@/components/ui/more-menu";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
@@ -868,7 +869,7 @@ export function InvoicesBoard({ invoices, readOnly, tab, differs }: { invoices: 
           <NoMatches noun="bills" onClear={clear} />
         ) : (
           <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
-            <thead><tr><th>Vendor</th><th>Bill</th><th>Leads for</th><th className="text-right">Total</th><th>Status</th><th>Next step</th></tr></thead>
+            <thead><tr><th>Vendor</th><th>Bill</th><th>Leads for</th><th className="text-right">Total</th><th>Status</th><th className="text-right">Next step</th></tr></thead>
             <tbody>
               {shown.rows.map((i) => {
                 const href = billHref(i.id, tab);
@@ -887,7 +888,7 @@ export function InvoicesBoard({ invoices, readOnly, tab, differs }: { invoices: 
                     <td className="whitespace-nowrap">{billDiffers(i) && i.status !== "paid"
                       ? <StatusChip tone="danger" title={`${INVOICE_STATUS_LABELS[i.status]} · our count is ${money(ours)}`}>{money(Math.abs(gapCents))} {gapCents < 0 ? "billed over" : "billed under"}</StatusChip>
                       : <InvoiceStatusChip status={i.status} paidOn={i.paidOn} />}</td>
-                    <td className="whitespace-nowrap" title={step ?? undefined}>{readOnly || !NEXT_VERB[i.status] ? "Open" : NEXT_VERB[i.status]} ›</td>
+                    <RowActionCell><RowAction href={href} title={step ?? undefined}>{readOnly || !NEXT_VERB[i.status] ? "Open" : NEXT_VERB[i.status]}</RowAction></RowActionCell>
                   </tr>
                 );
               })}

@@ -4,12 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition, type FormEvent } from "react";
 
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, control } from "@/components/ui/field";
 import { EmptyState, ErrorState } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction } from "@/components/ui/row-action";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
@@ -19,7 +20,6 @@ import { LinkRow } from "@/components/app/book/setup/link-row";
 import { bookLine, formatPhone, gapDay, type BookGapLine } from "@/lib/compliance/evidenceGaps";
 import type { BookScan, EvidenceReport, ReportGap, ReportRun, TimelineItem } from "@/lib/compliance/evidenceReport";
 import { SEVERITY_LABEL, SEVERITY_TONE, evidenceHref, evidenceQuery, rangeProblem, runHref, runScope, whenShort, type EvidenceQuery, type EvidenceView } from "@/lib/compliance/evidenceView";
-import { cn } from "@/lib/utils";
 
 /**
  * LA-6.3 · the evidence report on screen, and with no number the book-wide gap scan. PDF and CSV come from
@@ -39,7 +39,7 @@ import { cn } from "@/lib/utils";
 const first = "whitespace-nowrap font-medium text-foreground";
 const muted = "whitespace-nowrap tabular-nums text-muted-foreground";
 const num = "text-right tabular-nums";
-const next = "whitespace-nowrap text-right text-[var(--accent-ink)]";
+const next = "w-px whitespace-nowrap text-right";
 
 /** The scan's scope picker: a number runs its report; none scans the book, over an optional date range. */
 function ScopeToolbar({ query }: { query: EvidenceQuery }) {
@@ -246,7 +246,7 @@ export function ReportView({ report, view, query }: { report: EvidenceReport; vi
                     <td className="max-w-[280px] truncate whitespace-nowrap" title={c.sourceUrl ?? undefined}>{c.certificateId ?? "—"}</td>
                     <td className={muted} title={`Captured ${whenShort(c.capturedAt)} UTC`}>{c.consentAt ? whenShort(c.consentAt) : "Not stated"}</td>
                     <td><StatusChip tone={c.valid ? "good" : "danger"} title={c.validity}>{c.valid ? "Valid" : "Not valid"}</StatusChip></td>
-                    <td className={next}><Link href={`/app/consent/${c.artefactId}`} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Open</Link></td>
+                    <td className={next}><RowAction href={`/app/consent/${c.artefactId}`}>Open</RowAction></td>
                   </LinkRow>
                 ))}
               </tbody>
@@ -264,7 +264,7 @@ export function ReportView({ report, view, query }: { report: EvidenceReport; vi
                     <td className={first}>{l.name ?? "No name"}</td>
                     <td className="whitespace-nowrap">{l.partner ? `Partner: ${l.partner}` : l.campaign ? `Campaign: ${l.campaign}` : "Entered directly"}</td>
                     <td className={muted}>{gapDay(l.createdAt)}</td>
-                    <td className={next}><Link href={`/app/leads/${l.leadId}`} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Open Lead</Link></td>
+                    <td className={next}><RowAction href={`/app/leads/${l.leadId}`}>Open Lead</RowAction></td>
                   </LinkRow>
                 ))}
               </tbody>
@@ -272,7 +272,7 @@ export function ReportView({ report, view, query }: { report: EvidenceReport; vi
           )}
         </TableCard>
       ) : (
-        <PagedTableCard total={report.timeline.length} noun={report.timeline.length === 1 ? "record" : "records"} suffix="oldest first · times in UTC · the table and record id are in Open ›'s tooltip">
+        <PagedTableCard total={report.timeline.length} noun={report.timeline.length === 1 ? "record" : "records"} suffix="oldest first · times in UTC · the table and record id are in Open's tooltip">
           {report.timeline.length === 0 ? (
             <EmptyState title="Nothing recorded for this number" hint="No screening, scrub, consent, call or disclosure is on record." />
           ) : (
@@ -289,7 +289,7 @@ export function ReportView({ report, view, query }: { report: EvidenceReport; vi
                       <td className="whitespace-nowrap">{t.agent ?? "—"}</td>
                       <td>{t.outsideHours ? <StatusChip tone="danger" title={t.facts.find((f) => f.startsWith("OUTSIDE")) ?? undefined}>Outside hours</StatusChip> : t.result ? <StatusChip tone="neutral">{t.result}</StatusChip> : <span className="text-muted-foreground">—</span>}</td>
                       <td className="whitespace-nowrap" title={`${t.module} · ${t.sourceTable}`}>{MODULE_WORD[t.eventType] ?? t.module}</td>
-                      <td className={next} title={record}>{href ? <Link href={href} className="hover:underline">Open ›</Link> : <span className="text-muted-foreground">—</span>}</td>
+                      <td className={next} title={record}>{href ? <RowAction href={href} title={record}>Open</RowAction> : <span className="text-muted-foreground">—</span>}</td>
                     </>
                   );
                   const key = `${t.sourceTable}-${t.sourceId}-${t.sourceSubId ?? ""}-${t.eventType}`;
@@ -346,7 +346,7 @@ export function ScanView({ scan, query, problem }: { scan?: BookScan; query: Evi
               {worstFirst(scan.lines).map((l) => {
                 const seen = firstSeen(scan, l);
                 const bad = problemOf(l);
-                const step = !bad ? "Open ›" : l.category === "outside_legal_hours" ? "See calls ›" : "See numbers ›";
+                const step = !bad ? "Open" : l.category === "outside_legal_hours" ? "See Calls" : "See Numbers";
                 return (
                   <LinkRow key={l.category} href={focus(l.category)}>
                     <td className={first} id={`gap-${l.category}`} title={bad || l.undeterminedReason ? bookLine(l) : "None found."}>{l.label}</td>
@@ -354,7 +354,7 @@ export function ScanView({ scan, query, problem }: { scan?: BookScan; query: Evi
                     <td className={num}>{l.count.toLocaleString("en-US")}</td>
                     <td className={muted}>{seen ? gapDay(seen) : "—"}</td>
                     <td>{bad ? <StatusChip tone={SEVERITY_TONE[l.severity]}>{SEVERITY_LABEL[l.severity]}</StatusChip> : l.undeterminedReason ? <StatusChip tone="neutral" title={l.undeterminedReason}>Undetermined</StatusChip> : <StatusChip tone="good">Clear</StatusChip>}</td>
-                    <td className={next}><Link href={focus(l.category)} className="hover:underline">{step}</Link></td>
+                    <td className={next}><RowAction href={focus(l.category)}>{step}</RowAction></td>
                   </LinkRow>
                 );
               })}
@@ -418,7 +418,7 @@ export function FindingView({ scan, query, category }: { scan: BookScan; query: 
                 <td className={`${first} tabular-nums`}>{formatPhone(n.phone)}</td>
                 <td className={num}>{n.count.toLocaleString("en-US")}</td>
                 <td className={muted}>{n.firstAt ? gapDay(n.firstAt) : "—"}</td>
-                <td className={next}><Link href={report(n.phone)} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Open Report</Link></td>
+                <td className={next}><RowAction href={report(n.phone)}>Open Report</RowAction></td>
               </LinkRow>
             ))}
           </tbody>

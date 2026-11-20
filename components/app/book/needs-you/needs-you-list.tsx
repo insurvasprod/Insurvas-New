@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { BulkResolve } from "@/components/app/book/needs-you/bulk-resolve";
 import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
@@ -180,7 +180,7 @@ export function NeedsYouList({ items: every, view, fromFile = null, readOnly = f
                 <th>{closed ? "How it ended" : "Why"}</th>
                 <th>Owner</th>
                 <th title={closed ? undefined : "How long it has waited"}>{closed ? "Closed" : "Waiting"}</th>
-                {!closed && <th>What to do</th>}
+                {!closed && <th className="text-right">What to do</th>}
               </tr>
             </thead>
             <tbody>
@@ -196,8 +196,8 @@ export function NeedsYouList({ items: every, view, fromFile = null, readOnly = f
                       <td className="whitespace-nowrap" title={first.kind === "no-sale" ? "No sale or application on record: a new client was made from each row" : first.why}>{first.kind === "no-sale" ? "No sale on record" : "A person picks the client"}</td>
                       <td className="whitespace-nowrap">{f.items.every((i) => i.who === first.who) ? first.who : "Several people"}</td>
                       <td><Age days={Math.max(...f.items.map((i) => i.ageDays))} /></td>
-                      {/* A line of many: the verb on all of them ("Confirm all ›"). */}
-                      <td className="whitespace-nowrap" title={`${KIND_META[first.kind].todo}, all of them`}><Link href={reviewOf(f)} onClick={(event) => event.stopPropagation()} className="hover:underline">{`${NEXT_VERB[first.kind]} all`} ›</Link></td>
+                      {/* A line of many: the verb on all of them ("Confirm All"). */}
+                      <RowActionCell><RowAction href={reviewOf(f)} title={`${KIND_META[first.kind].todo}, all of them`}>{`${NEXT_VERB[first.kind]} all`}</RowAction></RowActionCell>
                     </tr>
                   );
                 }
@@ -213,7 +213,7 @@ export function NeedsYouList({ items: every, view, fromFile = null, readOnly = f
                     <td className="whitespace-nowrap">{item.who}</td>
                     <td>{closed ? <span className="whitespace-nowrap tabular-nums text-muted-foreground">{fileDay(item.closedAt ?? null)}</span> : <Age days={item.ageDays} />}</td>
                     {/* Round 6 (owner 2026-11-06: "know exactly what to do"): every open row's next step — a short verb, the whole sentence its tooltip. */}
-                    {!closed && <td className="whitespace-nowrap" title={KIND_META[item.kind].todo}><Link href={go} onClick={(event) => event.stopPropagation()} className="hover:underline">{NEXT_VERB[item.kind]} ›</Link></td>}
+                    {!closed && <RowActionCell><RowAction href={go} title={KIND_META[item.kind].todo}>{NEXT_VERB[item.kind]}</RowAction></RowActionCell>}
                   </tr>
                 );
               })}

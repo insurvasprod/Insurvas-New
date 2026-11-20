@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toolbarControl } from "@/components/ui/data-toolbar";
 import { SectionLoading } from "@/components/ui/page-states";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { BasisChip, Money } from "./money";
+import { OWNER_CHOICE, managerChoices, managerSaveOutcome, readFresh, type ManagerCandidate } from "./producer-record-core";
 import { sendJson } from "./use-agency-data";
 
 type Preview = { displayName: string; balanceCents: number; policiesInWindow: number; advanceAtRiskCents: number; seatReleasedOn: string; reactivatableUntil: string; sentence: string };
@@ -105,20 +107,54 @@ export function StatusDialog({ producerId, name, action, open, onOpenChange, onD
   );
 }
 
-/** AG-0.3 / AG-1.2 · change a producer's manager from a date (a new hierarchy row; history is never rewritten). */
-export function ManagerDialog({ producerId, name, managers, open, onOpenChange, onDone }: { producerId: string; name: string; managers: Array<{ id: string; name: string }>; open: boolean; onOpenChange: (open: boolean) => void; onDone: () => void }) {
-  const [manager, setManager] = useState("");
-  const [from, setFrom] = useState(() => new Date().toISOString().slice(0, 10));
+const todayIso = () => new Date().toISOString().slice(0, 10);
+
+/**
+ * AG-0.3 / AG-1.2 · change a producer's manager from a date (a new hierarchy row; history is never rewritten).
+ * Opens on whom he reports to now (so Save without a pick changes nothing by accident); the list names each person
+ * with their email beside it, muted, since two people can share a name. Save sends the pick held in state, reports
+ * the route's error, then reads the record back: a change from today or earlier that does not show there is said to
+ * have failed, so the page never claims a manager that was not stored. The header and Overview re-read the server.
+ */
+export function ManagerDialog({ producerId, name, currentManagerId, candidates, loadingCandidates, open, onOpenChange, onDone }: {
+  producerId: string;
+  name: string;
+  currentManagerId: string | null;
+  candidates: readonly ManagerCandidate[];
+  loadingCandidates?: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onDone: () => void;
+}) {
+  const [manager, setManager] = useState<string>(currentManagerId ?? OWNER_CHOICE);
+  const [from, setFrom] = useState(todayIso);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const choices = managerChoices(candidates, producerId);
+
+  useEffect(() => {
+    if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- each opening starts from whom he reports to now
+    setManager(currentManagerId ?? OWNER_CHOICE); setFrom(todayIso()); setError(null);
+  }, [open, currentManagerId]);
+
   async function save() {
+    const chosen = manager === OWNER_CHOICE ? null : manager;
     setBusy(true);
-    const { error: message } = await sendJson(`/api/app/agency/producers/${producerId}/manager`, "PUT", { managerProducerId: manager || null, effectiveFrom: from });
-    setBusy(false);
-    if (message) { setError(message); return; }
-    notify.done(`${name} reports to ${managers.find((m) => m.id === manager)?.name ?? "the owner"} from ${from}. Reports before that date are unchanged.`);
-    onOpenChange(false);
-    onDone();
+    setError(null);
+    try {
+      const { error: message } = await sendJson(`/api/app/agency/producers/${producerId}/manager`, "PUT", { managerProducerId: chosen, effectiveFrom: from });
+      if (message) { setError(message); return; }
+      const saved = await readFresh<{ managerProducerId: string | null; managerName: string }>(`/api/app/agency/producers/${producerId}`).catch(() => null);
+      const outcome = managerSaveOutcome({ chosen, effectiveFrom: from, today: todayIso(), saved });
+      if (!outcome.ok) { setError(outcome.message); onDone(); return; }
+      const named = outcome.managerName ?? choices.find((c) => c.value === manager)?.label ?? "the owner";
+      notify.done(`${name} reports to ${named} from ${from}. Reports before that date are unchanged.`);
+      onOpenChange(false);
+      onDone();
+    } finally {
+      setBusy(false);
+    }
   }
   return (
     <Dialog open={open} onOpenChange={(next) => { setError(null); onOpenChange(next); }}>
@@ -128,18 +164,16 @@ export function ManagerDialog({ producerId, name, managers, open, onOpenChange, 
           <DialogDescription>From the date you choose. Reports dated before it keep the old manager.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
-          <label className="grid gap-1 text-sm font-medium">Reports to
-            <select className={toolbarControl} value={manager} onChange={(e) => setManager(e.target.value)}>
-              <option value="">The owner</option>
-              {managers.filter((m) => m.id !== producerId).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-          </label>
+          <div className="grid gap-1 text-sm font-medium">
+            <span>Reports to</span>
+            <SelectMenu label="Reports to" value={manager} options={choices} onChange={setManager} disabled={loadingCandidates} searchPlaceholder="Find a person" matchTriggerWidth panelAlign="start" className="w-full" />
+          </div>
           <label className="grid gap-1 text-sm font-medium">From<input type="date" className={toolbarControl} value={from} onChange={(e) => setFrom(e.target.value)} /></label>
           {error && <p role="alert" className="m-0 text-sm font-medium text-[var(--error-ink)]">{error}</p>}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={save} disabled={busy || !from}>{busy ? "Saving…" : "Save"}</Button>
+          <Button onClick={save} disabled={busy || !from || loadingCandidates}>{busy ? "Saving…" : "Save"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

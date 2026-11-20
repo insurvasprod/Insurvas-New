@@ -1,9 +1,6 @@
-/* The pricing teaser (2026-11-04, owner's reference): three cards with a tab cut into the corner, a
-   large price, the same feature rows on each card (ticked or crossed). Since Umar's review (4 Nov)
-   the hatched edge is gone; the card you press comes forward and turns deep olive (owner, 6 Nov). */
-/* --tab-*: the section's own text colours, resolved here, so a tab (which shows the ground, not the
-   card) keeps them inside a selected card that re-points --ink and --muted. */
-.section { --ground: var(--canvas); --tab-ink: var(--ink); --tab-muted: var(--muted); --tab-edge: var(--border); position: relative; scroll-margin-top: 80px; background: var(--ground); color: var(--ink); }
+/* The pricing teaser (2026-11-04, owner's reference). The cards and their styles live in
+   price-card.module.css; --ground is the section's own background, which each card's corner tab shows. */
+.section { --ground: var(--canvas); position: relative; scroll-margin-top: 80px; background: var(--ground); color: var(--ink); }
 /* Light theme (A6.3): white cards on white lost their edge, so the section takes the landing page's
    own tint and the cards stand on it. Dark keeps the canvas. */
 :global(:root:not(.dark)) .section { --ground: var(--surface-alt); }
@@ -19,87 +16,11 @@
 .switch button[aria-pressed="true"] { background: var(--surface-alt); color: var(--ink); box-shadow: inset 0 0 0 1px var(--border); }
 .switch button:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
 
-.ladder { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; gap: 16px; max-width: 1180px; margin: clamp(56px, 6vw, 72px) auto 0; }
-.ladder[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 800px; }
-.ladder[data-count="1"] { grid-template-columns: minmax(0, 420px); justify-content: center; }
-.cell { height: 100%; }
+/* The cards are components/marketing/price-card.tsx (shared with /pricing since 2026-11-19); the
+   teaser only spaces the ladder from the heading. */
+.inner .ladder { margin-top: clamp(56px, 6vw, 72px); }
 
-.card {
-  position: relative;
-  display: flex;
-  height: 100%;
-  flex-direction: column;
-  border: 1px solid var(--border);
-  border-radius: 28px;
-  background: var(--surface);
-  font-family: var(--font-sans);
-  cursor: pointer;
-  transition: transform 260ms cubic-bezier(.23, 1, .32, 1), background-color 260ms ease, border-color 200ms ease, box-shadow 260ms ease;
-}
-@media (hover: hover) and (pointer: fine) { .card:hover { border-color: var(--border-strong); } }
-.card:not([data-selected="true"]):active { transform: scale(.985); transition-duration: 120ms; }
-/* The selected plan (A6.1, owner 6 Nov): it comes forward, a little up and a little larger, on the
-   brand's deep olive with light text, a green edge and a filled button. The card's own colours are
-   re-pointed, so every row inside it follows. */
-.card[data-selected="true"] {
-  --ink: var(--nav-ink);
-  --body: var(--nav-muted);
-  --muted: var(--nav-muted);
-  --border: rgb(234 246 242 / 16%);
-  z-index: 1;
-  border-color: var(--primary);
-  background: color-mix(in srgb, var(--footer-bg) 82%, black);
-  box-shadow: 0 0 0 1px var(--primary), 0 36px 70px -30px rgb(13 64 55 / 60%);
-  transform: translateY(-12px) scale(1.025);
-}
-/* Dark theme: every card is already dark, so the chosen one takes a green-tinted ground instead. */
-:global(.dark) .card[data-selected="true"] { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); box-shadow: 0 0 0 1px var(--primary), 0 36px 70px -30px rgb(0 0 0 / 80%); }
-
-/* The tab: a piece cut out of the card's top-right corner, holding a label and a dot. */
-.tab { position: absolute; top: -1px; right: -1px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--tab-edge); border-top-color: transparent; border-right-color: transparent; border-radius: 0 28px 0 22px; background: var(--ground); padding: 10px 20px 12px 22px; color: var(--tab-muted); font-size: 13.5px; font-weight: 500; transition: border-color 200ms ease, color 200ms ease; }
-.tab i { width: 7px; height: 7px; border-radius: 50%; background: var(--tab-muted); transition: background-color 200ms ease; }
-.card[data-selected="true"] .tab { border-color: var(--primary); border-top-color: transparent; border-right-color: transparent; color: var(--tab-ink); font-weight: 600; }
-.card[data-selected="true"] .tab i { background: var(--primary); }
-
-.cardHead { padding: 56px 32px 24px; text-align: center; }
-.tier { margin: 0; color: var(--ink); font: 600 22px/1.2 var(--font-brand); letter-spacing: -.015em; }
-.price { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 22px; }
-.whole { color: var(--ink); font: 500 clamp(44px, 4.6vw, 60px)/1 var(--font-display); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
-.per { display: grid; gap: 2px; white-space: nowrap; color: var(--muted); font-size: 14px; line-height: 1.35; text-align: left; }
-.blurb { max-width: 32ch; margin: 18px auto 0; color: var(--body); font-size: 14.5px; line-height: 1.55; }
-
-.rows { display: grid; flex: 1; align-content: start; gap: 14px; margin: 0 32px; border-top: 2px dotted var(--border); padding: 26px 0 28px; list-style: none; }
-.rows li { display: flex; align-items: center; gap: 12px; color: var(--ink); font-size: 14.5px; line-height: 1.35; }
-.rows li[data-included="false"] { color: var(--muted); opacity: .7; }
-.mark { display: grid; width: 22px; height: 22px; flex: none; place-items: center; border-radius: 50%; background: var(--primary); color: var(--on-primary); }
-.mark svg { width: 13px; height: 13px; stroke-width: 3; }
-.rows li[data-included="false"] .mark { background: transparent; color: var(--muted); }
-.rows li[data-included="false"] .mark svg { width: 16px; height: 16px; stroke-width: 1.8; }
-
-.cardFoot { display: flex; justify-content: center; padding: 0 32px 32px; }
-.planCta { display: inline-flex; height: 48px; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-alt); padding: 0 28px; color: var(--ink); font-size: 15px; font-weight: 600; text-decoration: none; transition: background-color 200ms ease, transform 160ms ease, box-shadow 250ms ease; }
-.planCta:hover { background: var(--surface-sunken); }
-.planCta:active { transform: scale(.98); }
-.planCta:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 3px; }
-.planCtaFeatured { border-color: transparent; background: var(--primary); color: var(--on-primary); box-shadow: 0 12px 28px -12px color-mix(in srgb, var(--primary) 80%, transparent); }
-.planCtaFeatured:hover { background: color-mix(in srgb, var(--primary) 88%, var(--on-dark)); }
-
-/* The recommended plan's tab names it; the hatched ring around the card is gone (Umar, 4 Nov). */
-.featured .tab { color: var(--tab-ink); font-weight: 600; }
-.featured .tab i { background: var(--primary); }
-
-@media (max-width: 1000px) {
-  .ladder, .ladder[data-count="2"] { grid-template-columns: minmax(0, 1fr); gap: 32px; max-width: 460px; }
-}
-@media (max-width: 640px) {
-  .inner { width: calc(100% - 32px); }
-  /* One column: the chosen card only lifts, so it never grows past the screen's edge. */
-  .card[data-selected="true"] { transform: translateY(-6px); }
-  .cardHead { padding: 52px 22px 20px; }
-  .rows { margin-inline: 22px; }
-  .cardFoot { padding-inline: 22px; }
-}
-@media (prefers-reduced-motion: reduce) { .planCta, .card { transition: none; } .card[data-selected="true"] { transform: none; } }
+@media (max-width: 640px) { .inner { width: calc(100% - 32px); } }
 
 /* Touch: every switch button at least 44px tall. */
 @media (pointer: coarse) { .switch button { min-height: 44px; } }

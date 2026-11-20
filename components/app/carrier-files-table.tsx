@@ -68,7 +68,7 @@ function shortReason(text: string): string {
   return head.length > 60 ? `${head.slice(0, 57).trimEnd()}…` : head;
 }
 
-export function CarrierFilesTable({ files, stages, emptyTitle, emptyHint, show, chips, also }: { files: CarrierFileRow[]; stages?: Record<string, FileStageView>; emptyTitle: string; emptyHint: string; show?: "needs" | "failed"; chips?: ReactNode; /** What the chip counts beside the files, said in the footer (walk 2026-11-03: "Needs you 21" over "12 files"). */ also?: string }) {
+export function CarrierFilesTable({ files, stages, emptyTitle, emptyHint, show, chips, also, emptyShown }: { files: CarrierFileRow[]; stages?: Record<string, FileStageView>; emptyTitle: string; emptyHint: string; show?: "needs" | "failed"; chips?: ReactNode; /** What the chip counts beside the files, said in the footer (walk 2026-11-03: "Needs you 21" over "12 files"). */ also?: string; /** What the list says when the chip's own filter (not a search) leaves no file (walk 2026-11-20: "Needs you 1" over "no files match"). */ emptyShown?: { title: string; hint: string } }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [carrier, setCarrier] = useState("");
@@ -182,6 +182,8 @@ export function CarrierFilesTable({ files, stages, emptyTitle, emptyHint, show, 
     >
       {files.length === 0 ? (
         <EmptyState title={emptyTitle} hint={emptyHint} />
+      ) : visible.length === 0 && !filtered && emptyShown ? (
+        <EmptyState title={emptyShown.title} hint={emptyShown.hint} />
       ) : visible.length === 0 ? (
         <NoMatches noun="files" onClear={clear} />
       ) : (

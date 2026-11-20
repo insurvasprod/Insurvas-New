@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { notify } from "@/lib/notify";
 import type { SubmissionView } from "@/lib/applications/types";
+import { gateBlocks, gateLine } from "@/lib/applications/submitGateRules";
 
 import { QaVerdictChip } from "@/components/app/applications/parts";
 import { CopyAssistPanel } from "@/components/app/applications/copy-assist/copy-assist-panel";
@@ -51,6 +52,10 @@ function SubmitBody() {
   const submitted = attempt.status !== "draft" && attempt.status !== "ready";
   const ready = attempt.status === "ready" || (sample && attempt.status === "draft");
   const carrier = attempt.carrierName ?? "the carrier";
+  // AG-1.10 · the case writer's producer gate (lib/applications/submitGateRules.ts); the server enforces it on Record.
+  const gateText = !submitted && gateBlocks(caseView.submitGate) ? gateLine(caseView.submitGate) : null;
+  const captureBlocked = !ready || readOnly || gateText !== null;
+  const captureWhy = readOnly ? "Read-only — nothing on this attempt can change" : !ready ? "Mark the application ready on the Review step first" : gateText ?? undefined;
   // Copy-assist is open until the agent folds it (its header, or Next); once captured it starts folded.
   const [copyFolded, setCopyFolded] = useState(submitted);
 
@@ -125,6 +130,10 @@ function SubmitBody() {
                   <Button type="button" variant="outline" onClick={() => goTo("review")}>Go to Review</Button>
                 </div>
               )}
+              {/* AG-1.10 · the producer gate, said before Record rather than after the server refuses it. */}
+              {gateText && (
+                <p role="alert" className="m-0 rounded-[8px] border border-[var(--border)] px-3 py-2 text-sm font-medium text-[var(--error-ink)]">{gateText}</p>
+              )}
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Carrier reference number (optional)" htmlFor="capture-reference" hint={example?.example ? `${example.carrierName ?? carrier} uses ${example.example}. Leave it empty if the carrier gave none: its policy file links by the client and the agent.` : "Leave it empty if the carrier gave none: its policy file links by the client and the agent."}>
                   <input id="capture-reference" className={`${control} font-mono uppercase`} value={reference} onChange={(e) => setReference(e.target.value)} disabled={!ready || readOnly} autoComplete="off" spellCheck={false} />
@@ -136,12 +145,12 @@ function SubmitBody() {
                   {shot.value ? (
                     <div className="flex flex-col gap-3">
                       <AttachedFile value={shot.value} onReplace={picker.open} onRemove={() => shot.set(null)} />
-                      <Button type="button" className="self-start" onClick={capture} disabled={!ready || readOnly} title={readOnly ? "Read-only — nothing on this attempt can change" : !ready ? "Mark the application ready on the Review step first" : undefined}>Capture submission</Button>
+                      <Button type="button" className="self-start" onClick={capture} disabled={captureBlocked} title={captureWhy}>Capture submission</Button>
                     </div>
                   ) : (
                     <PasteBox id="capture-confirmation" onFile={(f, how) => shot.set(f, how)} disabled={!ready || readOnly} disabledReason={readOnly ? "Read-only — nothing on this attempt can change" : "Mark the application ready on the Review step first"}>
-                      <span title={readOnly ? "Read-only — nothing on this attempt can change" : ready ? undefined : "Mark the application ready on the Review step first"}>
-                        <Button type="button" onClick={capture} disabled={!ready || readOnly}>Capture submission</Button>
+                      <span title={captureWhy}>
+                        <Button type="button" onClick={capture} disabled={captureBlocked}>Capture submission</Button>
                       </span>
                     </PasteBox>
                   )}

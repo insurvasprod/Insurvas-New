@@ -8,6 +8,7 @@ import { ShieldCheck } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
+import { RowAction } from "@/components/ui/row-action";
 import { cardSurface } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
@@ -183,7 +184,7 @@ export function TcpaDncExemptions({ onChanged, className, pageSize = 10 }: { onC
               <td className={`${td} whitespace-nowrap`}>{EXEMPTION_USE_LABELS[use.context] ?? use.context}</td>
               <td className={`${td} whitespace-nowrap`}>{use.clearedLists.map((list) => CLEARED_LIST_LABELS[list] ?? list).join(" and ") || "DNC"}</td>
               <td className={`${td} max-w-[180px] truncate whitespace-nowrap`} title={use.userName ?? undefined}>{use.userName ?? <span className="text-muted-foreground">—</span>}</td>
-              <td className={`${td} whitespace-nowrap text-right`}>{use.leadId ? <Link className="hover:underline" href={`/app/leads/${use.leadId}`}>Open lead ›</Link> : <span className="text-muted-foreground">—</span>}</td>
+              <td className={`${td} w-px whitespace-nowrap text-right`}>{use.leadId ? <RowAction href={`/app/leads/${use.leadId}`}>Open Lead</RowAction> : <span className="text-muted-foreground">—</span>}</td>
             </tr>)}</tbody>
           </table>
         )
@@ -216,9 +217,9 @@ export function TcpaDncExemptions({ onChanged, className, pageSize = 10 }: { onC
                 <td className={muted}>{row.basis === "written_consent" ? "No expiry" : day(row.expiresAt)}</td>
                 <td className={`${td} whitespace-nowrap text-right tabular-nums`} title={row.lastUsedAt ? `Last used ${stamp(row.lastUsedAt)}` : undefined}>{row.uses.toLocaleString()}</td>
                 <td className={td}><StatusChip tone={STATE_CHIP[row.state].tone} title={stateTitle}>{STATE_CHIP[row.state].label}</StatusChip></td>
-                <td className={`${td} whitespace-nowrap text-right`}>{canRevoke
-                  ? <button type="button" className="outline-none hover:underline focus-visible:underline" title="Put this number back on federal and state DNC" onClick={() => { setRevoking(row); setReason(""); }}>Revoke ›</button>
-                  : <span aria-hidden="true">Open ›</span>}</td>
+                <td className={`${td} w-px whitespace-nowrap text-right`}>{canRevoke
+                  ? <RowAction title="Put this number back on federal and state DNC" onClick={() => { setRevoking(row); setReason(""); }}>Revoke</RowAction>
+                  : <RowAction href={evidenceHref(row.phoneDigits)}>Open</RowAction>}</td>
               </tr>;
             })}</tbody>
           </table>}

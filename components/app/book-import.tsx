@@ -8,6 +8,7 @@ import { FilesInImportDialog, resultLine } from "@/components/app/book/setup/fil
 import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import type { CarrierImport } from "@/lib/ingestion/bookImport";
@@ -105,7 +106,7 @@ export function BookImport({ carriers, processing, readOnly }: { carriers: Carri
         ) : (
           <>
             <table data-guide="book-carriers" className="portal-lead-table hidden w-full min-w-[880px] text-left text-sm md:table">
-              <thead><tr><th className="w-[200px]">Carrier</th><th>Where to find the file</th><th className="w-[160px]">Result</th><th className="w-[140px]">Last file</th><th className="w-[130px]">Next step</th></tr></thead>
+              <thead><tr><th className="w-[200px]">Carrier</th><th>Where to find the file</th><th className="w-[160px]">Result</th><th className="w-[140px]">Last file</th><th className="w-[130px] text-right">Next step</th></tr></thead>
               <PagedBody>
                 {rows.map((c) => {
                   const g = c.guidance;
@@ -125,7 +126,7 @@ export function BookImport({ carriers, processing, readOnly }: { carriers: Carri
                       </td>
                       <td role="status">{resultCell(c)}</td>
                       <td className="whitespace-nowrap tabular-nums text-muted-foreground">{c.file?.fileDate ? fileDay(c.file.fileDate) : "—"}</td>
-                      <td className="whitespace-nowrap">{step ?? "Open"} ›</td>
+                      <RowActionCell><RowAction onClick={() => setOpen({ carrierId: c.carrierId, file: null })}>{step ?? "Open"}</RowAction></RowActionCell>
                     </tr>
                   );
                 })}
@@ -143,7 +144,7 @@ export function BookImport({ carriers, processing, readOnly }: { carriers: Carri
                     </div>
                     {c.guidance && !c.file && <span className="text-xs text-muted-foreground">{c.guidance.whereInPortal}{c.guidance.formatHint ? ` · ${c.guidance.formatHint}` : ""}</span>}
                     <span className="justify-self-start">{resultCell(c)}</span>
-                    {step && <button type="button" className="justify-self-start text-sm hover:underline" onClick={() => setOpen({ carrierId: c.carrierId, file: null })}>{step} ›</button>}
+                    {step && <RowAction className="justify-self-start" onClick={() => setOpen({ carrierId: c.carrierId, file: null })}>{step}</RowAction>}
                   </li>
                 );
               })}

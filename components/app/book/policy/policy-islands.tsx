@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Copy, Download, MoreHorizontal, Undo2, Unlink } from "lucide-react";
+import { ChevronDown, Copy, Download, Undo2, Unlink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { confirmAction } from "@/components/ui/confirm-dialog";
@@ -41,10 +41,10 @@ export type MoreLink = { label: string; href: string };
 export function PolicyMoreMenu({ links, policyNumber, unlink }: { links: MoreLink[]; policyNumber: string; unlink?: UnlinkTarget | null }) {
   const run = useUnlink();
   return (
-    // Round 6 (owner's standing look): ⋯, last on the title line.
+    // Owner 2026-11-19: a named button, not ⋯, last on the title line.
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size="icon" aria-label="More" title="More"><MoreHorizontal aria-hidden="true" /></Button>
+        <Button type="button" variant="outline">Actions<ChevronDown aria-hidden="true" /></Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {links.map((link) => (

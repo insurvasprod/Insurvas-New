@@ -206,6 +206,43 @@ export async function loadRateCard(tenantId: string) {
     byCarrier.set(p.carrier_id, entry);
     priced.push({ carrierId: p.carrier_id, monthlyCents: monthly, priced: ok });
   }
+  // Owner 2026-11-19 (Ledger walk): policies typed in or imported by hand (tenant_policies) are the book too. A carrier
+  // that sends no file is still on the card with its policies counted, and priced when a rate is set for their family
+  // (the product name is the family). Their own carrier name finds the carrier; one no carrier answers is left out.
+  const hand = await db().from("tenant_policies").select("carrier, product, status, annual_premium_cents, effective_date").eq("tenant_id", tenantId).neq("source", "carrier_file").limit(20000);
+  if (!hand.error) {
+    const key = (text: string) => String(text ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const carrierByName = new Map<string, string>((carriers.data ?? []).map((c: Loose) => [key(c.name), c.id]));
+    const familyByName = new Map<string, string>();
+    for (const p of (products.data ?? []) as Loose[]) { familyByName.set(key(p.code), p.code); familyByName.set(key(p.name), p.code); }
+    for (const p of (hand.data ?? []) as Loose[]) {
+      if (p.status !== "active" && p.status !== "lapsed") continue;
+      const carrierId = carrierByName.get(key(p.carrier));
+      if (!carrierId) continue;
+      const entry: RateCardCarrier = byCarrier.get(carrierId) ?? {
+        carrierId, carrierName: carrierName.get(carrierId) ?? p.carrier, policies: 0, monthlyCents: 0, pricedMonthlyCents: 0, pricedPolicies: 0,
+        trigger: data.trigger.get(carrierId)?.trigger ?? null, lagDays: data.trigger.get(carrierId)?.lagDays ?? null, levelBp: data.level.get(carrierId) ?? null, writingNumber: writing.get(carrierId) ?? null,
+        schedules: (data.schedulesByCarrier.get(carrierId) ?? []).map((s) => ({ ...s, familyName: productName.get(s.productCode) ?? s.productCode })), unmapped: [], mapped: [], reasons: [],
+        advanceRules: ((rules.data ?? []) as Loose[]).filter((r) => r.carrier_id === carrierId).map((r) => ({ productCode: r.product_code, familyName: productName.get(r.product_code) ?? r.product_code, advanceMonths: r.advance_months, advancePctBp: r.advance_pct_bp, clawbackMonths: r.clawback_months, clawbackType: r.clawback_type, effectiveFrom: r.effective_from })),
+      };
+      const monthly = Math.floor(Number(p.annual_premium_cents ?? 0) / 12);
+      const family = familyByName.get(key(p.product)) ?? null;
+      const rate = resolveRate({ schedules: data.schedulesByCarrier.get(carrierId) ?? [], family, carrierProductCode: null, levelBp: data.level.get(carrierId) ?? null, policyYear: 1, onDay: today, age: null });
+      const ok = family !== null && rate.confidence !== "no_rate_card";
+      entry.policies++;
+      entry.monthlyCents += monthly;
+      if (ok) { entry.pricedPolicies++; entry.pricedMonthlyCents += monthly; }
+      else {
+        const reason = family === null ? `no product family called "${p.product}"` : rate.confidence === "no_rate_card" ? rate.reason : "";
+        const known = entry.reasons.find((r) => r.reason === reason);
+        if (known) known.policies++; else entry.reasons.push({ reason, policies: 1 });
+      }
+      if (family && !entry.mapped.some((m) => m.code === p.product)) entry.mapped.push({ code: p.product, family, own: true });
+      byCarrier.set(carrierId, entry);
+      priced.push({ carrierId, monthlyCents: monthly, priced: ok });
+    }
+  }
+
   // A carrier switched on in Settings › Carriers is on the card before its first file, so its rates and
   // advance rule can be set ahead; one switched off shows only while it has policies (its history).
   for (const contract of [...on].map((carrier_id) => ({ carrier_id }))) {
@@ -242,7 +279,26 @@ export async function loadPolicyExpected(tenantId: string, carrierId: string, po
     if (isSchemaGap(error)) return { available: false as const, rows: [] as Loose[] };
     throw new Error(`Could not load the expected commission: ${error.message}`);
   }
-  return { available: true as const, rows: (data ?? []) as Loose[] };
+  const rows = (data ?? []) as Loose[];
+  return { available: true as const, rows: rows.length ? rows : await mirrorExpected(tenantId, carrierId, policyNumber) };
+}
+
+/**
+ * No carrier-file expectation (its pay trigger isn't set in Carrier terms) but a statement was matched to this
+ * policy's mirror: the rate card's first year, the figure the statement check holds it to (lib/ledger/statementMirror.ts).
+ */
+async function mirrorExpected(tenantId: string, carrierId: string, policyNumber: string): Promise<Loose[]> {
+  const mirrors = await db().from("tenant_policies").select("id, policy_number, insured_name, carrier, product, effective_date, annual_premium_cents, status, status_changed_at, created_by").eq("tenant_id", tenantId).eq("source", "carrier_file").eq("policy_number", policyNumber);
+  if (mirrors.error || !(mirrors.data ?? []).length) return [];
+  const [{ getCarrierLibrary }, { mirrorExpectedRows }] = await Promise.all([import("@/lib/carriers/service"), import("@/lib/ledger/statementMirror")]);
+  const library = await getCarrierLibrary(tenantId);
+  const carrierName = library.carriers.find((row) => row.id === carrierId)?.name?.trim().toLowerCase();
+  const mirror = ((mirrors.data ?? []) as Loose[]).find((row) => String(row.carrier ?? "").trim().toLowerCase() === carrierName);
+  if (!mirror || !mirror.effective_date || mirror.annual_premium_cents === null) return [];
+  return mirrorExpectedRows({
+    id: mirror.id, policyNumber: mirror.policy_number, insuredName: mirror.insured_name, carrier: mirror.carrier, product: mirror.product,
+    effectiveDate: mirror.effective_date, annualPremiumCents: Number(mirror.annual_premium_cents), status: mirror.status, statusChangedAt: mirror.status_changed_at ?? null, createdBy: mirror.created_by,
+  }, library);
 }
 
 /** An agency's own mapping of a carrier product code to a product family; blank clears it. */

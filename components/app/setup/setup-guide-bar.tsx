@@ -593,7 +593,9 @@ export function SetupGuideBar() {
   return (
     <>
       <span role="status" aria-live="polite" className="sr-only">{announcement}</span>
-      <div data-setup-guide="" data-setup-coach="" role="region" aria-label="Get set up" className="pointer-events-auto relative z-[56] mb-4 flex flex-col gap-2 rounded-[12px] border border-border bg-[var(--color-card)] px-4 py-2.5">
+      {/* Above the dim only while a control is lit (the dim covers the top bar then). Otherwise under the sticky
+          top bar (z-30), so a scrolled page never slides the bar over the search, New or the account menu. */}
+      <div data-setup-guide="" data-setup-coach="" role="region" aria-label="Get set up" className={cn("pointer-events-auto relative mb-4 flex flex-col gap-2 rounded-[12px] border border-border bg-[var(--color-card)] px-4 py-2.5", spotlight ? "z-[56]" : "z-[29]")}>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="text-sm font-semibold text-foreground">{replay && !done ? "Showing you again" : required ? "Setting up" : "Optional setting"}</span>
           {replay && !done ? <StatusChip tone="good">Already done</StatusChip> : <StatusChip tone={required ? "warning" : "neutral"}>{required ? "Required" : "Optional"}</StatusChip>}

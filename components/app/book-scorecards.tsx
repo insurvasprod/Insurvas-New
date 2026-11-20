@@ -16,6 +16,7 @@ import { MoreMenu } from "@/components/ui/more-menu";
 import { ActiveFilters, FilterButton, FilterField, FilterPanel, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
@@ -716,13 +717,13 @@ function Today({ ctx: { model, open, chart, tableHref } }: { ctx: Ctx }) {
     <PagedTableCard total={model.summary.facts.length} noun="items" footer={<span>{readableDay(model.summary.date)}</span>}>
       {model.summary.facts.length === 0 ? <EmptyState title="Nothing notable today" hint={QUIET_DAY} /> : (
         <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
-          <thead><tr><th>What happened</th><th className="w-[160px]">Status</th><th className="w-[120px]">Next step</th></tr></thead>
+          <thead><tr><th>What happened</th><th className="w-[160px]">Status</th><th className="w-[120px] text-right">Next step</th></tr></thead>
           <PagedBody>
             {model.summary.facts.map((f) => (
               <tr key={f.id} className="cursor-pointer" onClick={() => open(f.href)}>
                 <td className="text-foreground"><Link href={f.href} className="hover:underline" onClick={(e) => e.stopPropagation()}>{f.text}</Link></td>
                 <td><Chip s={FACT_STATUS[f.id] ?? null} /></td>
-                <td className="whitespace-nowrap">Open ›</td>
+                <RowActionCell><RowAction href={f.href}>Open</RowAction></RowActionCell>
               </tr>
             ))}
           </PagedBody>
@@ -910,7 +911,7 @@ export function ScoreDrill({ policies, entries, tabs, show = "table", here, week
         </table>
       ) : (
         <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
-          <thead><tr><th className="w-[140px]">Counted on</th><th>Carrier</th><th className="w-[150px]">Policy</th><th className="w-[150px]">Kind</th><th className="w-[140px] text-right">Amount</th><th className="w-[110px]">Source</th></tr></thead>
+          <thead><tr><th className="w-[140px]">Counted on</th><th>Carrier</th><th className="w-[150px]">Policy</th><th className="w-[150px]">Kind</th><th className="w-[140px] text-right">Amount</th><th className="w-[110px] text-right">Source</th></tr></thead>
           <PagedBody>
             {shownEntries.map((e) => (
               <tr key={e.id}>
@@ -919,7 +920,7 @@ export function ScoreDrill({ policies, entries, tabs, show = "table", here, week
                 <td className="whitespace-nowrap tabular-nums">{e.policyNumber}</td>
                 <td className="whitespace-nowrap">{e.type.replaceAll("_", " ")}</td>
                 <td className="text-right tabular-nums">{centsText(e.cents)}</td>
-                <td className="whitespace-nowrap">{e.rowNumber ? <Link href={rowHref(e.fileId, e.rowNumber)} className="hover:underline">Row {e.rowNumber} ›</Link> : <Link href={fileHref(e.fileId)} className="hover:underline">The file ›</Link>}</td>
+                <RowActionCell>{e.rowNumber ? <RowAction href={rowHref(e.fileId, e.rowNumber)}>{`Row ${e.rowNumber}`}</RowAction> : <RowAction href={fileHref(e.fileId)}>The File</RowAction>}</RowActionCell>
               </tr>
             ))}
           </PagedBody>

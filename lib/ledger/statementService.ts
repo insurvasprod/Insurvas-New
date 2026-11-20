@@ -54,9 +54,11 @@ type Query = PromiseLike<Result> & {
   neq(column: string, value: unknown): Query;
   is(column: string, value: unknown): Query;
   in(column: string, values: readonly unknown[]): Query;
+  or(filters: string): Query;
   order(column: string, options?: unknown): Query;
   range(from: number, to: number): Query;
   update(values: unknown): Query;
+  insert(values: unknown): Query;
   maybeSingle<T = unknown>(): Promise<Result<T>>;
 };
 type Storage = {
@@ -123,7 +125,7 @@ export async function listStatementCarriers(tenantId: string): Promise<Statement
   return carrierFilter(tenantId, ((held.data ?? []) as Array<{ carrier_id: string | null }>).map((row) => row.carrier_id));
 }
 
-type PolicyRow = { id: string; policy_number: string; insured_name: string; carrier: string; created_by: string | null };
+export type PolicyRow = { id: string; policy_number: string; insured_name: string; carrier: string; created_by: string | null };
 
 /** Every policy in the book, paged past PostgREST's row cap. */
 async function readPolicies(tenantId: string): Promise<PolicyRow[]> {
@@ -132,6 +134,16 @@ async function readPolicies(tenantId: string): Promise<PolicyRow[]> {
   );
   if (error) throw new Error(`Could not load policies: ${error.message}`);
   return rows;
+}
+
+/**
+ * The carrier-file mirrors (lib/ledger/statementMirrorStore.ts), loaded only by the three paths that write statement
+ * lines — import, re-match and typed-in lines, all owner and bookkeeper routes — so the routes that only read a
+ * statement (the ledger, a producer's view) never reach policy_current.
+ */
+async function carrierPolicyMirrors(...args: Parameters<typeof import("./statementMirrorStore").carrierPolicyMirrors>) {
+  const { carrierPolicyMirrors: mirrors } = await import("./statementMirrorStore");
+  return mirrors(...args);
 }
 
 const policyRef = (row: PolicyRow): StatementPolicyRef => ({ id: row.id, policyNumber: row.policy_number, insuredName: row.insured_name, carrier: row.carrier });
@@ -496,7 +508,7 @@ async function proposeAll(tenantId: string, lines: ParsedStatementLine[], polici
   return out;
 }
 
-async function prepare(tenantId: string, input: StatementImportInput, sha256 = statementFileHash(input.csvText)): Promise<Prepared> {
+async function prepare(tenantId: string, input: StatementImportInput, sha256 = statementFileHash(input.csvText), write: { actorUserId: string } | null = null): Promise<Prepared> {
   if (input.periodEnd < input.periodStart) throw new StatementError("The period ends before it starts.", 400, "invalid_period");
   const carriers = await carriersById([input.carrierId]);
   const carrier = carriers.get(input.carrierId);
@@ -508,7 +520,8 @@ async function prepare(tenantId: string, input: StatementImportInput, sha256 = s
   } catch (error) {
     throw new StatementError(error instanceof Error ? error.message : "The file could not be read.", 400, "unreadable_file");
   }
-  const policies = await readPolicies(tenantId);
+  const held = await readPolicies(tenantId);
+  const policies = [...held, ...await carrierPolicyMirrors(tenantId, parsed.lines, held, carrier, write !== null, write?.actorUserId ?? null)];
   const proposals = await proposeAll(tenantId, parsed.lines, policies, carrier, { start: input.periodStart, end: input.periodEnd });
   return { carrier, parsed, mapping, proposals, policies: new Map(policies.map((row) => [row.id, row])), sha256 };
 }
@@ -593,8 +606,8 @@ export type StatementFileInput = {
   reprocessFrom?: string;
 };
 
-/** The CSV text a file is read as: the file itself, or an Excel workbook's first visible sheet. */
-async function csvOf(kind: StatementFileKind, bytes: Uint8Array): Promise<{ csv: string; sheetName: string | null }> {
+/** The CSV text a file is read as: the file itself, or an Excel workbook's first visible sheet. (Also Statement first.) */
+export async function csvOf(kind: StatementFileKind, bytes: Uint8Array): Promise<{ csv: string; sheetName: string | null }> {
   if (kind === "csv") return { csv: new TextDecoder("utf-8").decode(bytes).replace(/^﻿/, ""), sheetName: null };
   if (kind === "xlsx") {
     try {
@@ -654,7 +667,7 @@ export async function importStatementFile(tenantId: string, actorUserId: string,
     if (!carrier) throw new StatementError("Choose a carrier from the carrier library.", 400, "unknown_carrier");
     prepared = { carrier, parsed: { headers: [], lines: [] }, mapping: {}, proposals: new Map(), policies: new Map(), sha256 };
   } else {
-    prepared = await prepare(tenantId, base, sha256);
+    prepared = await prepare(tenantId, base, sha256, { actorUserId });
   }
   if (!input.reprocessFrom) {
     const duplicate = await findDuplicate(tenantId, base, sha256);
@@ -808,7 +821,8 @@ export async function addManualStatementLines(tenantId: string, actorUserId: str
     { "Policy number": input.policyNumber, Insured: input.insuredName ?? "", Amount: input.amount, Kind: input.kind ?? "", Date: input.lineDate ?? "" },
   ));
 
-  const proposals = await proposeAll(tenantId, lines, await readPolicies(tenantId), carrier, { start: row.period_start, end: row.period_end });
+  const held = await readPolicies(tenantId);
+  const proposals = await proposeAll(tenantId, lines, [...held, ...await carrierPolicyMirrors(tenantId, lines, held, carrier, true, actorUserId)], carrier, { start: row.period_start, end: row.period_end });
   const payload = lines.map((line) => {
     const proposal = line.error ? null : proposals.get(line.lineNumber);
     return {
@@ -913,7 +927,8 @@ export async function rematchStatementLines(tenantId: string, actorUserId: strin
     if (!carrier) continue;
     const lines = scoped.filter((line) => line.statementId === statement.id);
     const parsed: ParsedStatementLine[] = lines.map((line) => ({ lineNumber: line.lineNumber, raw: {}, policyNumber: line.policyNumber, insuredName: line.insuredName, amountCents: line.amountCents, kind: line.kind, kindFrom: null, lineDate: null, premiumCents: null, rateBp: null, error: null }));
-    const found = await proposeAll(tenantId, parsed, policies, carrier, { start: statement.period_start, end: statement.period_end });
+    const withMirrors = [...policies, ...await carrierPolicyMirrors(tenantId, parsed, policies, carrier, true, actorUserId)];
+    const found = await proposeAll(tenantId, parsed, withMirrors, carrier, { start: statement.period_start, end: statement.period_end });
     for (const line of lines) {
       const hit = found.get(line.lineNumber);
       if (hit?.policyId && hit.method && !rejected.has(`${line.id}|${hit.policyId}`)) proposals.push({ line_id: line.id, policy_id: hit.policyId, method: hit.method });

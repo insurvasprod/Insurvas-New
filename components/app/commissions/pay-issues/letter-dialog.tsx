@@ -162,7 +162,7 @@ export function GroupLetterButton({ carrierId, carrierName, carrierItems, handIt
 
           {handItems.length > 0 && (
             <div className="min-w-0">
-              <span className="text-label text-[var(--body)]">From statements imported by hand</span>
+              <span className="text-label text-[var(--body)]">From statements you imported</span>
               <ul className="mt-1.5 max-h-[180px] overflow-y-auto rounded-md border border-border">
                 {handItems.map((item) => row(item, handTicked.includes(item.id), (on) => setHandTicked(on ? [...handTicked, item.id] : handTicked.filter((x) => x !== item.id))))}
               </ul>

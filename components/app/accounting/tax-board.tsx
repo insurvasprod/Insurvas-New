@@ -19,6 +19,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { Segmented } from "@/components/ui/view-tabs";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { ENTITY_TYPES, EXEMPT_LABELS, EXEMPT_REASONS, maskTaxId, TAX_CATEGORIES, TAX_CATEGORY_LABELS, TAX_NOTICE, type ExemptReason, type TaxCategory } from "@/lib/accounting/taxCore";
 import { nextStepWords, payeeHref, standing, TAX_WHO_LABELS, whoRows, type CategoryByQuarter, type TaxQuarter, type TaxWho } from "@/lib/accounting/taxLinks";
@@ -368,7 +369,7 @@ export function TaxBoard({ data, view, who: initialWho, readOnly }: { data: TaxD
             : <EmptyState title={`Nobody over ${money(c.thresholdCents)} in ${data.year}`} hint="Payments to partners, producers and lead vendors are counted here as they are marked paid." />)
             : people.length === 0 ? <NoMatches noun="contractors" onClear={() => { setQ(""); setWho("all"); }} /> : (
             <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
-              <thead><tr><th className="w-[30%]">Name on the form</th><th className="w-[12%]">Type</th><th className="w-[14%]">Tax ID</th><th className="w-[14%] text-right">Paid</th><th className="w-[18%]">1099</th><th>Next step</th></tr></thead>
+              <thead><tr><th className="w-[30%]">Name on the form</th><th className="w-[12%]">Type</th><th className="w-[14%]">Tax ID</th><th className="w-[14%] text-right">Paid</th><th className="w-[18%]">1099</th><th className="text-right">Next step</th></tr></thead>
               <tbody>
                 {shown.rows.map((r) => {
                   const href = payeeHref(r, data.year, { from: who });
@@ -382,7 +383,7 @@ export function TaxBoard({ data, view, who: initialWho, readOnly }: { data: TaxD
                       <td className="whitespace-nowrap font-mono tabular-nums">{maskTaxId(r.profile?.taxIdType ?? "none", r.profile?.taxIdLast4 ?? null)}</td>
                       <td className="whitespace-nowrap text-right tabular-nums"><Link className="text-foreground hover:underline" href={payeeHref(r, data.year, { from: who, tab: "payments" })} onClick={(e) => e.stopPropagation()}>{money(r.paidCents)}</Link></td>
                       <td>{under ? <StatusChip tone="neutral">Under the threshold</StatusChip> : <TaxState row={r} />}</td>
-                      <td className="whitespace-nowrap" title={nextStepWords(r, under)}>{step} ›</td>
+                      <RowActionCell><RowAction href={href} title={nextStepWords(r, under)}>{step}</RowAction></RowActionCell>
                     </tr>
                   );
                 })}
@@ -411,7 +412,7 @@ export function TaxBoard({ data, view, who: initialWho, readOnly }: { data: TaxD
                   <td className="whitespace-nowrap font-medium">{SOURCE_LABEL[m.sourceType]}: {m.sourceValue.replace(/_/g, " ")}</td>
                   <td className="whitespace-nowrap">{TAX_CATEGORY_LABELS[m.category]}</td>
                   <td className="whitespace-nowrap" title={m.overridden ? `Insurvas's is ${TAX_CATEGORY_LABELS[m.defaultCategory]}` : undefined}>{m.overridden ? "Yours" : "Insurvas's"}</td>
-                  <td className="whitespace-nowrap text-right"><button type="button" className="text-sm text-foreground hover:underline" onClick={(e) => { e.stopPropagation(); setEditing(m); }}>{readOnly ? "View" : "Edit"} ›</button></td>
+                  <RowActionCell><RowAction onClick={() => setEditing(m)}>{readOnly ? "View" : "Edit"}</RowAction></RowActionCell>
                 </tr>
               ))}
             </tbody>

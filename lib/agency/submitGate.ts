@@ -26,7 +26,7 @@ export async function refuseIfCannotSubmit(tenantId: string, applicationId: stri
   if (producer.can_submit) return null;
   const reason = (producer.can_submit_reason as string | null) ?? "Onboarding is not complete";
   return NextResponse.json(
-    { error: `You can't submit yet: ${reason.charAt(0).toLowerCase()}${reason.slice(1)}. Finish it on your onboarding checklist.`, code: "cannot_submit", reason },
+    { error: `You can't submit yet: ${reason.charAt(0).toLowerCase()}${reason.slice(1)}. Ask your agency owner to fix it on your producer record.`, code: "cannot_submit", reason },
     { status: 409 },
   );
 }

@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pricing Rework Round 1</title>
+<style>
+/*
+ * Pricing rework, round 1 (2026-11-19). Self-contained board: open it in a browser.
+ * Board chrome uses the house 12/14/16 + 24 scale. The price cards inside the mock page copy the HOMEPAGE
+ * card (components/marketing/landing-pricing.module.css) exactly, its own sizes included, because the brief is
+ * "pricing cards look the same as the homepage cards".
+ * Every price, plan name and feature row is the live catalog as read on 2026-11-19, except the numbers drawn
+ * with a dashed underline: those are placeholders until the owner gives the band prices.
+ */
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--board);color:var(--board-ink)}
+body.light{--board:#e9ecea;--board-ink:#0d4037;--board-line:#cdd6d1;--board-card:#fff;
+  --canvas:#fbfcfb;--surface:#fff;--surface-alt:#e9f2ee;--surface-sunken:#dfeae5;--border:#cbd8d2;--border-strong:#6d7f77;
+  --ink:#0d4037;--body:#26332e;--muted:#4d5f58;--primary:#07d6a0;--on-primary:#0d4037;--primary-soft:#dcfaf0;--accent-ink:#00735a;
+  --footer-bg:#0d4037;--nav-ink:#eaf6f2;--nav-muted:#9fc4b8;--ground:var(--surface-alt)}
+body.dark{--board:#050b09;--board-ink:#f2f7f5;--board-line:#1d2b26;--board-card:#0d1714;
+  --canvas:#08110f;--surface:#0f1a17;--surface-alt:#16241f;--surface-sunken:#1b2b25;--border:#22342e;--border-strong:#5f7a71;
+  --ink:#f2f7f5;--body:#c9d6d1;--muted:#93a69f;--primary:#07d6a0;--on-primary:#0d4037;--primary-soft:#0f3a30;--accent-ink:#4fe3bb;
+  --footer-bg:#0d4037;--nav-ink:#eaf6f2;--nav-muted:#9fc4b8;--ground:var(--canvas)}
+
+/* ── Board chrome ── */
+.board{max-width:1480px;margin:0 auto;padding:24px 16px 120px}
+.board>h1{font-size:24px;margin:0;letter-spacing:-.02em}
+.lead{max-width:1060px;margin:8px 0 0;opacity:.88}
+.bar{position:sticky;top:0;z-index:80;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:12px 0;margin:16px 0;background:var(--board);border-bottom:1px solid var(--board-line)}
+.bar .grp{display:flex;gap:6px;align-items:center}
+.bar .grp>span{font-size:12px;font-weight:600;opacity:.75;margin-right:2px}
+.bar button{font:600 14px Inter,system-ui,sans-serif;border:1px solid var(--board-line);background:var(--board-card);color:var(--board-ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+.bar button[aria-pressed=true]{background:#0d4037;color:#fff;border-color:#0d4037}
+h2.sec{font-size:16px;margin:40px 0 4px;letter-spacing:-.01em}
+.sub{font-size:14px;opacity:.8;margin:0 0 12px;max-width:1060px}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;margin:12px 0}
+.notes>div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px;font-size:14px}
+.notes b{display:block;margin-bottom:4px}
+.notes ul{margin:4px 0 0;padding-left:18px}.notes li{margin:3px 0}
+.where{width:100%;border-collapse:collapse;background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;overflow:hidden;font-size:14px}
+.where th,.where td{text-align:left;vertical-align:top;padding:10px 12px;border-top:1px solid var(--board-line)}
+.where th{font-size:12px;font-weight:600;opacity:.8;border-top:0;background:var(--board)}
+.where code{font-size:12px}
+.ph{border-bottom:1.5px dashed currentColor}
+.frame{border:1px solid var(--board-line);border-radius:16px;overflow:hidden;background:var(--canvas)}
+.cap{font-size:12px;font-weight:600;opacity:.75;margin:14px 0 6px}
+.opt{display:none}
+body[data-cmp=A] .opt.cA,body[data-cmp=B] .opt.cB,body[data-cmp=C] .opt.cC{display:block}
+.qs{counter-reset:q;display:grid;gap:10px;margin:12px 0}
+.qs>div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px 12px 44px;position:relative}
+.qs>div:before{counter-increment:q;content:counter(q);position:absolute;left:14px;top:12px;width:20px;height:20px;border-radius:50%;background:#0d4037;color:#fff;font-size:12px;font-weight:600;display:grid;place-items:center}
+
+/* ── Mock page: hero (the live pricing hero, deep olive) ── */
+.hero{position:relative;background:radial-gradient(120% 90% at 50% 0%,#145a4c 0%,#0d4037 55%,#0a332c 100%);color:var(--nav-ink);text-align:center;padding:72px 24px 150px}
+.hero h3{margin:0 auto;max-width:820px;font:600 48px/1.02 Montserrat,Inter,system-ui,sans-serif;letter-spacing:-.035em;text-wrap:balance}
+.hero p{margin:16px auto 0;max-width:600px;color:var(--nav-muted);font-size:16px;line-height:1.6}
+.seg{display:inline-flex;border:1px solid rgb(234 246 242 / 18%);border-radius:999px;background:rgb(255 255 255 / 6%);padding:4px;gap:2px}
+.seg button{min-height:40px;border:0;border-radius:999px;background:transparent;padding:8px 18px;color:var(--nav-muted);font:600 14px Inter,system-ui,sans-serif;cursor:pointer;display:inline-flex;gap:8px;align-items:center}
+.seg button[aria-pressed=true]{background:rgb(255 255 255 / 14%);color:var(--nav-ink);box-shadow:inset 0 0 0 1px rgb(234 246 242 / 22%)}
+.seg .save{font-size:12px;font-weight:600;color:#07d6a0}
+.switches{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:32px}
+.page{padding:0 24px 64px}
+.lift{margin-top:-104px;position:relative}
+.trust{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 28px;margin:32px 0 0;padding:0;list-style:none;color:var(--muted);font-size:14px}
+.trust li:before{content:"✓";color:var(--accent-ink);font-weight:700;margin-right:8px}
+
+/* ── The HOMEPAGE card, copied from landing-pricing.module.css ── */
+.ladder{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch;gap:16px;max-width:1180px;margin:0 auto}
+.ladder[data-count="2"]{grid-template-columns:repeat(2,minmax(0,1fr));max-width:800px}
+.ladder[data-count="1"]{grid-template-columns:minmax(0,440px);justify-content:center}
+.frame{--tab-ink:var(--ink);--tab-muted:var(--muted);--tab-edge:var(--border)}
+.card{position:relative;display:flex;height:100%;flex-direction:column;border:1px solid var(--border);border-radius:28px;background:var(--surface);cursor:pointer;color:var(--ink);transition:transform 260ms cubic-bezier(.23,1,.32,1),background-color 260ms,border-color 200ms,box-shadow 260ms}
+.card[data-selected=true]{--ink:var(--nav-ink);--body:var(--nav-muted);--muted:var(--nav-muted);--border:rgb(234 246 242 / 16%);z-index:1;border-color:var(--primary);background:color-mix(in srgb,var(--footer-bg) 82%,black);box-shadow:0 0 0 1px var(--primary),0 36px 70px -30px rgb(13 64 55 / 60%);transform:translateY(-12px) scale(1.025)}
+body.dark .card[data-selected=true]{background:color-mix(in srgb,var(--primary) 12%,var(--surface));box-shadow:0 0 0 1px var(--primary),0 36px 70px -30px rgb(0 0 0 / 80%)}
+.tab{position:absolute;top:-1px;right:-1px;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--tab-edge);border-top-color:transparent;border-right-color:transparent;border-radius:0 28px 0 22px;background:var(--canvas);padding:10px 20px 12px 22px;color:var(--tab-muted);font-size:13.5px;font-weight:500}
+.tab i{width:7px;height:7px;border-radius:50%;background:var(--tab-muted)}
+.card[data-selected=true] .tab{border-color:var(--primary);border-top-color:transparent;border-right-color:transparent;color:var(--tab-ink);font-weight:600}
+.card[data-selected=true] .tab i,.featured .tab i{background:var(--primary)}
+.cardHead{padding:56px 32px 24px;text-align:center}
+.tier{margin:0;color:var(--ink);font:600 22px/1.2 Montserrat,Inter,system-ui,sans-serif;letter-spacing:-.015em}
+.price{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:22px}
+.whole{color:var(--ink);font:500 56px/1 "Inter Tight",Inter,system-ui,sans-serif;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.per{display:grid;gap:2px;white-space:nowrap;color:var(--muted);font-size:14px;line-height:1.35;text-align:left}
+.talk{margin-top:22px;color:var(--ink);font:500 32px/1.1 "Inter Tight",Inter,system-ui,sans-serif;letter-spacing:-.02em}
+.talk small{display:block;margin-top:8px;color:var(--muted);font:400 14px/1.4 Inter,system-ui,sans-serif;letter-spacing:0}
+.blurb{max-width:32ch;margin:18px auto 0;color:var(--body);font-size:14.5px;line-height:1.55}
+.rows{display:grid;flex:1;align-content:start;gap:14px;margin:0 32px;border-top:2px dotted var(--border);padding:26px 0 28px;list-style:none}
+.rows li{display:flex;align-items:center;gap:12px;color:var(--ink);font-size:14.5px;line-height:1.35}
+.rows li[data-included=false]{color:var(--muted);opacity:.7}
+.rows li.lead{font-weight:600}
+.mark{display:grid;width:22px;height:22px;flex:none;place-items:center;border-radius:50%;background:var(--primary);color:var(--on-primary);font-size:12px;font-weight:800}
+.rows li[data-included=false] .mark{background:transparent;color:var(--muted);font-size:15px;font-weight:400}
+.cardFoot{display:flex;justify-content:center;padding:0 32px 32px}
+.planCta{display:inline-flex;height:48px;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:999px;background:var(--surface-alt);padding:0 28px;color:var(--ink);font-size:15px;font-weight:600;text-decoration:none;cursor:pointer}
+.card[data-selected=true] .planCta{border-color:transparent;background:var(--primary);color:var(--on-primary)}
+
+/* Seat bands (new): chips inside the card (S1) */
+.bands{margin:0 32px 22px}
+.bands .lbl{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;font-weight:600;margin-bottom:8px}
+.chips{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;border:1px solid var(--border);border-radius:14px;padding:4px;background:color-mix(in srgb,var(--surface-alt) 60%,transparent)}
+.chips button{border:0;border-radius:10px;background:transparent;padding:8px 2px;color:var(--muted);font:600 12px Inter,system-ui,sans-serif;cursor:pointer;line-height:1.25}
+.chips button>span{display:block;font-weight:500;font-size:12px;opacity:.85}
+.chips button[aria-pressed=true]{background:var(--surface);color:var(--ink);box-shadow:inset 0 0 0 1px var(--border)}
+.card[data-selected=true] .chips{background:rgb(255 255 255 / 5%)}
+.card[data-selected=true] .chips button[aria-pressed=true]{background:rgb(255 255 255 / 12%);color:var(--nav-ink);box-shadow:inset 0 0 0 1px var(--primary)}
+/* Seat bands as their own add-on card (S2): radio rows */
+.bandList{display:grid;gap:8px;margin:0 32px 24px;list-style:none;padding:0}
+.bandList li{display:flex;align-items:center;gap:12px;border:1px solid var(--border);border-radius:14px;padding:12px 14px;cursor:pointer;font-size:14.5px}
+.bandList li .r{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--muted);flex:none;display:grid;place-items:center}
+.bandList li[aria-checked=true]{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary)}
+.bandList li[aria-checked=true] .r{border-color:var(--primary)}
+.bandList li[aria-checked=true] .r:after{content:"";width:8px;height:8px;border-radius:50%;background:var(--primary)}
+.bandList li b{font-weight:600;flex:1}
+.bandList li em{font-style:normal;color:var(--muted);font-variant-numeric:tabular-nums}
+.total{margin:0 32px 22px;border-top:2px dotted var(--border);padding-top:18px;display:flex;justify-content:space-between;align-items:baseline;font-size:14px;color:var(--muted)}
+.total strong{color:var(--ink);font:500 28px/1 "Inter Tight",Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums}
+
+/* ── Comparison options ── */
+.cmpWrap{max-width:1180px;margin:72px auto 0}
+.eyebrow{text-align:center;color:var(--accent-ink);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.02em}
+.cmpTitle{text-align:center;margin:8px 0 6px;color:var(--ink);font:600 32px/1.1 Montserrat,Inter,system-ui,sans-serif;letter-spacing:-.03em}
+.cmpLede{text-align:center;margin:0 auto 28px;color:var(--muted);font-size:16px;max-width:620px}
+.tbl{width:100%;border-collapse:separate;border-spacing:0;border:1px solid var(--border);border-radius:20px;background:var(--surface);overflow:hidden;color:var(--ink)}
+.tbl th,.tbl td{padding:12px 16px;border-top:1px solid var(--border);font-size:14px;text-align:center;vertical-align:middle}
+.tbl td:first-child,.tbl th:first-child{text-align:left}
+.tbl thead th{border-top:0;position:sticky;top:58px;background:var(--surface);z-index:2;vertical-align:bottom;padding-top:18px;padding-bottom:14px}
+.tbl thead .pn{font:600 16px/1.2 Montserrat,Inter,system-ui,sans-serif}
+.tbl thead .pp{display:block;margin-top:4px;color:var(--muted);font-weight:500;font-size:14px}
+.tbl thead .pc{display:inline-flex;margin-top:10px;height:36px;align-items:center;border:1px solid var(--border);border-radius:999px;padding:0 16px;font-size:14px;font-weight:600;color:var(--ink);background:var(--surface-alt)}
+.tbl .grp td{background:var(--surface-alt);font-size:12px;font-weight:600;color:var(--muted);padding-top:8px;padding-bottom:8px;text-align:left}
+.tbl .val{color:var(--body);font-size:14px}
+.tick{display:inline-grid;width:20px;height:20px;border-radius:50%;background:var(--primary);color:var(--on-primary);place-items:center;font-size:12px;font-weight:800}
+.dash{color:var(--muted)}
+.tbl .same td{color:var(--muted)}
+.more{display:flex;justify-content:center;margin-top:16px}
+.more button,.ghost{border:1px solid var(--border);background:var(--surface);color:var(--ink);border-radius:999px;height:40px;padding:0 18px;font:600 14px Inter,system-ui,sans-serif;cursor:pointer}
+.modrow{cursor:pointer}
+.modrow td:first-child{font-weight:600}
+.modrow td:first-child:before{content:"›";display:inline-block;width:16px;color:var(--muted);transition:transform .2s}
+.modrow[aria-expanded=true] td:first-child:before{transform:rotate(90deg)}
+.inner td{background:color-mix(in srgb,var(--surface-alt) 40%,var(--surface));font-size:14px;padding-top:9px;padding-bottom:9px}
+.inner td:first-child{padding-left:40px;color:var(--body)}
+.cnt{font-variant-numeric:tabular-nums;color:var(--body)}
+.cnt.full{color:var(--ink);font-weight:600}
+.jobs td{text-align:left!important;color:var(--body)}
+.jobs td:first-child{color:var(--ink);font-weight:600;width:22%}
+.jobs td small{display:block;color:var(--muted);font-size:12px;margin-top:2px;font-weight:400}
+.sheetHost{position:relative;margin-top:24px;border:1px solid var(--border);border-radius:20px;overflow:hidden;min-height:560px;background:color-mix(in srgb,var(--canvas) 50%,var(--surface-alt))}
+.sheetHost .shade{position:absolute;inset:0;background:rgba(13,40,34,.32)}
+.sheet{position:absolute;top:0;right:0;bottom:0;width:min(440px,100%);background:var(--surface);border-left:1px solid var(--border);padding:24px;overflow:auto;color:var(--ink)}
+.sheet h4{margin:0;font-size:24px;letter-spacing:-.02em;font-weight:600}
+.sheet .sx{position:absolute;top:18px;right:18px;border:1px solid var(--border);background:var(--surface);border-radius:999px;width:36px;height:36px;font-size:16px;color:var(--ink)}
+.sheet .tabs{display:flex;gap:18px;border-bottom:1px solid var(--border);margin:16px 0 8px}
+.sheet .tabs span{padding:8px 0;font-size:14px;font-weight:600;color:var(--muted)}
+.sheet .tabs span.on{color:var(--ink);box-shadow:inset 0 -2px 0 var(--primary)}
+.sheet .mg{margin-top:16px;font-size:12px;font-weight:600;color:var(--muted)}
+.sheet ul{list-style:none;margin:6px 0 0;padding:0}
+.sheet li{display:flex;gap:10px;align-items:center;padding:6px 0;font-size:14px;color:var(--body)}
+.sheet li.no{color:var(--muted);opacity:.7}
+@media (max-width:1000px){.ladder,.ladder[data-count="2"]{grid-template-columns:minmax(0,1fr);max-width:460px;gap:32px}.hero h3{font-size:34px}}
+</style>
+</head>
+<body class="light" data-cmp="A" data-seat="S1" data-tiers="2">
+<div class="board">
+  <h1>Pricing Rework, Round 1</h1>
+  <p class="lead">Three audiences (Agent, Agency, IMO &amp; FMO), a Monthly / Yearly switch, the agency's one base price with seats as an add-on in bands, and three ways to compare plans. The price cards are the homepage cards, copied as they are. Click the switches inside the mock page; it is live. Numbers with a <span class="ph">dashed underline</span> are placeholders until you give the band prices.</p>
+
+  <div class="bar" role="toolbar" aria-label="Board options">
+    <div class="grp"><span>Theme</span><button data-k="theme" data-v="light">Light</button><button data-k="theme" data-v="dark">Dark</button></div>
+    <div class="grp"><span>Agent Tiers</span><button data-k="tiers" data-v="2">Basic + Advanced</button><button data-k="tiers" data-v="3">Ledger + Basic + Advanced</button></div>
+    <div class="grp"><span>Seat Picker</span><button data-k="seat" data-v="S1">S1 · In the Card</button><button data-k="seat" data-v="S2">S2 · Its Own Card</button></div>
+    <div class="grp"><span>Comparison</span><button data-k="cmp" data-v="A">A · What Changes</button><button data-k="cmp" data-v="B">B · By Module</button><button data-k="cmp" data-v="C">C · By Job</button></div>
+  </div>
+
+  <h2 class="sec">1 · The Pricing Page</h2>
+  <p class="sub">Hero, both switches, the cards, then the comparison you pick below. Agency opens on the 21–50 band. IMO &amp; FMO has no price, only "Talk to us for pricing", like the Custom band.</p>
+  <div class="frame" id="mock">
+    <section class="hero">
+      <h3 id="heroTitle"></h3>
+      <p id="heroLede"></p>
+      <div class="switches">
+        <div class="seg" role="group" aria-label="Plans for" id="audSeg">
+          <button data-aud="agent">Agent</button><button data-aud="agency">Agency</button><button data-aud="imo">IMO &amp; FMO</button>
+        </div>
+        <div class="seg" role="group" aria-label="Billing" id="cycSeg">
+          <button data-cyc="monthly">Monthly</button><button data-cyc="yearly">Yearly <span class="save">2 months free</span></button>
+        </div>
+      </div>
+    </section>
+    <div class="page">
+      <div class="lift" id="cards"></div>
+      <ul class="trust"><li>Card entered on the provider's page, never ours</li><li>Export your book any time</li><li>Cancel in Settings, no call needed</li><li>No per-lead fees</li></ul>
+
+      <div class="cmpWrap">
+        <div class="eyebrow">Compare</div>
+        <div class="cmpTitle">What you get on each plan</div>
+        <p class="cmpLede" id="cmpLede"></p>
+        <div class="opt cA" id="cmpA"></div>
+        <div class="opt cB" id="cmpB"></div>
+        <div class="opt cC" id="cmpC"></div>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="sec">2 · The Three Comparison Options</h2>
+  <div class="notes">
+    <div><b>A · What Changes (recommended)</b>Only the rows where the plans differ, about 15 instead of 48, under a plan header that stays on screen. Price and seats are the first two rows. One button shows the 22 features every plan shares, greyed. Same pattern as Linear, Attio and Notion: the cards say "everything in X, plus", and the table answers "what do I lose by staying down".</div>
+    <div><b>B · By Module</b>Nine rows, one per module, each cell a count ("All 8", "5 of 8", "—"). Click a row and its features open under it (Retention is open in the drawing). The shortest first view. The cost: you have to open a row to see what a count means.</div>
+    <div><b>C · By Job, in Words</b>Eight rows named after the work ("Keep policies on the books"), each cell a short sentence instead of ticks. "See Every Feature" opens a side panel with one plan's full list (drawn open below the table). Reads like Intercom's key-features list. Hardest to keep in step with the catalog: the sentences are written copy, so they must be updated whenever a plan's features change.</div>
+  </div>
+
+  <h2 class="sec">3 · The Current Comparison Table, Critiqued</h2>
+  <div class="notes">
+    <div><b>It is 48 rows long</b>The catalog has 39 features in 9 modules, so the table is 39 feature rows plus 9 module headers. That is about 1,900px of ticks, and nothing on screen says which plan a column is by row 30. The plan header does not stick.</div>
+    <div><b>Most rows say nothing</b>On the Agent view, Basic and Advanced share 22 of their 30 features. Three rows in four are a tick in every column, and the 8 that matter are scattered across 5 modules.</div>
+    <div><b>The same list appears three times</b>The cards list each plan's features by module with "+N more". "Compare table" lists them again, and "Explain each feature" a third time. Two switches lead to the same content.</div>
+    <div><b>It cannot cross audiences</b>The table shows one audience at a time. An Advanced agent cannot see what Agency adds, which is the most important upgrade.</div>
+    <div><b>Ticks only, no values</b>Seats, price and "Talk to us" are not rows, so the facts a buyer compares first are missing. Labels such as "Discrepancy report" and "Draft-date optimiser" have no explanation.</div>
+  </div>
+
+  <h2 class="sec">4 · What Premium Pricing Pages Do (Research, 2026-11-19)</h2>
+  <div class="notes">
+    <div><b>Short cards, an increment list</b>Notion, Attio and Close show 3–4 cards with one "best for" line and one badge. Each card starts "Everything in X, plus" and lists only what it adds.</div>
+    <div><b>The full matrix sits below, grouped</b>Close (about 50 rows in 6 sections) and Attio (about 70 rows, "Expand all") put the matrix below the cards in named groups. Vercel shows 150+ rows in full, which nobody reads end to end.</div>
+    <div><b>Values in the cell, not extra rows</b>Notion writes "5 MB" and "5 GB" in the cell, and Vercel prices add-ons inside the cell. Limits are not split into extra rows.</div>
+    <div><b>Seats are priced next to the plan</b>Attio prints "Add users for $35/mo each" on the card. Vercel prices seats separately from the plan. Intercom gives free "Lite" seats with each plan. None hides the seat cost in a footnote.</div>
+    <div><b>Custom means no number</b>Linear, Notion and Vercel show "Custom" with Contact Sales and "Everything in Business, plus". HubSpot shows "Starts at".</div>
+    <div><b>The yearly switch changes prices in place</b>Notion says "Save up to 20% with yearly", Attio "Save 20%", and Intercom shows a crossed-out monthly price. The saving is printed on the switch itself.</div>
+  </div>
+
+  <h2 class="sec">5 · What Changes Where</h2>
+  <table class="where">
+    <thead><tr><th style="width:21%">Place</th><th style="width:27%">Today</th><th>What has to change</th></tr></thead>
+    <tbody>
+      <tr><td><b>Plan catalog</b><br><code>/admin/plans</code>, <code>/admin/catalog</code>, tables <code>plans</code>, <code>plan_prices</code>, <code>plan_limits</code>, <code>plan_addons</code></td><td>Agent: Ledger $99, Basic $249, Advanced $449 (yearly 10×). Agency: three flat plans: 1–50 $999, 51–150 $2,499, 151+ $4,999, <b>monthly only</b>. No IMO/FMO plan. The <code>management</code> plan type ("Internal / IMO") is unused.</td><td>One Agency base plan. Seat bands 1–20, 21–50, 51–100 and 101–200 become priced add-ons, plus a Custom band with no price. Add yearly prices for Agency. An IMO &amp; FMO plan, either on <code>management</code> or a new <code>imo_fmo</code> type, marked "contact us" (no price, no checkout). Ledger stays or is retired (Q2). The three old agency plans are archived, and their subscribers keep their version.</td></tr>
+      <tr><td><b>Public plan feed</b><br><code>lib/publicPlans/*</code>, <code>/api/public/plans</code></td><td><code>audience</code> is individual or agency; <code>max_seats</code> labels the bands.</td><td>Add an <code>imo</code> audience, a <code>contact_only</code> flag, and the seat bands, with their prices per cycle, from the add-on catalog.</td></tr>
+      <tr><td><b>Pricing page</b><br><code>components/public/pricing-page.tsx</code>, <code>pricing-plan-card.tsx</code>, <code>pricing-compare-table.tsx</code>, <code>pricing-explorer.tsx</code>, <code>pricing-picker.tsx</code></td><td>Its own card (<code>PricingPlanCard</code>), a team-size slider, Monthly / Quarterly / Yearly, a 48-row table plus an "Explain" view.</td><td>Use the homepage card. Move it out of <code>landing-pricing.tsx</code> into one shared card used by both pages, and delete <code>pricing-plan-card.tsx</code>. Three-way audience switch (keep <code>?for=</code>). Monthly / Yearly only. The seat picker you choose (S1 / S2). The comparison you choose (A / B / C) replaces both the table and the explorer. The FAQ's seat answers get rewritten.</td></tr>
+      <tr><td><b>Homepage pricing</b><br><code>components/marketing/landing-pricing.tsx</code> + <code>.module.css</code></td><td>Agent / Team switch, three cards each side, agency shown as its three bands.</td><td>The card moves out into the shared component (no visual change). The switch gets IMO &amp; FMO. The Agency side becomes the one base card with the band picker. The Monthly / Yearly switch is added if you want it here too (Q5).</td></tr>
+      <tr><td><b>Sign-up "Your plan"</b><br><code>/app/onboarding/plan</code>, <code>components/app/plan-choice.tsx</code>, <code>lib/signup/planChoice.ts</code></td><td>The seat count picks one of the agency <i>plans</i> (<code>agencyPlanForSeats</code>, <code>withSeatBands</code>). Seats are stored in <code>signup_selections.seats</code>, add-ons in <code>signup_selection_addons</code>.</td><td>The seat count picks a band <i>add-on</i> on the one base plan. Both tables already exist, so likely no new column. Custom and IMO &amp; FMO end in "Talk to us", not Payment. Rewrite the tests (<code>planChoice</code>, <code>planFit</code>, the <code>planBranching</code> guard).</td></tr>
+      <tr><td><b>Whop</b><br><code>lib/payments/whop/planMapping.ts</code>, table <code>whop_plans</code></td><td>One Whop plan per (plan version, cycle), with <code>UNIQUE (plan_id, billing_cycle)</code>. <b>Add-ons are attached in our database at checkout completion but never charged through Whop.</b> Production env still points at sandbox.</td><td>A seat band has to be charged, so either (a) one Whop plan per base + band + cycle, priced at the total, which needs a <code>band</code> column and a new unique key on <code>whop_plans</code>, or (b) bands stay as plans behind the scenes, while the page shows them as "base + seats". (b) needs no Whop change. Recommend (b) for round 1. Changing band mid-period stays the existing plan-change flow.</td></tr>
+      <tr><td><b>Settings › Plan &amp; billing</b><br><code>billing-settings.tsx</code></td><td>Change plan lists every plan.</td><td>Agency owners change <i>band</i>, not plan. Same proration rule: up applies now, down applies at period end.</td></tr>
+      <tr><td><b>Solo mode, audience checks</b><br><code>lib/tenantTeam/soloRule.ts</code>, <code>tenant_plan_audience</code></td><td>individual / agency.</td><td>IMO &amp; FMO counts as agency (never solo).</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="sec">6 · Questions for You</h2>
+  <div class="qs">
+    <div><b>Band prices.</b> What are the monthly prices for 1–20, 21–50 and 51–100 seats? Is $9,999 for 101–200 the <i>seat add-on</i> (on top of the base) or the <i>total</i>?</div>
+    <div><b>Agent tier names.</b> The catalog today is Ledger $99, Basic $249 and Advanced $449. Did "leisure, basic, advanced" mean these three, or only Basic and Advanced, with Ledger retired? The board's Agent Tiers switch shows both.</div>
+    <div><b>Agency base price.</b> What is the one base price, and does it include the 1–20 band, or is 1–20 an add-on too?</div>
+    <div><b>Yearly.</b> Is yearly "2 months free" (10× monthly, as the agent plans are today) for the agency base and the bands too?</div>
+    <div><b>IMO &amp; FMO.</b> Is it always "Talk to us for pricing"? What do you want listed on its card? Downline agencies are not in the product yet, so the drawing marks those rows "to confirm".</div>
+    <div><b>Homepage.</b> Should the homepage cards get the Monthly / Yearly switch too, or show yearly as the small line under the price, as they do today?</div>
+  </div>
+</div>
+
+<script>
+const body=document.body;
+const PLAN={
+  ledger:{name:"Ledger",m:99,y:990,blurb:"Book of business and commissions."},
+  basic:{name:"Basic",m:249,y:2490,blurb:"Adds acquisition, selling and compliance."},
+  advanced:{name:"Advanced",m:449,y:4490,blurb:"Everything, including retention and insight."},
+};
+// Live catalog 2026-11-19: features and which plan grants them (L Ledger, B Basic, A Advanced, G Agency).
+const F=[
+ ["Book of business","Policies & book of business","LBAG"],["Book of business","Carrier statement import","LBAG"],["Book of business","Commission ledger","LBAG"],["Book of business","Appointments & contract levels","LBAG"],["Book of business","Discrepancy report","LBAG"],
+ ["Acquisition","Inbound live transfers","BAG"],["Acquisition","Outbound dialer","BAG"],["Acquisition","Purchased list import","BAG"],["Acquisition","Duplicate & existing-customer check","BAG"],
+ ["Sell","Quoting","BAG"],["Sell","Dynamic application forms","BAG"],["Sell","Draft-date optimiser","BAG"],["Sell","Callback calendar","BAG"],["Sell","Daily deal flow","BAG"],["Sell","AI underwriting assistant","BAG"],["Sell","Carrier autofill extension","BAG"],["Sell","Sales performance report","BAG"],
+ ["Retention","Predictive lapse scoring","AG"],["Retention","Failed-payment repair","AG"],["Retention","Win-back campaigns","AG"],
+ ["Insight","True cost per acquisition","AG"],["Insight","Persistency by lead source","LBAG"],["Insight","Partner quality","BAG"],
+ ["Partners","Publisher management","BAG"],["Partners","Payout runs","AG"],
+ ["Accounting","Full P&L","AG"],["Accounting","Tax summaries & 1099","AG"],
+ ["Compliance","TCPA / DNC checker","BAG"],["Compliance","Consent certificate storage","BAG"],["Compliance","Litigation packet export","AG"],
+ ["Agency","Agency owner dashboard","G"],["Agency","Producers, hierarchy & overrides","G"],["Agency","Lead routing to producers","G"],["Agency","Producer payout runs & statements","G"],["Agency","Producer scorecards","G"],["Agency","Application review","G"],
+];
+const MODS=[...new Set(F.map(f=>f[0]))];
+// Seat bands: only $9,999 is from the owner; the rest are placeholders (dashed).
+const BASE={m:999,ph:true};
+const BANDS=[{k:"1-20",lbl:"1–20",m:0,ph:true,note:"Included"},{k:"21-50",lbl:"21–50",m:1500,ph:true},{k:"51-100",lbl:"51–100",m:4000,ph:true},{k:"101-200",lbl:"101–200",m:9999,ph:false},{k:"custom",lbl:"Custom",m:null}];
+const st={aud:"agent",cyc:"monthly",band:1,pick:null,openMod:"Retention",showAll:false};
+const $=s=>document.querySelector(s);
+const money=n=>"$"+n.toLocaleString("en-US",{maximumFractionDigits:2,minimumFractionDigits:n%1?2:0});
+const ph=(txt,on)=>on?`<span class="ph">${txt}</span>`:txt;
+const yr=n=>n*10;
+function tiers(){return body.dataset.tiers==="3"?["ledger","basic","advanced"]:["basic","advanced"]}
+function letter(k){return {ledger:"L",basic:"B",advanced:"A",agency:"G",imo:"G"}[k]}
+
+function priceBlock(m,isPh){
+  const mo=st.cyc==="monthly"?m:yr(m)/12;
+  const line2=st.cyc==="monthly"?(m?`or ${money(yr(m))} billed yearly`:""):`${money(yr(m))} billed yearly`;
+  return `<div class="price"><span class="whole">${ph(money(Math.round(mo*100)/100),isPh)}</span><span class="per"><span>/ month (USD)</span><span>${line2}</span></span></div>`;
+}
+function rowsHtml(rows){return `<ul class="rows">${rows.map(r=>`<li data-included="${r.in}" class="${r.lead?"lead":""}"><span class="mark">${r.in?"✓":"×"}</span><span>${r.t}</span></li>`).join("")}</ul>`}
+function card({tab,tier,head,blurb,extra="",rows,cta,i,featured}){
+  const sel=(st.pick??featuredIndex())===i;
+  return `<article class="card ${featured?"featured":""}" data-selected="${sel}" data-i="${i}">${tab?`<span class="tab">${tab}<i></i></span>`:""}
+   <header class="cardHead"><h3 class="tier">${tier}</h3>${head}${blurb?`<p class="blurb">${blurb}</p>`:""}</header>${extra}${rows?rowsHtml(rows):""}
+   <footer class="cardFoot"><span class="planCta">${cta}</span></footer></article>`;
+}
+let featuredIndex=()=>0;
+const AGENT_ROWS=["Policies & book of business","Commission ledger","Inbound live transfers","Outbound dialer","Quoting","TCPA / DNC checker","Predictive lapse scoring","Failed-payment repair","Full P&L","Payout runs"];
+const AGENCY_ROWS=["Agency owner dashboard","Producers, hierarchy & overrides","Lead routing to producers","Producer payout runs & statements","Producer scorecards","Application review"];
+
+function renderCards(){
+  const el=$("#cards");
+  if(st.aud==="agent"){
+    const t=tiers();featuredIndex=()=>t.length===3?1:1;
+    el.innerHTML=`<div class="ladder" data-count="${t.length}">${t.map((k,i)=>{
+      const p=PLAN[k],L=letter(k);
+      const tab=i===featuredIndex()?"Recommended":i===0?"Start here":"Everything";
+      return card({i,featured:i===featuredIndex(),tab,tier:p.name,head:priceBlock(p.m,false),blurb:p.blurb,
+        rows:AGENT_ROWS.map(t=>({t,in:F.find(f=>f[1]===t)[2].includes(L)})),cta:"Start 14-day free trial"});
+    }).join("")}</div>`;
+  } else if(st.aud==="agency"){
+    featuredIndex=()=>0;
+    const b=BANDS[st.band],custom=b.m==null;
+    const total=custom?null:BASE.m+b.m;
+    const head=custom?`<div class="talk">Talk to us for pricing<small>Over 200 seats, or a setup of your own.</small></div>`
+      :priceBlock(total,true).replace("</span></span></div>",`</span><span>${ph(money(BASE.m),true)} base + ${b.m?ph(money(b.m),b.ph):"seats included"}</span></span></div>`).replace(/<span>(or )?\$[\d,]+ billed yearly<\/span>/,"");
+    const rows=[{t:"Everything in Advanced",in:true,lead:true},...AGENCY_ROWS.map(t=>({t,in:true}))];
+    const cta=custom?"Talk to Us":"Start 14-day free trial";
+    if(body.dataset.seat==="S1"){
+      const chips=`<div class="bands"><div class="lbl"><span>Seats</span><span>Everyone who signs in is one seat</span></div><div class="chips" role="radiogroup" aria-label="Seats">${BANDS.map((x,i)=>`<button aria-pressed="${i===st.band}" data-band="${i}">${x.lbl}<span>${x.m==null?"Talk to us":x.m===0?ph("Included",x.ph):"+"+ph(money(st.cyc==="monthly"?x.m:Math.round(yr(x.m)/12)),x.ph)}</span></button>`).join("")}</div></div>`;
+      el.innerHTML=`<div class="ladder" data-count="1">${card({i:0,featured:true,tab:"One price, your seats",tier:"Agency",head,blurb:"Everything in Advanced for your whole team, with routing, payouts and the agency dashboard.",extra:chips,rows,cta})}</div>`;
+    } else {
+      const baseHead=priceBlock(BASE.m,true);
+      const list=`<ul class="bandList" role="radiogroup">${BANDS.map((x,i)=>`<li role="radio" aria-checked="${i===st.band}" data-band="${i}"><span class="r"></span><b>${x.lbl==="Custom"?"Custom":x.lbl+" seats"}</b><em>${x.m==null?"Talk to us":x.m===0?ph("Included",x.ph):"+"+ph(money(st.cyc==="monthly"?x.m:Math.round(yr(x.m)/12)),x.ph)+" / mo"}</em></li>`).join("")}</ul>`;
+      const tot=custom?`<div class="total"><span>Your total</span><strong style="font-size:20px">Talk to us</strong></div>`:`<div class="total"><span>Base + seats, per month</span><strong>${ph(money(st.cyc==="monthly"?total:Math.round(yr(total)/12)),true)}</strong></div>`;
+      featuredIndex=()=>1;
+      el.innerHTML=`<div class="ladder" data-count="2">${card({i:0,tab:"Base",tier:"Agency",head:baseHead,blurb:"Everything in Advanced for your whole team, with routing, payouts and the agency dashboard.",rows,cta:"See What's Included"})}${card({i:1,featured:true,tab:"Add-on",tier:"Seats",head:`<p class="blurb" style="margin-top:14px">Pick the band your team fits in. Move up the day you grow.</p>`,extra:list+tot,cta})}</div>`;
+    }
+  } else {
+    featuredIndex=()=>0;
+    const rows=[{t:"Everything in Agency, any number of seats",in:true,lead:true},{t:"Downline agencies under one roof (to confirm)",in:true},{t:"Overrides across agencies (to confirm)",in:true},{t:"Onboarding and data move done with you",in:true},{t:"A named contact at Insurvas",in:true}];
+    el.innerHTML=`<div class="ladder" data-count="1">${card({i:0,featured:true,tab:"Custom",tier:"IMO & FMO",head:`<div class="talk">Talk to us for pricing<small>Priced to your downline and how you pay it.</small></div>`,blurb:"For marketing organisations running agencies and agents beneath them.",rows,cta:"Talk to Us"})}</div>`;
+  }
+}
+
+// Columns for the comparison: agent tiers + Agency + IMO & FMO.
+function cols(){return [...tiers().map(k=>({k,name:PLAN[k].name,L:letter(k),price:money(st.cyc==="monthly"?PLAN[k].m:Math.round(yr(PLAN[k].m)/12))+" / mo",seats:"1"})),
+  {k:"agency",name:"Agency",L:"G",price:"From "+ph(money(BASE.m),true)+" / mo",seats:"1–200"},{k:"imo",name:"IMO & FMO",L:"G",price:"Talk to us",seats:"Any"}]}
+function head(c){return `<thead><tr><th style="width:30%"></th>${c.map(x=>`<th><span class="pn">${x.name}</span><span class="pp">${x.price}</span><span class="pc">${x.k==="imo"?"Talk to Us":"Start Trial"}</span></th>`).join("")}</tr></thead>`}
+const tick='<span class="tick">✓</span>',dash='<span class="dash">—</span>';
+
+function renderA(c){
+  const diff=F.filter(f=>new Set(c.map(x=>f[2].includes(x.L))).size>1), same=F.filter(f=>!diff.includes(f));
+  let h=`<table class="tbl">${head(c)}<tbody>
+   <tr class="grp"><td colspan="${c.length+1}">The Basics</td></tr>
+   <tr><td>Seats</td>${c.map(x=>`<td class="val">${x.seats}</td>`).join("")}</tr>
+   <tr><td>Free trial</td>${c.map(x=>`<td class="val">${x.k==="imo"?"On request":"14 days"}</td>`).join("")}</tr>`;
+  for(const m of MODS){const r=diff.filter(f=>f[0]===m);if(!r.length)continue;
+    h+=`<tr class="grp"><td colspan="${c.length+1}">${m}</td></tr>`+r.map(f=>`<tr><td>${f[1]}</td>${c.map(x=>`<td>${f[2].includes(x.L)?tick:dash}</td>`).join("")}</tr>`).join("");}
+  if(st.showAll){h+=`<tr class="grp"><td colspan="${c.length+1}">On Every Plan</td></tr>`+same.map(f=>`<tr class="same"><td>${f[1]}</td>${c.map(()=>`<td>${tick}</td>`).join("")}</tr>`).join("");}
+  h+=`</tbody></table><div class="more"><button data-act="all">${st.showAll?"Hide the shared features":`Show the ${same.length} features on every plan`}</button></div>`;
+  $("#cmpA").innerHTML=h;
+}
+function renderB(c){
+  let h=`<table class="tbl">${head(c)}<tbody>`;
+  for(const m of MODS){const r=F.filter(f=>f[0]===m),open=st.openMod===m;
+    h+=`<tr class="modrow" data-mod="${m}" aria-expanded="${open}"><td>${m}</td>${c.map(x=>{const n=r.filter(f=>f[2].includes(x.L)).length;return `<td class="cnt ${n===r.length?"full":""}">${n===0?"—":n===r.length?`All ${n}`:`${n} of ${r.length}`}</td>`}).join("")}</tr>`;
+    if(open)h+=r.map(f=>`<tr class="inner"><td>${f[1]}</td>${c.map(x=>`<td>${f[2].includes(x.L)?tick:dash}</td>`).join("")}</tr>`).join("");}
+  $("#cmpB").innerHTML=h+`</tbody></table>`;
+}
+const JOBS=[
+ ["Keep your book and commissions","Policies, statements, ledger, discrepancies",{L:"Included",B:"Included",A:"Included",G:"Included"}],
+ ["Bring in and dial leads","Transfers, dialer, list import",{L:"—",B:"Included",A:"Included",G:"Plus routing to producers"}],
+ ["Quote and submit applications","Quoting, forms, callbacks, deal flow",{L:"—",B:"Included",A:"Included",G:"Plus application review"}],
+ ["Keep policies on the books","Lapse scoring, payment repair, win-back",{L:"—",B:"—",A:"Included",G:"Included"}],
+ ["Know your real numbers","Cost per sale, persistency, P&L, 1099",{L:"Persistency only",B:"Persistency, partner quality",A:"Everything",G:"Plus producer scorecards"}],
+ ["Pay partners and producers","Publishers, payout runs",{L:"—",B:"Publisher records",A:"Partner payout runs",G:"Plus producer payouts"}],
+ ["Stay compliant","DNC checks, consent, litigation packets",{L:"—",B:"DNC and consent",A:"Plus litigation packets",G:"Included"}],
+ ["Run a team","Dashboard, hierarchy, overrides",{L:"—",B:"—",A:"—",G:"Included"}],
+];
+function renderC(c){
+  const h=`<table class="tbl jobs">${head(c)}<tbody>${JOBS.map(j=>`<tr><td>${j[0]}<small>${j[1]}</small></td>${c.map(x=>`<td>${x.k==="imo"?"Everything in Agency":j[2][x.L]==="—"?dash:j[2][x.L]}</td>`).join("")}</tr>`).join("")}</tbody></table>
+   <div class="more"><button>See Every Feature</button></div>
+   <div class="cap" style="color:var(--muted)">Drawn open: the side panel "See Every Feature" opens, one plan at a time.</div>
+   <div class="sheetHost"><div class="shade"></div><aside class="sheet"><button class="sx" aria-label="Close">×</button><h4>Every Feature</h4>
+    <div class="tabs">${c.filter(x=>x.k!=="imo").map((x,i)=>`<span class="${x.k==="advanced"?"on":""}">${x.name}</span>`).join("")}</div>
+    ${MODS.map(m=>`<div class="mg">${m}</div><ul>${F.filter(f=>f[0]===m).map(f=>{const on=f[2].includes("A");return `<li class="${on?"":"no"}">${on?tick:dash}${f[1]}</li>`}).join("")}</ul>`).join("")}
+   </aside></div>`;
+  $("#cmpC").innerHTML=h;
+}
+const COPY={
+  agent:["Priced per workspace. Never per lead.","For an independent agent working on their own. Pick the tier, and move up the day you need more."],
+  agency:["One base price. Seats in bands.","Everything in Advanced for your whole team. Pick the band your team fits in, from 1 to 200 seats, or talk to us beyond that."],
+  imo:["Built for IMOs and FMOs.","Agencies and agents beneath you, on one platform. We price it to your downline, so talk to us."],
+};
+function render(){
+  $("#heroTitle").textContent=COPY[st.aud][0];$("#heroLede").textContent=COPY[st.aud][1];
+  document.querySelectorAll("[data-aud]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.aud===st.aud));
+  document.querySelectorAll("[data-cyc]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.cyc===st.cyc));
+  document.querySelectorAll(".bar [data-k]").forEach(b=>{const v={theme:body.classList.contains("dark")?"dark":"light",tiers:body.dataset.tiers,seat:body.dataset.seat,cmp:body.dataset.cmp}[b.dataset.k];b.setAttribute("aria-pressed",b.dataset.v===v)});
+  renderCards();const c=cols();renderA(c);renderB(c);renderC(c);
+  $("#cmpLede").textContent=body.dataset.cmp==="A"?"Only what differs. Everything else is on every plan.":body.dataset.cmp==="B"?"One row per module. Open a row to see its features.":"What each plan does for you, in plain words.";
+}
+document.addEventListener("click",e=>{
+  const t=e.target.closest("button,[data-band],.card,.modrow");if(!t)return;
+  if(t.dataset.k){const{k,v}=t.dataset;if(k==="theme"){body.classList.toggle("dark",v==="dark");body.classList.toggle("light",v==="light")}else body.dataset[k]=v;st.pick=null;}
+  else if(t.dataset.aud){st.aud=t.dataset.aud;st.pick=null}
+  else if(t.dataset.cyc){st.cyc=t.dataset.cyc}
+  else if(t.dataset.band){st.band=+t.dataset.band}
+  else if(t.dataset.act==="all"){st.showAll=!st.showAll}
+  else if(t.classList.contains("modrow")){st.openMod=st.openMod===t.dataset.mod?null:t.dataset.mod}
+  else if(t.classList.contains("card")){st.pick=+t.dataset.i}
+  else return;
+  render();
+});
+render();
+</script>
+</body>
+</html>

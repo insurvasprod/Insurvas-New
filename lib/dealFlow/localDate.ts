@@ -28,6 +28,34 @@ export function localRangeToUtc(from: string, to: string, zone: string): { gte: 
   };
 }
 
+function knownZone(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value.trim() });
+    return value.trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The zone whose midnight starts the Daily deal flow's "today" (and the day funnel's range): the same zone the
+ * deals were filed in. A partner submission files its deal on the agency's day, else the partner's own
+ * (lib/agentTemplates/intake.ts), so without an agency timezone the partners' zone is the agency's day, when
+ * every partner shares one. Null when nothing settles it (no agency zone, partners in different zones or none):
+ * the page then falls back to the browser's day as before.
+ *
+ * Never the viewer's own display timezone (LA-8.2): that is for showing times, and a viewer in Europe looking
+ * at a New York agency at 00:30 would otherwise open on a day with no deals in it (2026-11-20, demo.basic: a
+ * deal filed 2026-11-19 in America/New_York, the page opened on the browser's 2026-11-20 and counted 0).
+ */
+export function dealDayZone(workspaceZone: string | null | undefined, partnerZones: ReadonlyArray<string | null | undefined>): string | null {
+  const agency = knownZone(workspaceZone);
+  if (agency) return agency;
+  const zones = new Set(partnerZones.map(knownZone).filter((zone): zone is string => zone !== null));
+  return zones.size === 1 ? [...zones][0] : null;
+}
+
 export function intakeLocalDate(timeZone: string, at: Date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone,

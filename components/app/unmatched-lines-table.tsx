@@ -22,6 +22,7 @@ import { cleanPolicyNumber, statementHref, statementName } from "@/components/ap
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarCheckbox, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/app/book-of-business-views";
 import { STATEMENT_KIND_LABELS, statementMoney, statementPeriod, type UnmatchedStatementLine } from "@/lib/ledger/statementConstants";
@@ -125,7 +126,7 @@ export function UnmatchedLinesTable({ lines, leftUnmatchedCount = 0, canWrite, w
                 <th>Insured</th>
                 <th className="w-[120px]">Kind</th>
                 <th className="w-[130px] text-right">Amount</th>
-                <th className="w-[110px]">Next step</th>
+                <th className="w-[110px] text-right">Next step</th>
               </tr>
             </thead>
             <tbody>
@@ -146,7 +147,7 @@ export function UnmatchedLinesTable({ lines, leftUnmatchedCount = 0, canWrite, w
                     <td className="whitespace-nowrap">{line.insuredName ?? <span className="text-muted-foreground">—</span>}</td>
                     <td className="whitespace-nowrap">{line.kind ? STATEMENT_KIND_LABELS[line.kind] : <span className="text-muted-foreground">—</span>}</td>
                     <td className="whitespace-nowrap text-right tabular-nums">{line.amountCents === null ? <span className="text-muted-foreground">—</span> : statementMoney(line.amountCents)}</td>
-                    <td><Link href={open} className="whitespace-nowrap hover:underline">{canWrite ? "Match ›" : "Open ›"}</Link></td>
+                    <RowActionCell><RowAction href={open}>{canWrite ? "Match" : "Open"}</RowAction></RowActionCell>
                   </tr>
                 );
               })}

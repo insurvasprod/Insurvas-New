@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { notify } from "@/lib/notify";
 import type { SubmissionView } from "@/lib/applications/types";
+import { gateBlocks, gateLine } from "@/lib/applications/submitGateRules";
 
 import { QaVerdictChip, shortDate } from "@/components/app/applications/parts";
 import { useWorkspace } from "@/components/app/applications/workspace/context";
@@ -86,13 +87,17 @@ function CaptureForm({ open, onOpenChange, existing, extensionDetected, seed }: 
   const atValid = atIso !== null && new Date(atIso).getTime() <= openedAt + 10 * 60_000;
   const zone = zoneShortName(atIso ? new Date(atIso) : new Date(openedAt), timeZone);
   const verdict = existing?.qaVerdict ?? qa.verdict;
+  // AG-1.10 · the producer gate is part of the pre-check: said here, before Record, not after a 409.
+  const gate = existing ? null : caseView.submitGate;
+  const gateText = gateBlocks(gate) ? gateLine(gate) : null;
+  const blocked = gateText !== null;
   const canAttach = !existing?.hasConfirmation;
   const subtitle = [attempt.carrierName, `attempt ${attempt.attemptNo}`, caseView.clientName].filter(Boolean).join(" · ");
   const hint = check.example ? `${check.carrierName ?? attempt.carrierName ?? "This carrier"} uses ${check.example}.` : "Copy it from the carrier's confirmation screen.";
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!atValid || saving) return;
+    if (!atValid || saving || blocked) return;
     setSaving(true);
     setError(null);
     try {
@@ -119,7 +124,13 @@ function CaptureForm({ open, onOpenChange, existing, extensionDetected, seed }: 
       }
 
       const recorded = await actions.recordSubmission({ reference: ref || null, referenceKind: kind, submittedAt: (atIso ?? ""), submittedVia: via });
-      if (!recorded) { setError("The submission wasn't recorded — everything you typed is still here. Try again."); return; }
+      if ("error" in recorded) {
+        // The server's own reason (a 409 says what is missing), then that everything typed is kept. A
+        // refusal may mean the producer gate changed since the step loaded: read the case again.
+        setError(`${recorded.error.replace(/\.?\s*$/, ".")} Everything you typed is still here.`);
+        if (!sample) void actions.refresh();
+        return;
+      }
       if (sample) {
         updateAttempt({ status: "submitted", submittedAt: (atIso ?? ""), submissions: [...attempt.submissions, { id: recorded.submissionId, attemptNo: attempt.attemptNo, carrierReference: ref || null, referenceKind: ref ? kind : null, policyNumber: ref && kind === "policy_no" ? ref : null, submittedAt: (atIso ?? ""), submittedVia: via, hasConfirmation: Boolean(file), qaVerdict: verdict }] });
         notify.done("Sample data — nothing was saved");
@@ -155,7 +166,7 @@ function CaptureForm({ open, onOpenChange, existing, extensionDetected, seed }: 
       onPaste={canAttach ? (e) => confirmation.onPaste(e) : undefined}
       actions={<>
         <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving} title={saving ? "Saving…" : undefined}>Cancel</Button>
-        <Button type="submit" disabled={!atValid || saving} title={!atValid ? "Enter when it was submitted" : saving ? "Saving…" : undefined}>
+        <Button type="submit" disabled={!atValid || saving || blocked} title={gateText ?? (!atValid ? "Enter when it was submitted" : saving ? "Saving…" : undefined)}>
           {saving ? "Saving…" : existing ? "Save" : "Record submission"}
         </Button>
       </>}
@@ -216,8 +227,9 @@ function CaptureForm({ open, onOpenChange, existing, extensionDetected, seed }: 
 
       <div className="flex items-center justify-between gap-3 rounded-[8px] bg-[var(--surface-alt)] px-3 py-2 text-sm">
         <span className="text-[var(--muted)]" title="Frozen with the submission and never changed afterwards">{existing ? "Check at submission" : "Check it will be frozen with"}</span>
-        <QaVerdictChip verdict={verdict} />
+        {blocked ? <StatusChip tone="danger">Can&apos;t submit yet</StatusChip> : <QaVerdictChip verdict={verdict} />}
       </div>
+      {gateText && <p role="status" className="m-0 text-sm text-[var(--error-ink)]">{gateText}</p>}
       {error && <p role="alert" className="text-sm text-[var(--error-ink)]">{error}</p>}
     </Overlay>
   );

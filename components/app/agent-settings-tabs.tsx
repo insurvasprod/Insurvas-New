@@ -16,6 +16,7 @@ import { LoadingRows } from "@/components/ui/page-states";
 import { useStepDirection } from "@/components/ui/use-step-direction";
 import { groupSections, parseSettingsHash, searchSettings, sectionHref, visibleSections } from "@/lib/settings/registry";
 import { revealAnchor } from "@/lib/settings/revealAnchor";
+import { samePageHash } from "@/lib/settings/samePageHash";
 import type { SettingsSection } from "@/lib/settings/sections";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
 import { cn } from "@/lib/utils";
@@ -270,6 +271,24 @@ export function AgentSettingsTabs({
     window.addEventListener("hashchange", syncFromHash);
     return () => window.removeEventListener("hashchange", syncFromHash);
   }, [inPage]);
+
+  // A <Link> to "/app/settings#form-templates" from inside Settings (Products "+ Form", Sales process,
+  // Lead posting) is a router push, which never fires `hashchange`: the address changed and the panel
+  // didn't until a reload. Such clicks set location.hash instead, which the listeners above (and each
+  // panel's own) follow. Capture phase, so Next's Link sees the click as handled and stays out of it.
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const link = (event.target as Element | null)?.closest?.("a[href]");
+      if (!(link instanceof HTMLAnchorElement) || (link.target && link.target !== "_self") || link.hasAttribute("download")) return;
+      const hash = samePageHash(link.getAttribute("href"), window.location);
+      if (hash === null) return;
+      event.preventDefault();
+      window.location.hash = hash;
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, []);
 
   // The open section's menu item in view inside the menu (not the page), so a section low in the
   // list, like Accounting on its own route, is visibly the current one.

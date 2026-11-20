@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
@@ -113,7 +114,7 @@ export function StatementsTable({ statements, view, waitingCents, initialCarrier
               <th className="w-[120px] text-right">Accepted</th>
               <th className="w-[120px]">Imported</th>
               <th className="w-[170px]">Status</th>
-              <th className="w-[110px]">Next step</th>
+              <th className="w-[110px] text-right">Next step</th>
             </tr>
           </thead>
           <tbody className="m-seq">
@@ -138,9 +139,9 @@ export function StatementsTable({ statements, view, waitingCents, initialCarrier
                   </td>
                   <td className="whitespace-nowrap tabular-nums text-muted-foreground">{statementDay(statement.uploadedAt)}</td>
                   <td><StatusChip tone={chip.tone} title={chip.title}>{chip.text}</StatusChip></td>
-                  <td>
-                    <Link href={next.tab ? statementHref(statement.id, view, { tab: next.tab }) : open} className="whitespace-nowrap hover:underline" title={next.text.replace(/ ›$/, "")}>{act ? "Review ›" : "Open ›"}</Link>
-                  </td>
+                  <RowActionCell>
+                    <RowAction href={next.tab ? statementHref(statement.id, view, { tab: next.tab }) : open} title={next.text.replace(/ ›$/, "")}>{act ? "Review" : "Open"}</RowAction>
+                  </RowActionCell>
                 </tr>
               );
             })}

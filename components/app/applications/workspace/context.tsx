@@ -51,7 +51,7 @@ export type WorkspaceActions = {
   saveQuote: (input: QuoteSave) => Promise<{ id: string; warnings: { code: string; message: string }[] } | null>;
   selectQuote: (quoteId: string) => Promise<boolean>;
   transition: (to: "ready" | "draft" | "closed", extra?: { outcome?: ApplicationOutcome; reasonCode?: string | null; reasonText?: string | null; policyNumber?: string | null; issuedOn?: string | null }) => Promise<{ policy?: { linked: boolean; message: string | null } | null } | null>;
-  recordSubmission: (input: { reference: string | null; referenceKind: "application_no" | "policy_no"; submittedAt: string | null; submittedVia: "extension" | "copy_assist" | "carrier_portal_manual"; notes?: string | null }) => Promise<{ submissionId: string; duplicate: { applicationId: string; caseId: string } | null } | null>;
+  recordSubmission: (input: { reference: string | null; referenceKind: "application_no" | "policy_no"; submittedAt: string | null; submittedVia: "extension" | "copy_assist" | "carrier_portal_manual"; notes?: string | null }) => Promise<{ submissionId: string; duplicate: { applicationId: string; caseId: string } | null } | { error: string }>;
   setReference: (submissionId: string, input: { reference?: string | null; referenceKind?: "application_no" | "policy_no"; policyNumber?: string | null }) => Promise<boolean>;
   nextAttempt: () => Promise<boolean>;
   closeCase: (reasonCode: string, reasonText?: string | null) => Promise<boolean>;
@@ -263,7 +263,17 @@ export function WorkspaceProvider({ initial, sample, timeZone, seatReadOnly = fa
       saveQuote: async (input) => run<{ id: string; warnings: { code: string; message: string }[] }>(() => call(`/api/app/applications/cases/${caseView.caseId}/quotes`, { method: "POST", body: { insured_role: insured, ...input, riders: input.riders ?? [], rating_inputs: input.rating_inputs ?? {} } })),
       selectQuote: async (quoteId) => ok(await run(() => call(`/api/app/quotes/${quoteId}/select`, { method: "POST" }))),
       transition: async (to, extra = {}) => run(() => call(`${aUrl}/transition`, { method: "POST", body: { to, outcome: extra.outcome ?? null, reason_code: extra.reasonCode ?? null, reason_text: extra.reasonText ?? null, policy_number: extra.policyNumber ?? null, issued_on: extra.issuedOn ?? null } })),
-      recordSubmission: async (input) => run(() => call(`${aUrl}/submissions`, { method: "POST", body: { reference: input.reference, reference_kind: input.referenceKind, submitted_at: input.submittedAt, submitted_via: input.submittedVia, notes: input.notes ?? null } })),
+      // The refusal comes back as words (walk 2026-11-20: a 409 cannot_submit read as "try again"): the
+      // dialog shows the server's own reason inline, so no second toast is raised for it here.
+      recordSubmission: async (input) => {
+        let refusal = "";
+        const saved = await run<{ submissionId: string; duplicate: { applicationId: string; caseId: string } | null }>(async () => {
+          const r = await call<{ submissionId: string; duplicate: { applicationId: string; caseId: string } | null }>(`${aUrl}/submissions`, { method: "POST", body: { reference: input.reference, reference_kind: input.referenceKind, submitted_at: input.submittedAt, submitted_via: input.submittedVia, notes: input.notes ?? null } });
+          if (!r.ok) refusal = r.error;
+          return r;
+        }, { quiet: true });
+        return saved ?? { error: refusal || "The submission wasn't recorded." };
+      },
       setReference: async (sid, input) => ok(await run(() => call(`${aUrl}/submissions/${sid}`, { method: "PATCH", body: { reference: input.reference, reference_kind: input.referenceKind, policy_number: input.policyNumber } }))),
       nextAttempt: async () => {
         const r = await run<{ applicationId: string }>(() => call(`${aUrl}/next-attempt`, { method: "POST" }));

@@ -136,6 +136,52 @@ export function durationLabel(seconds: number): string {
   return h % 24 ? `${d}d ${h % 24}h` : `${d}d`;
 }
 
+/** The middle wait from a lead arriving to its first dial, in seconds, over the leads that were dialled; null when none was. */
+export function medianSecondsToDial(leads: ReadonlyArray<{ created_at: string; first_dial_at?: string | null }>): number | null {
+  const waits = leads
+    .map((lead) => (lead.first_dial_at ? (Date.parse(lead.first_dial_at) - Date.parse(lead.created_at)) / 1000 : NaN))
+    .filter((seconds) => Number.isFinite(seconds) && seconds >= 0)
+    .sort((x, y) => x - y);
+  if (!waits.length) return null;
+  const mid = Math.floor(waits.length / 2);
+  return waits.length % 2 ? waits[mid] : (waits[mid - 1] + waits[mid]) / 2;
+}
+
+/**
+ * A taken inbound transfer is a called lead (Basic walk 2026-11-20). `first_dial_at` is the dialer's
+ * first dial click (20260925711500), which an inbound call never makes: the caller rings in and an agent
+ * takes them (lead_queue.claimed_at on a partner's transfer). Without this, a transfer that was taken and
+ * worked stayed "not called" in the strip, the funnel, the sources and speed to lead.
+ */
+export type TakenTransfer = { lead_id: string; claimed_at: string | null };
+
+/** Each lead's first take of an inbound transfer, earliest first; rows never taken are left out. */
+export function takenAtByLead(rows: readonly TakenTransfer[]): Map<string, string> {
+  const taken = new Map<string, string>();
+  for (const row of rows) {
+    if (!row.claimed_at || !Number.isFinite(Date.parse(row.claimed_at))) continue;
+    const before = taken.get(row.lead_id);
+    if (!before || Date.parse(row.claimed_at) < Date.parse(before)) taken.set(row.lead_id, row.claimed_at);
+  }
+  return taken;
+}
+
+/** The lead's first contact: its first dial or its first take as an inbound transfer, whichever came first. */
+export function firstContactAt(firstDialAt: string | null | undefined, takenAt: string | null | undefined): string | null {
+  if (!firstDialAt) return takenAt ?? null;
+  if (!takenAt) return firstDialAt;
+  return Date.parse(takenAt) < Date.parse(firstDialAt) ? takenAt : firstDialAt;
+}
+
+/** Leads with `first_dial_at` read as first contact: a taken inbound transfer counts as called. */
+export function withInboundTaken<T extends { id: string; first_dial_at?: string | null }>(leads: readonly T[], taken: ReadonlyMap<string, string>): T[] {
+  if (!taken.size) return [...leads];
+  return leads.map((lead) => {
+    const at = taken.get(lead.id);
+    return at ? { ...lead, first_dial_at: firstContactAt(lead.first_dial_at, at) } : lead;
+  });
+}
+
 export type NeedCounts = {
   notCalled: { count: number; capped: boolean; href: string } | null;
   duplicates: { count: number; href: string } | null;
@@ -233,6 +279,8 @@ export type LeadsViewData = {
     | { kind: "in"; leadsIn: number; called: number; href: string }
     | null;
   speed: { items: DashItem[]; href: string } | null;
+  /** This month's pulse for the strip: the median wait to a first dial, and the leads not dialled yet. */
+  pulse: { medianSeconds: number | null; notCalled: number; ready: number | null } | null;
   period: { from: string; to: string };
 };
 
@@ -300,8 +348,10 @@ export async function loadLeadsView(props: DashViewProps): Promise<LeadsViewData
     if (notCalledHref) tasks.push(settle(async () => {
       // Routed to someone (an owner on the open queue row) over two hours ago, and never dialled.
       const cutoff = new Date(now - NOT_CALLED_AFTER_MS).toISOString();
-      const queued = await paged<{ lead_id: string }>(() => scoped(db().from("lead_queue").select("lead_id").eq("tenant_id", tenantId).in("status", ["unclaimed", "claimed"]).not("owner_user_id", "is", null).lt("queued_at", cutoff).order("queued_at", { ascending: true }), "owner_user_id"), 5000);
-      const ids = [...new Set(queued.rows.map((row) => row.lead_id))];
+      const queued = await paged<{ lead_id: string; partner_id: string | null; claimed_at: string | null }>(() => scoped(db().from("lead_queue").select("lead_id, partner_id, claimed_at").eq("tenant_id", tenantId).in("status", ["unclaimed", "claimed"]).not("owner_user_id", "is", null).lt("queued_at", cutoff).order("queued_at", { ascending: true }), "owner_user_id"), 5000);
+      // An inbound transfer an agent has taken was called (takenAtByLead), whatever its dial column says.
+      const taken = takenAtByLead(queued.rows.filter((row) => row.partner_id));
+      const ids = [...new Set(queued.rows.map((row) => row.lead_id))].filter((id) => !taken.has(id));
       // The 300-id pieces a few at a time (lib/retention/batch's bound), not one after another.
       const { mapLimit, READ_CONCURRENCY } = await import("@/lib/retention/batch");
       const pieces: string[][] = [];
@@ -337,14 +387,21 @@ export async function loadLeadsView(props: DashViewProps): Promise<LeadsViewData
   /* This month's leads: the chart, the donut, and the leads-only fallbacks */
   type MonthLead = { id: string; created_at: string; first_dial_at: string | null; campaign_id: string | null; partner_id: string | null };
   const monthRead = workspace ? settle(async () => {
-    const [leads, calls, visible] = await Promise.all([
+    const [leads, calls, transfers, visible] = await Promise.all([
       paged<MonthLead>(() => db().from("agent_leads").select("id, created_at, first_dial_at, campaign_id, partner_id").eq("tenant_id", tenantId).gte("created_at", range.gte).lt("created_at", range.lt).order("created_at", { ascending: true })),
       paged<{ lead_id: string; dial_clicked_at: string }>(() => scoped(db().from("tenant_call_attempts").select("lead_id, dial_clicked_at").eq("tenant_id", tenantId).gte("attempted_at", range.gte).lt("attempted_at", range.lt).not("dial_clicked_at", "is", null).order("attempted_at", { ascending: true }), "agent_id")),
+      // Inbound transfers taken this month: each is a call (takenAtByLead), by whoever took it.
+      paged<{ lead_id: string; claimed_at: string; owner_user_id: string | null }>(() => db().from("lead_queue").select("lead_id, claimed_at, owner_user_id").eq("tenant_id", tenantId).not("partner_id", "is", null).gte("claimed_at", range.gte).lt("claimed_at", range.lt).order("claimed_at", { ascending: true })),
       visibleRead,
     ]);
     if (scope !== null && visible === null) throw new Error("scope unavailable");
-    const mine = visible ? leads.rows.filter((lead) => visible.has(lead.id)) : leads.rows;
-    return { leads: mine, calls: calls.rows, capped: leads.capped || calls.capped };
+    // A lead this session sees counts as called whoever took it; the chart's own calls stay the session's, as dials do.
+    const taken = takenAtByLead(transfers.rows);
+    const mine = withInboundTaken(visible ? leads.rows.filter((lead) => visible.has(lead.id)) : leads.rows, taken);
+    const takes = transfers.rows
+      .filter((row) => scope === null || (row.owner_user_id !== null && scope.includes(row.owner_user_id)))
+      .map((row) => ({ lead_id: row.lead_id, dial_clicked_at: row.claimed_at }));
+    return { leads: mine, calls: [...calls.rows, ...takes], capped: leads.capped || calls.capped || transfers.capped };
   }) : Promise.resolve(null);
 
   /* The vendor scorecard: funnel, vendors and spend (agency-wide only, the true CPA page's gate) */
@@ -363,11 +420,17 @@ export async function loadLeadsView(props: DashViewProps): Promise<LeadsViewData
     const rows = ((data ?? []) as Array<{ id: string; created_at: string; posted_at: string | null; first_dial_at: string | null; values: Record<string, unknown> | null }>)
       .filter((row) => !visible || visible.has(row.id))
       .slice(0, 8);
-    return rows.map((row) => ({ id: row.id, name: leadName(row.values), arrivedAt: row.posted_at ?? row.created_at, firstDialAt: row.first_dial_at }));
+    // A taken inbound transfer was called when it was taken (takenAtByLead); a failed read leaves the dials alone.
+    const undialled = rows.filter((row) => !row.first_dial_at).map((row) => row.id);
+    const transfers = undialled.length
+      ? await db().from("lead_queue").select("lead_id, claimed_at").eq("tenant_id", tenantId).in("lead_id", undialled).not("partner_id", "is", null).not("claimed_at", "is", null)
+      : { data: [], error: null };
+    const taken = transfers.error ? new Map<string, string>() : takenAtByLead((transfers.data ?? []) as TakenTransfer[]);
+    return rows.map((row) => ({ id: row.id, name: leadName(row.values), arrivedAt: row.posted_at ?? row.created_at, firstDialAt: firstContactAt(row.first_dial_at, taken.get(row.id)) }));
   }) : Promise.resolve(null);
 
   /* Ready to dial: the non-money hero */
-  const readyRead = !money && dialer ? settle(async () => {
+  const readyRead = dialer ? settle(async () => {
     const result = await scoped(db().from("lead_queue").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "unclaimed").is("partner_id", null), "owner_user_id");
     if (result.error) throw new Error(result.error.message);
     return (result.count ?? 0) as number;
@@ -463,6 +526,7 @@ export async function loadLeadsView(props: DashViewProps): Promise<LeadsViewData
     vendors,
     hero,
     speed: speed && workspace ? { items: speedItems(speed, now, (id) => `${workspace}/${id}`), href: workspace } : null,
+    pulse: monthData && workspace ? { medianSeconds: medianSecondsToDial(monthData.leads), notCalled: monthData.leads.filter((lead) => !lead.first_dial_at).length, ready: dialer ? ready : null } : null,
     period: { from: month.from, to: month.to },
   };
 }

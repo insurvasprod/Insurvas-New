@@ -33,6 +33,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { Pager } from "@/components/ui/pager";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
@@ -414,7 +415,7 @@ function ChangesTab({ head, rows, notIn, search }: { head: FileHead; rows: FileR
       >
         {notIn.policies.length === 0 ? <EmptyState title={notIn.comparedWith ? "Every policy is still here" : "Nothing to compare with"} hint={notIn.comparedWith ? "Each policy in the previous file is in this one too." : "The next file of this carrier and type is compared with this one."} /> : (
           <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
-            <thead><tr><th>Policy</th><th>Client</th><th>Last seen</th><th>Last status</th><th>What happens</th><th>Next step</th></tr></thead>
+            <thead><tr><th>Policy</th><th>Client</th><th>Last seen</th><th>Last status</th><th>What happens</th><th className="text-right">Next step</th></tr></thead>
             <tbody>
               {/* One line per row (owner 2026-11-11): the client and the last status are their own columns. */}
               {notIn.policies.slice(0, 200).map((p) => (
@@ -424,7 +425,7 @@ function ChangesTab({ head, rows, notIn, search }: { head: FileHead; rows: FileR
                   <td className="whitespace-nowrap tabular-nums text-muted-foreground">{fileDay(p.lastSeen)}</td>
                   <td className="whitespace-nowrap capitalize">{p.lastStatus ? p.lastStatus.replaceAll("_", " ") : <span className="text-muted-foreground">—</span>}</td>
                   <td><StatusChip tone="neutral">Watched</StatusChip></td>
-                  <td className="whitespace-nowrap">{carrierId ? <Link href={policyHref(carrierId, p.policyNumber)} className="hover:underline">Open ›</Link> : <span className="text-muted-foreground">—</span>}</td>
+                  <RowActionCell>{carrierId ? <RowAction href={policyHref(carrierId, p.policyNumber)}>Open</RowAction> : <span className="text-muted-foreground">—</span>}</RowActionCell>
                 </tr>
               ))}
             </tbody>
@@ -441,7 +442,7 @@ function ChangesTab({ head, rows, notIn, search }: { head: FileHead; rows: FileR
       >
         {list.length === 0 ? <EmptyState title="This file changed nothing" hint={head.previous ? "Every policy reads as it did in the previous file." : "The first file of a carrier and type is where each policy's history starts."} /> : (
           <table className="portal-lead-table w-full min-w-[720px] text-left text-sm">
-            <thead><tr><th>Policy</th><th>Client</th><th>Field</th><th>Change</th><th>Next step</th></tr></thead>
+            <thead><tr><th>Policy</th><th>Client</th><th>Field</th><th>Change</th><th className="text-right">Next step</th></tr></thead>
             <tbody>
               {/* One line per row, one text colour (owner 2026-11-11): the client is its own column, the change plain. */}
               {list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((c) => (
@@ -450,7 +451,7 @@ function ChangesTab({ head, rows, notIn, search }: { head: FileHead; rows: FileR
                   <td className="whitespace-nowrap">{c.row.clientName ?? <span className="text-muted-foreground">Row {c.row.rowNumber}</span>}</td>
                   <td className="whitespace-nowrap">{c.field}</td>
                   <td className="whitespace-nowrap">{c.isNew ? "New" : `${c.from} → ${c.to}`}</td>
-                  <td className="whitespace-nowrap">{carrierId && c.row.policyNumber ? <Link href={policyHref(carrierId, c.row.policyNumber, "history")} className="hover:underline">History ›</Link> : <span className="text-muted-foreground">—</span>}</td>
+                  <RowActionCell>{carrierId && c.row.policyNumber ? <RowAction href={policyHref(carrierId, c.row.policyNumber, "history")}>History</RowAction> : <span className="text-muted-foreground">—</span>}</RowActionCell>
                 </tr>
               ))}
             </tbody>
@@ -498,7 +499,7 @@ async function CommissionsTab({ tenantId, head, search }: { tenantId: string; he
       >
         {shown.length === 0 ? <EmptyState title="No line here" hint="Choose another filter." /> : (
           <table className="portal-lead-table w-full min-w-[860px] text-left text-sm">
-            <thead><tr><th>Policy</th><th>Client</th><th>Line</th><th className="text-right">Paid</th><th className="text-right">Expected</th><th>Result</th><th>Next step</th></tr></thead>
+            <thead><tr><th>Policy</th><th>Client</th><th>Line</th><th className="text-right">Paid</th><th className="text-right">Expected</th><th>Result</th><th className="text-right">Next step</th></tr></thead>
             <tbody>
               {/* A statement-like table keeps its columns; each row is one line (owner 2026-11-11): the client is its own column. */}
               {shown.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((g) => (
@@ -512,7 +513,7 @@ async function CommissionsTab({ tenantId, head, search }: { tenantId: string; he
                   <td className="whitespace-nowrap text-right tabular-nums">{cents(g.paidCents)}</td>
                   <td className="whitespace-nowrap text-right tabular-nums">{g.expectedCents === null ? <span className="text-muted-foreground">—</span> : cents(g.expectedCents)}</td>
                   <td><StatusChip tone={g.result.tone}>{g.result.label}</StatusChip></td>
-                  <td className="whitespace-nowrap"><Link href={rowHref(head.id, g.rowNumber)} className="hover:underline" aria-label={`Open row ${g.rowNumber}`}>Open ›</Link></td>
+                  <RowActionCell><RowAction href={rowHref(head.id, g.rowNumber)} aria-label={`Open row ${g.rowNumber}`}>Open</RowAction></RowActionCell>
                 </tr>
               ))}
             </tbody>

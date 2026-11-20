@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
     // names: both need only the lead ids.
     const money = anyRoleHasPermission(contextRoles(auth.context), "money.view");
     const [leads, facts, totals] = await Promise.all([
-      withSubmitterNames(found),
+      withSubmitterNames(auth.context.tenantId, found),
       // When each lead entered its stage came with the leads themselves (speed pass 2026-11-12: 7 fewer reads).
       leadWorkFacts(auth.context.tenantId, found.map((lead) => lead.id), money, new Map(found.map((lead) => [lead.id, (lead as { stage_entered_at?: string | null }).stage_entered_at ?? null]))),
       totalsRead.catch(() => null),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { startTransition, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, Download, Plus, Upload } from "lucide-react";
 
@@ -54,7 +54,9 @@ export function PolicyEntryActions({ canAdd, blockedReason, carriers }: { canAdd
       if (!response.ok) throw new Error(data?.error ?? fallback);
       notify.done(done);
       setMode(null);
-      router.refresh();
+      // As the list's own Refresh does: in a transition, so the new rows replace the old ones when they arrive
+      // (2026-11-19 Ledger walk: a plain refresh after the dialog closed left the list as it was).
+      startTransition(() => router.refresh());
     } catch (cause) {
       notify.fail(cause instanceof Error ? cause.message : fallback);
     } finally {

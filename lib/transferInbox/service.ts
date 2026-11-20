@@ -262,12 +262,14 @@ export async function announceTransferClaim(params: { tenantId: string; userId: 
   // customer name and the partner id the chat card needs.
   const claimed = await supabase
     .from("lead_queue")
-    .select("partner_id, agent_leads!lead_queue_lead_id_fkey(values)")
+    .select("partner_id, agent_leads!lead_queue_lead_id_fkey(tenant_id, values)")
     .eq("id", params.workItemId)
     .eq("tenant_id", params.tenantId)
     .maybeSingle();
-  const claimedLead = claimed.data?.agent_leads as unknown as { values: unknown } | { values: unknown }[] | null | undefined;
-  const leadValues = Array.isArray(claimedLead) ? claimedLead[0]?.values : claimedLead?.values;
+  const claimedLead = claimed.data?.agent_leads as unknown as { tenant_id?: string; values: unknown } | { tenant_id?: string; values: unknown }[] | null | undefined;
+  // The embed has no tenant predicate of its own: only this tenant's lead is named (audit 2026-11-19).
+  const ownLead = Array.isArray(claimedLead) ? claimedLead[0] : claimedLead;
+  const leadValues = ownLead && ownLead.tenant_id === params.tenantId ? ownLead.values : undefined;
   const customer = claimed.data && leadValues !== undefined ? transferCustomerName(leadValues) : "Customer";
   let chatPosted = true;
   const claim = (params.claim ?? {}) as TransferClaim;

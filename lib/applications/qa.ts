@@ -141,6 +141,13 @@ export function runQa(input: {
 
   // SSA validity (LA-3.7): a plaintext value is checked whole; a masked one by its serial (the last
   // four), plus the server's verdict on the decrypted number when it supplies one.
+  // A check that judges a value's format only runs on a value: with nothing typed it has not passed
+  // (walk 2026-11-20: a blank SSN was listed as "Social Security number valid"). A blank required
+  // field is raised by the required-field check above instead.
+  const notRun = new Set<string>();
+  if (!has("insured.ssn")) notRun.add("Social Security number valid");
+  if (!has("addr.zip")) notRun.add("ZIP valid");
+  if (!has("insured.height_in") && !has("insured.weight_lb")) notRun.add("height and weight plausible");
   const ssn = v("insured.ssn");
   if (ssn && (ssn.hasValue || (ssn.value !== null && ssn.value !== ""))) {
     const plain = typeof ssn.value === "string" || typeof ssn.value === "number" ? String(ssn.value) : null;
@@ -229,7 +236,7 @@ export function runQa(input: {
   }
 
   const raised = new Set([...blocking, ...warnings].map((i) => i.code));
-  const passed = CHECKS.filter((c) => !c.codes.some((code) => raised.has(code))).map((c) => c.label);
+  const passed = CHECKS.filter((c) => !notRun.has(c.label) && !c.codes.some((code) => raised.has(code))).map((c) => c.label);
   return { verdict: blocking.length ? "fail" : warnings.length ? "pass_with_warnings" : "pass", blocking, warnings, passed };
 }
 

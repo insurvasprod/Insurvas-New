@@ -8,6 +8,7 @@ import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/com
 import { setParamsInPlace } from "@/components/ui/nav-pending";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
@@ -49,10 +50,10 @@ function verdictWord(r: { verdict: PaymentVerdict; shortCents: number; missingCe
 
 /** A payment's Next step as a short verb (the sentence is its tooltip). */
 function paymentStep(verdict: PaymentVerdict): string {
-  if (verdict === "missing_money") return "Ask carrier";
+  if (verdict === "missing_money") return "Ask Carrier";
   if (verdict === "bad_math") return "Review";
   if (verdict === "to_confirm") return "Confirm";
-  if (verdict === "rate_missing") return "Add rate";
+  if (verdict === "rate_missing") return "Add Rate";
   return "Open";
 }
 
@@ -110,7 +111,7 @@ export function BankResults({ rows, period, show, bankThrough, hasAccounts }: { 
           <NoMatches noun="payments" onClear={() => { setQ(""); pick("all"); }} />
         ) : (
           <table className="portal-lead-table w-full min-w-[1040px] text-left text-sm">
-            <thead><tr><th>Carrier payment</th><th>Statement</th><th className="text-right">Carrier says</th><th className="text-right">Bank deposit</th><th>Result</th><th>Next step</th></tr></thead>
+            <thead><tr><th>Carrier payment</th><th>Statement</th><th className="text-right">Carrier says</th><th className="text-right">Bank deposit</th><th>Result</th><th className="text-right">Next step</th></tr></thead>
             <tbody>
               {paged.rows.map((r) => {
                 const open = paymentHref(r.id, from);
@@ -132,7 +133,7 @@ export function BankResults({ rows, period, show, bankThrough, hasAccounts }: { 
                       ? <Link className="hover:underline" href={paymentHref(r.id, from, "&tab=deposit")} {...stop}>{money(r.deposit.amountCents)}</Link>
                       : <span className="text-muted-foreground">—</span>}</td>
                     <td><StatusChip tone={VERDICT_TONES[r.verdict]}>{verdictWord(r)}</StatusChip></td>
-                    <td className="whitespace-nowrap" title={next ?? undefined}>{paymentStep(r.verdict)} ›</td>
+                    <RowActionCell><RowAction href={open} title={next ?? undefined}>{paymentStep(r.verdict)}</RowAction></RowActionCell>
                   </tr>
                 );
               })}

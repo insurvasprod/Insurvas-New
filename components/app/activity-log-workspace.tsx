@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Download } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { Card } from "@/components/ui/card";
 import { BarList, BarSeries, LineSeries, type BarListRow, type LinePoint } from "@/components/ui/chart";
 import { ActiveFilters, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
@@ -211,7 +212,7 @@ function ReviewRow({ row }: { row: ActivityRow }) {
       <td className="max-w-[200px] truncate">{row.disposition ? humanize(row.disposition) : <span className="text-muted-foreground">—</span>}</td>
       <td className="whitespace-nowrap tabular-nums text-muted-foreground">{served(row.served_at)}</td>
       <td className="whitespace-nowrap"><StatusChip tone={flag.tone}>{flag.text}</StatusChip></td>
-      <td className="whitespace-nowrap">Review ›</td>
+      <RowActionCell><RowAction href={href}>Review</RowAction></RowActionCell>
     </tr>
   );
 }
@@ -812,7 +813,7 @@ export function ActivityLogWorkspace({ initialView = "agents", role = "", framed
                 : <EmptyState title="No activity in this window" hint="Served leads show up here, newest first." action={<Button variant="outline" asChild><Link href="/app/dialer">Open the dialer</Link></Button>} />
           ) : view === "integrity" ? (
             <table className="portal-activity-table w-full min-w-[820px] text-left text-sm">
-              <thead><tr><th scope="col">Agent</th><th scope="col">Lead</th><th scope="col">Outcome logged</th><th scope="col">Served</th><th scope="col">Status</th><th scope="col">Next step</th></tr></thead>
+              <thead><tr><th scope="col">Agent</th><th scope="col">Lead</th><th scope="col">Outcome logged</th><th scope="col">Served</th><th scope="col">Status</th><th scope="col" className="text-right">Next step</th></tr></thead>
               <tbody className="m-seq">
                 {entries.map((entry) => entry.kind === "served" ? <ReviewRow key={entry.row.id} row={entry.row} /> : null)}
               </tbody>

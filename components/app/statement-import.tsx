@@ -272,7 +272,7 @@ export function StatementImportButton({
           </DialogHeader>
 
           {step === "file" && (
-            <div className="grid gap-4 text-sm">
+            <div className="grid gap-4 text-sm" data-guide="statement-fields">
               <div className="grid gap-1.5">
                 <Label htmlFor="statement-file">Statement file (CSV, Excel or PDF)</Label>
                 <Input id="statement-file" data-guide="statement-file" type="file" accept={STATEMENT_FILE_ACCEPT} onChange={(event) => void chooseFile(event.target.files?.[0])} />

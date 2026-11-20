@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
+import { mutate, peek, readResource, seed } from "@/lib/client/resource-cache";
+import { readFresh } from "./producer-record-core";
 
 /**
  * Agency screens · one way to load a route: initial load, a refresh that keeps the old data on screen while it
@@ -22,8 +23,9 @@ export function useAgencyData<T>(url: string | null) {
     else setLoading(true);
     setError("");
     try {
-      // A refresh follows a change (or the person asked): always ask again.
-      const body = await (mode === "refresh" ? loadResource<T>(url) : readResource<T>(url));
+      // A refresh follows a change (or the person asked): always ask again, never joining an older read.
+      const body = mode === "refresh" ? await readFresh<T>(url) : await readResource<T>(url);
+      if (mode === "refresh") mutate(url, body);
       setData(body);
     } catch (cause) {
       // An answer from the route (it has a status) keeps the server's sentence; no answer at all is the connection.
@@ -44,7 +46,8 @@ export function useAgencyData<T>(url: string | null) {
     void load("load");
   }, [url, load]);
 
-  return { data, error, loading, refreshing, reload: () => load("refresh") };
+  const reload = useCallback(() => load("refresh"), [load]);
+  return { data, error, loading, refreshing, reload };
 }
 
 /** POST / PUT a JSON body; resolves to the server's error sentence, or null on success. */

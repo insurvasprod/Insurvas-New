@@ -425,7 +425,10 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
     const asked = askedFor.current;
     if (!asked) return;
     const picked = info.campaigns.find((item) => item.id === asked.campaign);
-    if (!picked) { askedFor.current = null; return; }
+    // Not in this answer: it may be the kept (cached) one from before the campaign was made (2026-11-19, a campaign
+    // created a moment ago opened "Import its list" with nothing chosen). Wait for the fresh answer; a campaign the
+    // person picks by hand ends the wait (chooseCampaign).
+    if (!picked) return;
     if (asked.product && asked.product !== info.productCode && info.products?.some((product) => product.code === asked.product)) {
       // Another product's form first; this runs again when it arrives.
       const product = asked.product;
@@ -484,6 +487,7 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
   // already outrank a saved map, and the new vendor's saved map still fills every column they did
   // not touch. If that changes the mapping, it is no longer the one confirmed, and the page says so.
   function chooseCampaign(value: string) {
+    askedFor.current = null;
     setCampaignId(value);
     // The vendor follows the campaign: a campaign belongs to exactly one vendor.
     const next = campaigns.find((item) => item.id === value);

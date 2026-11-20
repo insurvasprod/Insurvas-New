@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction } from "@/components/ui/row-action";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -122,7 +123,7 @@ export function CreditQueue({ rows, decided = false, today }: { rows: CreditRow[
                   </> : <>
                     <TableCell className="whitespace-nowrap tabular-nums">{days} d</TableCell>
                     <TableCell><StatusChip tone={tone ?? "neutral"}>{WHY_CHIP[r.why]}</StatusChip></TableCell>
-                    <TableCell className="whitespace-nowrap text-right"><Link href={itemHref(r.id)} className={LINK}>Decide ›</Link></TableCell>
+                    <TableCell className="w-px whitespace-nowrap text-right"><RowAction href={itemHref(r.id)}>Decide</RowAction></TableCell>
                   </>}
                 </TableRow>
               );

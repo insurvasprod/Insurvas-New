@@ -48,6 +48,7 @@ type Loose = {
 };
 type Filterable = Head & PromiseLike<{ data: unknown[] | null; error: { message: string } | null; count: number | null }> & {
   eq(column: string, value: unknown): Filterable;
+  neq(column: string, value: unknown): Filterable;
   is(column: string, value: null): Filterable;
   in(column: string, values: readonly string[]): Filterable;
   or(filters: string): Filterable;
@@ -124,8 +125,8 @@ async function leads(tenantId: string): Promise<TileMetric> {
 
 async function policies(tenantId: string): Promise<TileMetric> {
   const [total, active] = await Promise.all([
-    db().from("tenant_policies").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
-    db().from("tenant_policies").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "active"),
+    db().from("tenant_policies").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).neq("source", "carrier_file"),
+    db().from("tenant_policies").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).neq("source", "carrier_file").eq("status", "active"),
   ]);
   if (total.error || active.error) throw new Error("policies summary unavailable");
   return { value: total.count ?? 0, caption: `${n(active.count ?? 0)} active`, detail: policiesSentence(total.count ?? 0) };

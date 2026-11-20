@@ -28,6 +28,7 @@ import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 import { MoreMenu } from "@/components/ui/more-menu";
+import { RowAction } from "@/components/ui/row-action";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
@@ -461,7 +462,7 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
                   <th scope="col" className={st.th}>Carrier</th>
                   <th scope="col" className={st.th}>Due</th>
                   <th scope="col" className={st.th}>Status</th>
-                  <th scope="col" className={cn(st.th, "pr-4")}>Next step</th>
+                  <th scope="col" className={cn(st.th, "pr-4 text-right")}>Next step</th>
                 </tr>
               </thead>
               <tbody className="m-seq">
@@ -474,8 +475,8 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
                       <td className={cn(st.td, "max-w-[220px] truncate whitespace-nowrap")}>{row.carrierLabel ?? <span className="text-muted-foreground">every carrier</span>}</td>
                       <td className={DATE}>{row.due ? shortDate(row.due) : DASH}</td>
                       <td className={st.td}><StatusChip tone={row.chip.tone}>{row.chip.label}</StatusChip></td>
-                      <td className={cn(st.td, "whitespace-nowrap pr-4")}>
-                        <button type="button" className="cursor-pointer text-left outline-none focus-visible:underline" onClick={() => openBlocker(row)} title={row.detail}>{next} ›</button>
+                      <td className={cn(st.td, "w-px whitespace-nowrap pr-4 text-right")}>
+                        <RowAction onClick={() => openBlocker(row)} title={row.detail}>{next}</RowAction>
                       </td>
                     </tr>
                   );
@@ -516,7 +517,7 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
                   <th scope="col" className={st.th}>Pending</th>
                   <th scope="col" className={st.th}>Ended or expired</th>
                   <th scope="col" className={st.th}>Status</th>
-                  <th scope="col" className={cn(st.th, "pr-4")}>Next step</th>
+                  <th scope="col" className={cn(st.th, "pr-4 text-right")}>Next step</th>
                 </tr>
               </thead>
               <tbody className="m-seq">
@@ -530,8 +531,8 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
                       <td className={cn(st.td, "tabular-nums")}>{line.pending}</td>
                       <td className={cn(st.td, "tabular-nums")}>{line.endedOrExpired}</td>
                       <td className={st.td}><StatusChip tone={line.chip.tone}>{line.chip.label}</StatusChip></td>
-                      <td className={cn(st.td, "whitespace-nowrap pr-4")}>
-                        <button type="button" className="cursor-pointer text-left outline-none focus-visible:underline" onClick={open} title={`${name}: every state, its status and since when`}>Open ›</button>
+                      <td className={cn(st.td, "w-px whitespace-nowrap pr-4 text-right")}>
+                        <RowAction onClick={open} title={`${name}: every state, its status and since when`}>Open</RowAction>
                       </td>
                     </tr>
                   );
@@ -681,7 +682,7 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
                   <th scope="col" className={st.th}>Lines</th>
                   <th scope="col" className={st.th}>Expires</th>
                   <th scope="col" className={st.th}>Status</th>
-                  {canEdit && <th scope="col" className={cn(st.th, "pr-4")}>Next step</th>}
+                  {canEdit && <th scope="col" className={cn(st.th, "pr-4 text-right")}>Next step</th>}
                 </tr>
               </thead>
               <tbody className="m-seq">
@@ -699,8 +700,8 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
                       <td className={DATE}>{expiry ? shortDate(row.expires_at) : DASH}</td>
                       <td className={st.td}><StatusChip tone={chip.tone}>{chip.label}</StatusChip></td>
                       {canEdit && (
-                        <td className={cn(st.td, "whitespace-nowrap pr-4")}>
-                          <button type="button" className="cursor-pointer text-left outline-none focus-visible:underline" onClick={open} title={`Update the ${stateName(row.state)} licence`}>{next} ›</button>
+                        <td className={cn(st.td, "w-px whitespace-nowrap pr-4 text-right")}>
+                          <RowAction onClick={open} title={`Update the ${stateName(row.state)} licence`}>{next}</RowAction>
                         </td>
                       )}
                     </tr>
@@ -716,8 +717,8 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
                       <td className={st.td}>{DASH}</td>
                       <td className={st.td}><StatusChip tone="danger">Not licensed</StatusChip></td>
                       {canEdit && (
-                        <td className={cn(st.td, "whitespace-nowrap pr-4")}>
-                          <button type="button" className="cursor-pointer text-left outline-none focus-visible:underline" onClick={open} title={`Add the ${stateName(state)} licence`}>Add licence ›</button>
+                        <td className={cn(st.td, "w-px whitespace-nowrap pr-4 text-right")}>
+                          <RowAction onClick={open} title={`Add the ${stateName(state)} licence`}>Add Licence</RowAction>
                         </td>
                       )}
                     </tr>
@@ -864,7 +865,7 @@ function CarrierStatesDialog({
               <th scope="col" className={cn(st.th, "pl-4")}>State</th>
               <th scope="col" className={st.th}>Status</th>
               <th scope="col" className={st.th}>Since</th>
-              {canEdit && <th scope="col" className={cn(st.th, "pr-4")}>Next step</th>}
+              {canEdit && <th scope="col" className={cn(st.th, "pr-4 text-right")}>Next step</th>}
             </tr>
           </thead>
           <tbody>
@@ -881,8 +882,8 @@ function CarrierStatesDialog({
                   <td className={st.td}>{chip ? <StatusChip tone={chip.tone}>{chip.label}</StatusChip> : DASH}</td>
                   <td className={DATE}>{shortDate(row.effective_from)}</td>
                   {canEdit && (
-                    <td className={cn(st.td, "whitespace-nowrap pr-4")}>
-                      <button type="button" className="cursor-pointer text-left outline-none focus-visible:underline" onClick={() => onOpenState(row.state)}>Open ›</button>
+                    <td className={cn(st.td, "w-px whitespace-nowrap pr-4 text-right")}>
+                      <RowAction onClick={() => onOpenState(row.state)}>Open</RowAction>
                     </td>
                   )}
                 </tr>

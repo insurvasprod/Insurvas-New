@@ -115,11 +115,8 @@ export async function UpgradePrompt({
               </section>
             )}
           </div>
-
-          <div className="portal-gate-note is-error">
-            <strong>An outage is a different screen, deliberately</strong>
-            <p>If this feature were switched off for everyone, you would see &ldquo;temporarily unavailable&rdquo; and no price. Offering to sell someone a feature nobody can currently use is the mistake this split exists to prevent.</p>
-          </div>
+          {/* No explainer card under the gate (walk 2026-11-20; owner rule 2026-11-02, no notice cards): the red
+              note about outages was the design board's annotation, not words for an agency. */}
         </div>
       </div>
     </div>

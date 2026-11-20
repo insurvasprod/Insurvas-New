@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { fileDay } from "@/lib/ingestion/constants";
@@ -23,8 +24,6 @@ const METHOD_LABEL: Record<string, string> = { submission_record: "Submission re
 const TYPE_LABEL: Record<string, string> = { deal_flow: "Deal", application: "Application", contact: "Client", provisional: "No client found" };
 // Owner 2026-11-11 (one text colour in a table): a field's outcome is its mark, not a green, amber or red value.
 const OUTCOME_MARK: Record<FieldOutcome, string> = { match: " ✓", partial: " ~", mismatch: " ✕", missing: "" };
-/** A row's action: a short verb and ›, plain, the same weight on every row (owner 2026-11-11). */
-const ROW_ACTION = "whitespace-nowrap text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-50 hover:underline disabled:no-underline";
 const OUTCOME_WORD: Record<FieldOutcome, string> = { match: "same", partial: "partly", mismatch: "different", missing: "—" };
 const dollars = (cents: number | null | undefined) => (cents === null || cents === undefined ? "—" : `$${(cents / 100).toFixed(2)}`);
 const nameOf = (p: { firstName?: string | null; lastName?: string | null }) => [p.firstName, p.lastName].filter(Boolean).join(" ") || "—";
@@ -148,7 +147,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
             : visibleLinks.length === 0 ? <NoMatches noun="links" onClear={() => search("")} />
             : (
               <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
-                <thead><tr><th>Policy</th><th>Carrier</th><th>Linked to</th><th>How</th><th>When</th><th>{readOnly ? <span className="sr-only">Actions</span> : "Next step"}</th></tr></thead>
+                <thead><tr><th>Policy</th><th>Carrier</th><th>Linked to</th><th>How</th><th>When</th><th className="text-right">{readOnly ? <span className="sr-only">Actions</span> : "Next step"}</th></tr></thead>
                 <tbody>
                   {shownLinks.rows.map((link) => (
                     <tr key={link.id}>
@@ -157,7 +156,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
                       <td className="whitespace-nowrap">{link.clientName ?? TYPE_LABEL[link.type] ?? link.type}</td>
                       <td className="whitespace-nowrap">{METHOD_LABEL[link.method] ?? link.method}{link.confidence !== null ? ` · ${link.confidence}%` : ""}</td>
                       <td className="whitespace-nowrap tabular-nums text-muted-foreground">{fileDay(link.createdAt.slice(0, 10))}</td>
-                      <td>{!readOnly && <button type="button" className={ROW_ACTION} title="Remove the link and send the policy back to review" disabled={busy !== null} onClick={() => void reopen(link)}>Reopen ›</button>}</td>
+                      <RowActionCell>{!readOnly && <RowAction title="Remove the link and send the policy back to review" disabled={busy !== null} onClick={() => void reopen(link)}>Reopen</RowAction>}</RowActionCell>
                     </tr>
                   ))}
                 </tbody>
@@ -172,7 +171,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
             : visibleAgents.length === 0 ? <NoMatches noun="agent codes" onClear={() => search("")} />
             : (
               <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
-                <thead><tr><th>Carrier&apos;s agent code</th><th>Carrier</th><th className="text-right">Policies</th><th className="w-[260px]">Agent</th><th>{readOnly ? <span className="sr-only">Actions</span> : "Next step"}</th></tr></thead>
+                <thead><tr><th>Carrier&apos;s agent code</th><th>Carrier</th><th className="text-right">Policies</th><th className="w-[260px]">Agent</th><th className="text-right">{readOnly ? <span className="sr-only">Actions</span> : "Next step"}</th></tr></thead>
                 <tbody>
                   {shownAgents.rows.map((agent) => {
                     if (agent.kind === "mapped") return (
@@ -182,7 +181,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
                         <td className="whitespace-nowrap text-right tabular-nums" title={agent.policies ? undefined : "No file has carried this code yet"}>{agent.policies.toLocaleString("en-US")}</td>
                         {/* The "Mapped" sub-line went: a mapped code shows its person, an unmapped one the picker. */}
                         <td className="whitespace-nowrap" title="Mapped">{agent.userName}</td>
-                        <td>{!readOnly && <button type="button" className={ROW_ACTION} title="Stop crediting this person for the code" disabled={busy !== null} onClick={() => void unmap(agent)}>Unmap ›</button>}</td>
+                        <RowActionCell>{!readOnly && <RowAction title="Stop crediting this person for the code" disabled={busy !== null} onClick={() => void unmap(agent)}>Unmap</RowAction>}</RowActionCell>
                       </tr>
                     );
                     const key = `${agent.carrierId}|${agent.agentIdentifier}`;
@@ -197,7 +196,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
                             {members.map((member) => <option key={member.userId} value={member.userId}>{member.name}</option>)}
                           </select>
                         </td>
-                        <td>{!readOnly && <button type="button" className={ROW_ACTION} title={assign[key] ? "Credit this code's policies to the person picked" : "Pick the agent first"} disabled={!assign[key] || busy !== null} onClick={() => void post(`map-${key}`, { action: "map_agent", carrier_id: agent.carrierId, agent_identifier: agent.agentIdentifier, user_id: assign[key] }, "Agent code mapped.")}>Map ›</button>}</td>
+                        <RowActionCell>{!readOnly && <RowAction title={assign[key] ? "Credit this code's policies to the person picked" : "Pick the agent first"} disabled={!assign[key] || busy !== null} onClick={() => void post(`map-${key}`, { action: "map_agent", carrier_id: agent.carrierId, agent_identifier: agent.agentIdentifier, user_id: assign[key] }, "Agent code mapped.")}>Map</RowAction>}</RowActionCell>
                       </tr>
                     );
                   })}

@@ -19,6 +19,7 @@ import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { afterStamp } from "@/components/ui/use-done-stamps";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { percent, type Basis, type NegativePolicy, type PaysOn, type ProducerRun } from "@/lib/accounting/producersCore";
@@ -289,7 +290,7 @@ export function ProducersBoard({ data, view, show = "all", readOnly }: { data: O
           {data.people.length === 0 ? <EmptyState title="No producers" hint="Producer splits are for agencies: once producers join, record each one's split here." />
             : people.length === 0 ? <NoMatches noun="producers" onClear={() => { setQ(""); pick("all"); }} /> : (
             <table className="portal-lead-table w-full min-w-[920px] text-left text-sm">
-              <thead><tr><th>Producer</th><th className="w-[200px]">Split</th><th className="w-[130px] text-right">Owed to date</th><th className="w-[130px] text-right">Clawed back</th><th className="w-[130px] text-right">Balance</th><th className="w-[220px]">Next step</th><th className="w-8"><span className="sr-only">Open</span></th></tr></thead>
+              <thead><tr><th>Producer</th><th className="w-[200px]">Split</th><th className="w-[130px] text-right">Owed to date</th><th className="w-[130px] text-right">Clawed back</th><th className="w-[130px] text-right">Balance</th><th className="w-[220px] text-right">Next step</th><th className="w-8"><span className="sr-only">Open</span></th></tr></thead>
               <tbody>
                 {shown.rows.map((p) => {
                   const s = split(p);
@@ -304,7 +305,7 @@ export function ProducersBoard({ data, view, show = "all", readOnly }: { data: O
                       <td className="whitespace-nowrap text-right"><Link className={figure} href={`${base}?show=chargebacks`}>{money(p.clawedBackCents)}</Link></td>
                       {/* A negative balance is said in the row's one chip; a balance owed to them stays a plain amount. */}
                       <td className="whitespace-nowrap text-right">{p.balanceCents < 0 ? <StatusChip tone="danger">{money(-p.balanceCents)} owed back</StatusChip> : <Link className={figure} href={base}>{money(p.balanceCents)}</Link>}</td>
-                      <td className="whitespace-nowrap" title={next.title}>{next.text} ›</td>
+                      <RowActionCell><RowAction href={base} title={next.title}>{next.text}</RowAction></RowActionCell>
                       <Chevron />
                     </tr>
                   );

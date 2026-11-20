@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction } from "@/components/ui/row-action";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -97,7 +98,7 @@ export function CreditAgentCodes({ unmapped, members, readOnly }: { unmapped: Un
                   <TableCell className="whitespace-nowrap">{a.carrierName}</TableCell>
                   <TableCell className="text-right"><Link href={policiesHref(a.carrierId, null)} className="tabular-nums underline-offset-2 hover:underline">{policiesLabel(a.policies)}</Link></TableCell>
                   <TableCell><StatusChip tone="warning">No producer yet</StatusChip></TableCell>
-                  <TableCell className="whitespace-nowrap text-right">{readOnly ? "Open ›" : "Map ›"}</TableCell>
+                  <TableCell className="w-px whitespace-nowrap text-right"><RowAction onClick={() => setOpen(a)}>{readOnly ? "Open" : "Map"}</RowAction></TableCell>
                 </TableRow>
               ))}
             </TableBody>

@@ -156,7 +156,7 @@ export default async function PayIssuePage({ params, searchParams }: { params: P
                     ))}
                   </tbody>
                 </table>
-              )) : statements.length === 0 ? <EmptyState title="No statement line yet" hint="Nothing on the statements imported by hand was paid for this." /> : (
+              )) : statements.length === 0 ? <EmptyState title="No statement line yet" hint="Nothing on the statements you imported was paid for this." /> : (
                 <table className="portal-lead-table w-full text-left text-sm">
                   <thead><tr><th>Statement</th><th className="text-right">Lines</th></tr></thead>
                   <tbody>
@@ -210,7 +210,7 @@ export default async function PayIssuePage({ params, searchParams }: { params: P
                   ["Written by", facts?.agentName || facts?.agentCode ? [facts?.agentName, facts?.agentCode ? `writing no. ${facts.agentCode}` : null].filter(Boolean).join(" · ") : null],
                   ["Carrier says", facts?.status ? `${facts.status.replaceAll("_", " ").replace(/^./, (c) => c.toUpperCase())}${facts.asOf ? ` (${fileDay(facts.asOf)} file)` : ""}` : null],
                   ["Period", hand?.periodStart && hand.periodEnd ? `${fileDay(hand.periodStart)} – ${fileDay(hand.periodEnd)}` : null],
-                  ["Source", issue.source === "hand" ? "A statement imported by hand" : "The carrier's own files"],
+                  ["Source", issue.source === "hand" ? "A statement you imported" : "The carrier's own files"],
                 ]} />
               </section>
             </div>

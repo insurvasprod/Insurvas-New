@@ -176,7 +176,7 @@ export async function loadCompare(viewer: CompareViewer, pair: PeriodPair): Prom
     return scopeQuery(query, "agent_user_id", scoped).order("carrier_id").order("policy_number");
   }, 50_000));
   const handRows = () => tolerate(pages<{ effective_date: string | null; annual_premium_cents: number | null }>(() => {
-    let query = db().from("tenant_policies").select("effective_date, annual_premium_cents").eq("tenant_id", viewer.tenantId).gte("effective_date", from);
+    let query = db().from("tenant_policies").select("effective_date, annual_premium_cents").eq("tenant_id", viewer.tenantId).neq("source", "carrier_file").gte("effective_date", from);
     if (producerOnly) query = query.eq("created_by", viewer.userId);
     return scopeQuery(query, "created_by", scoped).order("id");
   }, 50_000));
