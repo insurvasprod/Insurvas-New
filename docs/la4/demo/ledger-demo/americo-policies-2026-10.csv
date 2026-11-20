@@ -1,0 +1,12 @@
+policy_number,insured_name,carrier,product,effective_date,annual_premium,status,renewal_date
+AM-LD-23911,Patricia Lowe,Americo,Final Expense,2026-06-10,912.00,lapsed,2027-06-10
+AM-LD-24001,Harold Whitaker,Americo,Final Expense,2026-09-25,1080.00,active,2027-09-25
+AM-LD-24002,Brenda Coleman,Americo,Final Expense,2026-09-26,948.00,active,2027-09-26
+AM-LD-24003,Luis Ortega,Americo,Term Life,2026-09-30,1320.00,active,2027-09-30
+AM-LD-24004,Deborah Finch,Americo,Final Expense,2026-10-01,780.00,active,2027-10-01
+AM-LD-24005,Marcus Bell,Americo,Final Expense,2026-10-03,1164.00,active,2027-10-03
+AM-LD-24006,Gloria Hayes,Americo,Term Life,2026-10-08,1560.00,active,2027-10-08
+AM-LD-24007,Walter Simmons,Americo,Final Expense,2026-10-10,864.00,active,2027-10-10
+AM-LD-24008,Raymond Cruz,Americo,Final Expense,2026-10-15,1032.00,active,2027-10-15
+AM-LD-24009,Sandra Mills,Americo,Term Life,2026-10-21,1440.00,active,2027-10-21
+AM-LD-24010,Eugene Porter,Americo,Final Expense,2026-09-17,1020.00,active,2027-09-17

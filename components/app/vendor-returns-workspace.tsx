@@ -36,6 +36,7 @@ import {
   type VendorReturnsPageData,
 } from "@/lib/vendorScorecard/returnModel";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction } from "@/components/ui/row-action";
 import { FILL_CARD, useFittingRows } from "./use-fitting-rows";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ViewTabs } from "@/components/ui/view-tabs";
@@ -539,7 +540,7 @@ export function VendorReturnsWorkspace({ initialVendorId, embedded = false }: { 
             <th scope="col" className={th}>Period</th>
             <th scope="col" className={`${th} text-right`}>Claimed</th>
             <th scope="col" className={th}>Status</th>
-            <th scope="col" className={th}>Next step</th>
+            <th scope="col" className={`${th} text-right`}>Next step</th>
           </tr></thead>
           {/* Round 7 (2·6): a row opens its claim; Evidence CSV and the next step are in the dialog. Owner 2026-11-11: one
               line, one colour, six columns. Rows and reason are the campaign's tooltip; what was credited is the chip. */}
@@ -556,7 +557,7 @@ export function VendorReturnsWorkspace({ initialVendorId, embedded = false }: { 
                 <td className={`${td} tabular-nums text-muted-foreground`}>{period(claim.period_from, claim.period_to)}</td>
                 <td className={`${td} text-right tabular-nums`}>{dollars(claim.amount_claimed_cents)}</td>
                 <td className={td}><StatusChip tone={status.tone} title={claim.status === "partial" ? `${status.label} · ${dollars(claim.amount_claimed_cents - claim.amount_credited_cents)} not credited` : undefined}>{chipText}</StatusChip></td>
-                <td className={td} title={CLAIM_NEXT[claim.status]}>{CLAIM_VERB[claim.status] ?? "Open"} ›</td>
+                <td className={`${td} w-px text-right`}><RowAction title={CLAIM_NEXT[claim.status]} onClick={() => toggleClaim(claim)}>{CLAIM_VERB[claim.status] ?? "Open"}</RowAction></td>
               </tr>;
             })}
           </tbody>
@@ -590,7 +591,7 @@ export function VendorReturnsWorkspace({ initialVendorId, embedded = false }: { 
             <th scope="col" className={`${th} text-right`}>Waiting</th>
             <th scope="col" className={`${th} text-right`}>Claimable</th>
             <th scope="col" className={th}>Closes</th>
-            <th scope="col" className={th}>Next step</th>
+            <th scope="col" className={`${th} text-right`}>Next step</th>
           </tr></thead>
           {/* Owner 2026-11-11: one line, one colour, six columns. The reasons are Waiting's tooltip; imported, the window,
               the price per record and what lapsed are Claimable's; how soon it closes is the one chip. */}
@@ -614,7 +615,7 @@ export function VendorReturnsWorkspace({ initialVendorId, embedded = false }: { 
               <td className={`${td} text-right tabular-nums`} title={waiting || "Nothing claimable left"}>{waitingRows ? `${count(waitingRows)} row${waitingRows === 1 ? "" : "s"}` : <span className="text-muted-foreground">—</span>}</td>
               <td className={`${td} text-right tabular-nums`} title={facts}>{entry.claimable_rows > 0 && entry.unit_cost_cents != null ? dollars(entry.claimable_cents) : <span className="text-muted-foreground">—</span>}</td>
               <td className={td}>{closes ? <StatusChip tone={closes}>{daysText(entry.days_left)}</StatusChip> : <span className="text-muted-foreground">—</span>}</td>
-              <td className={td} title={entry.claimable_rows > 0 ? `Review a claim for ${count(entry.claimable_rows)} row${entry.claimable_rows === 1 ? "" : "s"}` : "See the rows behind it"}>{entry.claimable_rows > 0 ? "Review" : "See rows"} ›</td>
+              <td className={`${td} w-px text-right`}><RowAction title={entry.claimable_rows > 0 ? `Review a claim for ${count(entry.claimable_rows)} row${entry.claimable_rows === 1 ? "" : "s"}` : "See the rows behind it"} onClick={openRow}>{entry.claimable_rows > 0 ? "Review" : "See Rows"}</RowAction></td>
             </tr>;
           })}</tbody>
         </table>}

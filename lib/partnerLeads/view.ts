@@ -224,17 +224,25 @@ function humanise(key: string): string {
   return words ? words[0].toUpperCase() + words.slice(1).toLowerCase() : key;
 }
 
+function dollars(amount: number): string {
+  const whole = Number.isInteger(amount);
+  return `$${amount.toLocaleString("en-US", { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: whole ? 0 : 2 })}`;
+}
+
 /**
  * One submitted value, formatted.
  *
- * Money: a template's amount is typed by a person in dollars, not stored in cents like the
- * `*_cents` columns, so 55000 is $55,000 — never `formatCentsAsCurrency`, which would read it as
- * $550.00 and quietly shrink a customer's coverage by a hundredfold.
+ * Money (walk 2026-11-20, the same rule as components/app/inbound/caller-value.ts): a `currency`
+ * field is stored in cents — the portal types dollars and stores `dollars × 100`
+ * (partner-portal-workspace.tsx), as every agent screen reads it — so 25000000 is $250,000. Read as
+ * dollars, the partner's own view showed a $250,000 lead as $25,000,000. A field that is not
+ * `currency` (a plain number) whose name says money is whole dollars as typed, so 55000 is $55,000.
+ * When the field's type is unknown (no form revision to read it from) the name rule applies.
  */
-export function snapshotValue(key: string, value: unknown): string {
+export function snapshotValue(key: string, value: unknown, type?: string | null): string {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value === "object") return Array.isArray(value) ? value.map((item) => snapshotValue(key, item)).join(", ") : JSON.stringify(value);
+  if (typeof value === "object") return Array.isArray(value) ? value.map((item) => snapshotValue(key, item, type)).join(", ") : JSON.stringify(value);
   const text = String(value).trim();
   if (text === "") return "—";
   if (text === "true" || text === "false") return text === "true" ? "Yes" : "No";
@@ -245,9 +253,9 @@ export function snapshotValue(key: string, value: unknown): string {
     if (ten.length === 10) return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
     return text;
   }
-  if (MONEY_KEY.test(key) && /^\d+(\.\d+)?$/.test(text)) {
-    const amount = Number(text);
-    return `$${amount.toLocaleString("en-US", { maximumFractionDigits: amount % 1 === 0 ? 0 : 2 })}`;
+  if (/^-?\d+(\.\d+)?$/.test(text)) {
+    if (type === "currency") return dollars(Number(text) / 100);
+    if (MONEY_KEY.test(key) && !text.startsWith("-")) return dollars(Number(text));
   }
   return text;
 }
@@ -260,6 +268,7 @@ export function snapshotFields(
   const entries = Object.entries(values ?? {}).filter(([key]) => !HIDDEN.has(key.toLowerCase()));
   if (configured?.form_definition.sections.length) {
     const labels = new Map(configured.fields.map((field) => [field.field_key, field.label]));
+    const types = new Map(configured.fields.map((field) => [field.field_key, field.type as string]));
     const taken = new Set<string>();
     const groups: SnapshotGroup[] = [];
     const sections = [...configured.form_definition.sections].sort((a, b) => a.sort_order - b.sort_order);
@@ -269,12 +278,12 @@ export function snapshotFields(
         const entry = entries.find(([key]) => key === configuredField.field_key);
         if (!entry || taken.has(entry[0])) continue;
         taken.add(entry[0]);
-        fields.push({ key: entry[0], label: labels.get(entry[0]) || humanise(entry[0]), value: snapshotValue(entry[0], entry[1]) });
+        fields.push({ key: entry[0], label: labels.get(entry[0]) || humanise(entry[0]), value: snapshotValue(entry[0], entry[1], types.get(entry[0])) });
       }
       if (fields.length) groups.push({ key: section.section_key, label: section.label, fields });
     }
     const unplaced = entries.filter(([key]) => !taken.has(key));
-    if (unplaced.length) groups.push({ ...OTHER, fields: unplaced.map(([key, value]) => ({ key, label: labels.get(key) || humanise(key), value: snapshotValue(key, value) })) });
+    if (unplaced.length) groups.push({ ...OTHER, fields: unplaced.map(([key, value]) => ({ key, label: labels.get(key) || humanise(key), value: snapshotValue(key, value, types.get(key)) })) });
     return groups;
   }
 

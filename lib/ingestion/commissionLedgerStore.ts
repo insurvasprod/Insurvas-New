@@ -73,7 +73,31 @@ export type PolicyEntry = {
   createdAt: string;
   /** LA-4.14: its statement doesn't add up, so it is held out of every total until corrected. */
   heldByStatement: boolean;
+  /** A line from a statement imported by hand (no carrier commission file): it opens that statement. */
+  href?: string;
 };
+
+const STATEMENT_KIND: Record<string, string> = { advance: "advance", commission: "earned", chargeback: "chargeback", adjustment: "adjustment" };
+
+/**
+ * A carrier-file policy that no commission FILE has paid yet, but whose statement lines were matched to its
+ * mirror (lib/ledger/statementMirror.ts, owner 2026-11-20 walk: Victor's $340 was on the ledger while his
+ * policy's Money tab read "No commission lines yet"). The accepted lines, shaped as commission_entry rows.
+ */
+async function mirrorStatementRows(tenantId: string, carrierId: string, policyNumber: string): Promise<Loose[]> {
+  const mirrors = await db().from("tenant_policies").select("id").eq("tenant_id", tenantId).eq("source", "carrier_file").eq("policy_number", policyNumber);
+  const ids = ((mirrors.data ?? []) as Loose[]).map((row) => row.id);
+  if (mirrors.error || !ids.length) return [];
+  const read = await db().from("tenant_commission_statement_entries")
+    .select("line_id, statement_id, carrier_id, period_end, original_filename, line_number, amount_cents, kind, posted_on, accepted_at")
+    .eq("tenant_id", tenantId).eq("carrier_id", carrierId).in("policy_id", ids).order("posted_on").order("line_id");
+  if (read.error) return [];
+  return ((read.data ?? []) as Loose[]).map((row) => ({
+    id: `statement:${row.line_id}`, entry_type: STATEMENT_KIND[row.kind] ?? "adjustment", corrects_type: null, amount_cents: row.amount_cents,
+    transaction_date: row.posted_on, statement_date: row.period_end, rate_bp: null, months_advanced: null, payee_level: null, agent_identifier: null, reversal_reason: null,
+    file_id: "", row_number: row.line_number, created_at: row.accepted_at, file_name: row.original_filename, href: `/app/statements/${row.statement_id}`,
+  }));
+}
 
 export type PolicyMoney = {
   available: boolean;
@@ -106,13 +130,14 @@ export async function loadPolicyMoney(tenantId: string, carrierId: string, polic
     if (isSchemaGap(error)) return { available: false, entries: [], totals: null, unearned: null, rule: null };
     throw new Error(`Could not load the policy's commission entries: ${error.message}`);
   }
-  const rows = (data ?? []) as Loose[];
+  const fromFiles = (data ?? []) as Loose[];
+  const rows = fromFiles.length ? fromFiles : await mirrorStatementRows(tenantId, carrierId, policyNumber);
   if (!rows.length) return { available: true, entries: [], totals: null, unearned: null, rule: null };
 
-  const fileIds = [...new Set(rows.map((row) => row.file_id))];
+  const fileIds = [...new Set(rows.map((row) => row.file_id).filter(Boolean))];
   const [flagged, family] = await Promise.all([flaggedFiles(tenantId), productFamilyOf(tenantId, carrierId, policy.productCode)]);
   const [files, ruleRead] = await Promise.all([
-    db().from("file_registry").select("id, original_filename").eq("tenant_id", tenantId).in("id", fileIds),
+    fileIds.length ? db().from("file_registry").select("id, original_filename").eq("tenant_id", tenantId).in("id", fileIds) : { data: [] },
     // The LA-0.4 advance rule in force for this carrier and product family on the as-of date.
     family
       ? db().from("advance_rules").select("product_code, advance_months, clawback_months, clawback_type, effective_from").eq("tenant_id", tenantId).eq("carrier_id", carrierId).eq("product_code", family).lte("effective_from", policy.asOf ?? new Date().toISOString().slice(0, 10)).order("effective_from", { ascending: false }).limit(1)
@@ -122,7 +147,8 @@ export async function loadPolicyMoney(tenantId: string, carrierId: string, polic
   const entries: PolicyEntry[] = rows.map((row) => ({
     id: row.id, type: row.entry_type, correctsType: row.corrects_type, amountCents: Number(row.amount_cents), transactionDate: row.transaction_date, statementDate: row.statement_date,
     rateBp: row.rate_bp, monthsAdvanced: row.months_advanced, payeeLevel: row.payee_level, agentIdentifier: row.agent_identifier, reversalReason: row.reversal_reason,
-    fileName: fileName.get(row.file_id) ?? null, fileId: row.file_id, rowNumber: row.row_number, createdAt: row.created_at, heldByStatement: flagged.has(row.file_id),
+    fileName: row.file_name ?? fileName.get(row.file_id) ?? null, fileId: row.file_id, rowNumber: row.row_number, createdAt: row.created_at, heldByStatement: flagged.has(row.file_id),
+    ...(row.href ? { href: row.href } : {}),
   }));
   const totals = rollup(rows.filter((row) => !flagged.has(row.file_id)));
   const ruleRow = (ruleRead.data ?? [])[0] as Loose;

@@ -5,6 +5,7 @@ import { Fragment, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { ActiveFilters, ClearFiltersButton, DataToolbar, FilterField, FilterPopover, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { HoverPeek } from "@/components/ui/hover-peek";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -140,7 +141,7 @@ export function LadderBoard({ data, isOwner, viewerId }: { data: Ladder; isOwner
               <th className="text-right">$/mo</th>
               <th>{f.step === "lost" && !across ? "Lost since" : "Deadline"}</th>
               <th>Last touch</th>
-              <th>Next step</th>
+              <th className="text-right">Next step</th>
             </tr>
           </thead>
           <tbody className="m-seq">
@@ -288,8 +289,8 @@ function Row({ r, f, isOwner, viewerId, acrossSteps }: { r: CaseRow; f: ListFilt
             : <span className="text-muted-foreground" title="No carrier window">—</span>}
       </td>
       <td className="whitespace-nowrap" title={touchTitle || undefined}>{r.unreachable ? "Unreachable" : touchText(r)}</td>
-      {/* The next step as a short verb (no button in the row); the sentence is its tooltip. */}
-      <td className="whitespace-nowrap" title={next}>{waiting ? "Check" : NEXT_VERB[r.reason] ?? "Open"} ›</td>
+      {/* The next step as a short verb on a RowAction button (owner 2026-11-19); the sentence is its tooltip. */}
+      <RowActionCell><RowAction href={href} title={next}>{waiting ? "Check" : NEXT_VERB[r.reason] ?? "Open"}</RowAction></RowActionCell>
     </LinkRow>
   );
 }

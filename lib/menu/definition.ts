@@ -110,7 +110,10 @@ export const AGENT_MENU: MenuSection[] = [
     id: "leads",
     label: "Leads",
     items: [
-      item("Leads", { key: "leads.workspace", label: "Lead workspace", path: "/app/leads", icon: "square-kanban", built: true, required_feature: "book_of_business", required_roles: ["owner", "producer", "assistant"] }),
+      // 2026-11-19 (owner): gated on lead_import, not book_of_business. The $99 Ledger plan is "no CRM"
+      // (Notion, Individual Agent §6.5: Dashboard, Book, Commission Ledger, Carriers & Appointments,
+      // Settings), so it has no leads; every plan that sells (Basic up, every agency band) has lead_import.
+      item("Leads", { key: "leads.workspace", label: "Lead workspace", path: "/app/leads", icon: "square-kanban", built: true, required_feature: "lead_import", required_roles: ["owner", "producer", "assistant"] }),
       // 2026-10-26: import is a side sheet on Lead sources ("Import a list"); /app/import opens it there.
       item("Leads", { key: "leads.import", label: "List import", path: "/app/import", icon: "list-plus", built: true, sidebar: false, required_feature: "lead_import", required_roles: ["owner", "producer", "assistant"] }),
       // Directly after the import, because that is the order the work happens in: import a CSV, look
@@ -287,6 +290,10 @@ export const AGENT_MENU: MenuSection[] = [
       item("Reports", { key: "insight.book-scorecards", groupLink: true, sidebar_fallback_for: "insight.scoring", label: "Book scorecards", path: "/app/book-scorecards", icon: "gauge", required_feature: "cohort_persistency", required_roles: ["owner", "producer", "bookkeeper"], built: true, blurb: "Persistency, placement, chargebacks and true cost per sale, from your carrier files." }),
       item("Reports", { key: "insight.true-cpa", groupLink: true, sidebar_fallback_for: "insight.book-scorecards", label: "True CPA", path: "/app/true-cpa", icon: "badge-dollar-sign", required_feature: "true_cpa", required_roles: ["owner", "producer", "bookkeeper"], built: true, blurb: "What your leads actually cost" }),
       item("Reports", { key: "partners.review", groupLink: true, sidebar_fallback_for: "insight.true-cpa", label: "Partner quality", path: "/app/partner-quality", icon: "award", required_feature: "partner_quality", required_roles: ["owner", "producer", "bookkeeper"], built: true }),
+      // Basic's modules that had no report (owner 2026-11-19). Lead sources has the vendors and campaigns' gate and
+      // roles (/app/campaigns: outbound_dialing, owner and producer); Callbacks kept has the calendar's.
+      item("Reports", { key: "insight.lead-sources", groupLink: true, sidebar_fallback_for: "insight.sales-performance", label: "Lead sources", path: "/app/source-results", icon: "package", required_feature: "outbound_dialing", required_roles: ["owner", "producer"], built: true, blurb: "What each vendor and campaign's leads became: contacted, applied, issued." }),
+      item("Reports", { key: "insight.callbacks", groupLink: true, sidebar_fallback_for: "insight.sales-performance", label: "Callbacks kept", path: "/app/callback-results", icon: "calendar-check", required_feature: "callback_calendar", required_roles: ["owner", "producer", "assistant"], built: true, blurb: "Callbacks booked, kept and missed, week by week." }),
       // LA-5.8 / LA-5.9 · Module 5's reports (owner 2026-11-02): out of Retention into Reports; "Does it work?" renamed.
       item("Reports", { key: "retention.scorecard", groupLink: true, sidebar_fallback_for: "partners.review", label: "Retention scorecard", path: "/app/retention-scorecard", icon: "chart-no-axes-combined", built: true, required_feature: "chargeback_radar", required_roles: ["owner", "producer", "retention"], blurb: "Policies worked, contact rate and save rate by reason, per person." }),
       item("Reports", { key: "retention.results", groupLink: true, sidebar_fallback_for: "retention.scorecard", label: "Retention results", path: "/app/retention-results", icon: "chart-line", built: true, required_feature: "chargeback_radar", required_roles: ["owner"], blurb: "Whether the risk bands came true, and what working the queue saved, from your own book." }),
@@ -339,9 +346,17 @@ export const AGENCY_OWNER_ONLY_KEYS: ReadonlySet<string> = new Set([
   // leads.assignments (QA pass 2026-11): /app/assignments tells every non-owner in an agency "the owner or an
   // admin routes leads", so a producer, setter or assistant clicking Lead routing hit a dead end.
   "leads.import", "leads.lists", "leads.nurture", "leads.duplicates", "leads.campaigns", "leads.assignments",
-  "book.needs_you", "insight.vendor-returns", "insight.scoring", "insight.true-cpa", "partners.review",
+  "book.needs_you", "insight.vendor-returns", "insight.scoring", "insight.true-cpa", "insight.lead-sources", "partners.review",
   "compliance.dashboard", "compliance.tcpa", "compliance.consent", "compliance.complaints", "compliance.deletions", "compliance.litigation",
 ]);
+
+/**
+ * Screens that, inside an agency, only forward to another link already in the menu, so a narrowed session is not
+ * offered them. Owner 2026-11-20 (manager walk: "clicking Accounting redirects me back to Commissions"): My balance
+ * forwards to Commissions › My pay (one producer pay, 2026-11-03); the agency's accounting is not a producer's or a
+ * manager's (AG-0.2), so they get no Accounting link at all.
+ */
+export const AGENCY_FORWARDED_KEYS: ReadonlySet<string> = new Set(["accounting.my_balance"]);
 
 /**
  * Custom team access: `extraRoles` are the member's other roles (the union opens an item), `hiddenPages` the menu
@@ -361,7 +376,7 @@ export function buildAgentMenu(
     items: section.items.filter((entry) =>
       (!entry.required_feature || granted.has(entry.required_feature)) &&
       roles.some((held) => menuRoleAdmits(entry.required_roles, held)) &&
-      !(options.agencyNarrow && AGENCY_OWNER_ONLY_KEYS.has(entry.key)) &&
+      !(options.agencyNarrow && (AGENCY_OWNER_ONLY_KEYS.has(entry.key) || AGENCY_FORWARDED_KEYS.has(entry.key))) &&
       !(options.solo && entry.teamOnly) &&
       !hidden.has(entry.key),
     ),

@@ -18,6 +18,7 @@ import type { MappedDisposition, PipelineViewContext, StageEvent } from "@/lib/p
 import { cn } from "@/lib/utils";
 import { dateTime, dayMonth, viewerTimeZone } from "@/lib/format/dates";
 import { useSolo } from "@/components/app/solo-context";
+import { leadPartnerLabel } from "@/lib/agentTemplates/leadPartner";
 
 /**
  * The pipeline views beside the board: Stages (the pipeline's shape and the dispositions that land
@@ -38,6 +39,8 @@ export type ViewLead = {
   values: Record<string, unknown>;
   created_at: string;
   submitter_name?: string | null;
+  /** The partner company that sent the lead (leadPartnerLabel names it before the person). */
+  partner_name?: string | null;
   owner_user_id?: string | null;
   owner_name?: string | null;
   disposition?: string | null;
@@ -358,7 +361,7 @@ export function TableView({
       ["Lead", "Partner", "Stage", "Disposition", "In stage", "Owner", ...(money ? ["Premium"] : [])],
       chosen.map((lead) => [
         leadName(lead),
-        lead.submitter_name ?? "Workspace",
+        leadPartnerLabel(lead),
         stageName(lead.stage_id).name,
         dispositionLabel(lead.disposition, context) ?? "",
         durationLabel(inStageMs(lead, now)),
@@ -410,7 +413,7 @@ export function TableView({
                   <tr key={lead.id} className={cn("m-row", selection.isSelected(lead.id) && "bg-[var(--primary-soft)]")}>
                     <td><RowCheckbox selection={selection} id={lead.id} label={`Select ${leadName(lead)}`} /></td>
                     <td><button type="button" className="font-semibold text-foreground underline-offset-4 hover:underline" onClick={() => onOpen(lead)}>{leadName(lead)}</button></td>
-                    <td className="text-[var(--body)]">{lead.submitter_name ?? "Workspace"}</td>
+                    <td className="text-[var(--body)]">{leadPartnerLabel(lead)}</td>
                     <td><Chip dot={stage.color}>{stage.name}</Chip></td>
                     <td className="text-[var(--body)]">{dispositionLabel(lead.disposition, context) ?? "—"}</td>
                     <td className={cn("text-right tabular-nums", late ? "font-semibold text-[var(--error-ink)]" : "text-[var(--body)]")}>{durationLabel(inStageMs(lead, now))}</td>
@@ -536,7 +539,7 @@ export function ListView({
                       <span className={cn("inline-flex size-[26px] shrink-0 items-center justify-center rounded-full text-xs font-bold", active ? "bg-[var(--primary)] text-[var(--primary-foreground)]" : "bg-[var(--highlight-soft)] text-[var(--highlight-ink)]")}>{initials(leadName(lead))}</span>
                       <span className="min-w-0 flex-grow">
                         <span className="block truncate text-sm font-semibold">{leadName(lead)}</span>
-                        <span className="block truncate text-xs text-muted-foreground tabular-nums">{lead.submitter_name ?? "Workspace"} · {stageAge(lead, now)}</span>
+                        <span className="block truncate text-xs text-muted-foreground tabular-nums">{leadPartnerLabel(lead)} · {stageAge(lead, now)}</span>
                       </span>
                       {lead.disposition && <Chip>{dispositionLabel(lead.disposition, context)}</Chip>}
                       <span className="w-[120px] shrink-0 text-right">
@@ -564,7 +567,7 @@ export function ListView({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate text-base font-semibold">{leadName(selected)}</p>
-                    <p className="text-xs text-[var(--body)]">{selected.submitter_name ?? "Workspace"} · arrived {dayMonth(selected.created_at, viewerTimeZone())}</p>
+                    <p className="text-xs text-[var(--body)]">{leadPartnerLabel(selected)} · arrived {dayMonth(selected.created_at, viewerTimeZone())}</p>
                   </div>
                   <Button asChild size="sm" className="shrink-0"><Link href={`/app/leads/${selected.id}`}>Open workspace</Link></Button>
                 </div>

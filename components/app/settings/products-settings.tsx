@@ -18,7 +18,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
 
 import { SettingsSectionHeader } from "@/components/app/settings/primitives";
 import { StatusLine } from "@/components/app/settings/sales-process/parts";
@@ -27,6 +26,7 @@ import { ToolbarSearch } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/field";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
@@ -243,7 +243,7 @@ export function ProductsSettings() {
                       <TableHead>Partners who may send it</TableHead>
                       <TableHead>What it needs</TableHead>
                       <TableHead>Ready</TableHead>
-                      <TableHead className="w-8" aria-label="Open" />
+                      <TableHead className="w-px"><span className="sr-only">Next step</span></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -266,7 +266,7 @@ export function ProductsSettings() {
                           <TableCell className="whitespace-nowrap">
                             {row.ready ? <StatusChip tone={row.ready.tone} dot={false}>{row.ready.label}</StatusChip> : <StatusChip tone="neutral" dot={false}>{row.sold ? "Sold" : "Not sold"}</StatusChip>}
                           </TableCell>
-                          <TableCell className="text-[var(--muted)]"><ChevronRight aria-hidden className="size-4" /></TableCell>
+                          <RowActionCell><RowAction onClick={() => setOpenCode(row.code)} aria-label={`${row.sold && row.ready?.missing?.length ? "Set up" : "Open"} ${row.name}`}>{row.sold && row.ready?.missing?.length ? "Set up" : "Open"}</RowAction></RowActionCell>
                         </TableRow>
                       )),
                     ])}

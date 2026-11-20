@@ -4,6 +4,7 @@ import { useState, type MouseEvent } from "react";
 import Link from "next/link";
 
 import { Button, buttonVariants } from "@/components/ui/button";
+import { RowAction } from "@/components/ui/row-action";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 
@@ -18,7 +19,7 @@ const opensFrom = (event: MouseEvent<HTMLElement>) => !(event.target as HTMLElem
 /**
  * A carrier's Windows tab (board 1·1, direction B): the five retention windows, days from paid-to. A row opens that
  * window's dialog (board 1·4), never an editor inside the row; a missing window names what it costs and ends in
- * "Set it ›". Read-only accounts still open a row, read-only, with its history. The title line's "Set N windows"
+ * a "Set It" RowAction. Read-only accounts still open a row, read-only, with its history. The title line's "Set N windows"
  * steps through the missing ones (WindowQueueButton, on the page). On a phone each window is a card.
  */
 export function CarrierRuleWindows({ carrierId, carrierName, asOf, readOnly, rows }: { carrierId: string; carrierName: string; asOf: string; readOnly: boolean; rows: WindowRow[] }) {
@@ -38,7 +39,7 @@ export function CarrierRuleWindows({ carrierId, carrierName, asOf, readOnly, row
       <TableCard title="Retention windows" description="days from paid-to" action={<span className="text-xs text-muted-foreground">a row opens its window</span>} footer={footer}>
         <div className="hidden md:block">
           <table className="portal-lead-table w-full min-w-[900px] text-left text-sm" data-even="off">
-            {/* One line a window: a missing one says so in its chip (what it costs on hover) and ends in "Set it ›". */}
+            {/* One line a window: a missing one says so in its chip (what it costs on hover) and ends in a "Set It" RowAction. */}
             <thead>
               <tr><th className="w-[200px]">Window</th><th>Closes after</th><th>Grace</th><th>Redraft</th><th>Source</th><th>Whose</th></tr>
             </thead>
@@ -65,7 +66,7 @@ export function CarrierRuleWindows({ carrierId, carrierName, asOf, readOnly, row
                   )}
                   <td className="whitespace-nowrap" title={row.upcoming ? upcomingText(row) ?? undefined : undefined}>
                     {row.state === "missing" && !readOnly ? (
-                      <button type="button" className="hover:underline" title={row.cost} onClick={() => show(row)}>Set it ›</button>
+                      <RowAction title={row.cost} onClick={() => show(row)}>Set It</RowAction>
                     ) : row.rule ? whose(row.rule) : <span className="text-muted-foreground">—</span>}
                   </td>
                 </tr>

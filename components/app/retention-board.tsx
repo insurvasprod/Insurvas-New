@@ -5,6 +5,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { ClearFiltersButton, DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
+import { RowActionLabel, rowActionClass } from "@/components/ui/row-action";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -121,7 +122,7 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
                 <th>Why</th>
                 <th className="text-right" title="Unearned advance the carrier takes back if this policy dies (from the commission ledger)">Advance at risk</th>
                 <th>Last contact</th>
-                <th>{readOnly ? <span className="sr-only">Log the call</span> : "Next step"}</th>
+                <th className="text-right">{readOnly ? <span className="sr-only">Log the call</span> : "Next step"}</th>
               </tr>
             </thead>
             <tbody>
@@ -153,13 +154,13 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
                     <td className="whitespace-nowrap" title={last ? `${fileDay(last.at.slice(0, 10))}${last.by ? ` · ${last.by}` : ""}` : undefined}>
                       {last ? `${OUTCOME_LABELS[last.outcome] ?? last.outcome}${last.result ? ` · ${RESULT_WORD[last.result]}` : ""}` : "Never"}
                     </td>
-                    <td>
+                    <td className="w-px whitespace-nowrap text-right">
                       {/* A menu of outcomes (§11 row actions): choosing one is the deliberate act that logs, never a select's change. */}
                       {!readOnly && (
                         <DropdownMenu modal={false}>
                           <DropdownMenuTrigger asChild>
-                            <button type="button" className="whitespace-nowrap text-sm text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline" disabled={busy !== null} aria-label={`Log the call to ${row.clientName ?? row.policyNumber}`} title="Log what happened on the call">
-                              {busy === row.key ? "Logging…" : "Log ›"}
+                            <button type="button" className={rowActionClass()} disabled={busy !== null} aria-label={`Log the call to ${row.clientName ?? row.policyNumber}`} title="Log what happened on the call">
+                              <RowActionLabel>{busy === row.key ? "Logging…" : "Log"}</RowActionLabel>
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">

@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
@@ -24,8 +25,6 @@ import { notify } from "@/lib/notify";
 export type ExceptionsTab = "open" | "closed" | "owners";
 /** The one chip on an open row (owner 2026-11-11): its age's tone, said in words, never a coloured number. */
 const AGE_CHIP = { fresh: { tone: "neutral", text: "Open" }, aging: { tone: "warning", text: "Aging" }, escalated: { tone: "danger", text: "Escalated" } } as const;
-/** A row's action: a short verb and ›, plain, the same weight on every row (owner 2026-11-11). */
-const ROW_ACTION = "whitespace-nowrap text-sm text-foreground hover:underline";
 const dollars = (cents: number | null | undefined) => (cents === null || cents === undefined ? "—" : `$${(cents / 100).toFixed(2)}`);
 
 /** `plain`: in a table row, "(provisional)" in words, since the row's one chip is its state (owner 2026-11-11). */
@@ -125,7 +124,7 @@ export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly,
             </div>
             <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
               {/* Owner 2026-11-11: one line per row, the subject first; the age is a plain period and its tone the row's one chip; the owner's role is the name's tooltip. */}
-              <thead><tr><th>What</th><th>Owner</th><th title="From the sale's date for unsubmitted sales, otherwise from when the item appeared">Age</th><th>Status</th><th>Next step</th></tr></thead>
+              <thead><tr><th>What</th><th>Owner</th><th title="From the sale's date for unsubmitted sales, otherwise from when the item appeared">Age</th><th>Status</th><th className="text-right">Next step</th></tr></thead>
               <tbody>
                 {shown.rows.map((item) => {
                   const age = ageDays(item.ageFrom, today);
@@ -137,7 +136,7 @@ export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly,
                       <td className="whitespace-nowrap" title={OWNER_ROLE_LABELS[item.assignedRole]}>{item.assigneeName}</td>
                       <td className="whitespace-nowrap tabular-nums text-muted-foreground">{ageLabel(age)}</td>
                       <td><StatusChip tone={chip.tone}>{chip.text}</StatusChip></td>
-                      <td><button type="button" className={ROW_ACTION} onClick={(event) => { event.stopPropagation(); openIt(); }}>{readOnly ? "Open" : "Resolve"} ›</button></td>
+                      <RowActionCell><RowAction onClick={openIt}>{readOnly ? "Open" : "Resolve"}</RowAction></RowActionCell>
                     </tr>
                   );
                 })}

@@ -102,7 +102,9 @@ const MOVES: Record<string, readonly GuideMove[]> = {
   ],
   statement: [
     // No "Click Import a statement" move: the step's page (?import=1) opens the dialog itself.
-    { target: "statement-file", say: "Choose the statement file, then pick its carrier and period", detail: "PDF, Excel or CSV, as the carrier sent it.", advance: "click" },
+    // 2026-11-19 (owner's Ledger walk): lit on the three fields together, not the file input alone, so the card sits
+    // under the group instead of over the carrier field it asks for, and all three stay usable.
+    { target: "statement-fields", say: "Choose the statement file, then pick its carrier and period", detail: "PDF, Excel or CSV, as the carrier sent it.", advance: "click" },
     { target: "statement-next", say: "Click Next: columns", advance: "click" },
     { target: "statement-preview", say: "Match Policy number and Amount, then click Preview", detail: "Insurvas remembers the columns for this carrier next time.", advance: "click" },
     { target: "statement-import", say: "Check the matches, then click Import for review", detail: "Nothing reaches your ledger until you accept the matches.", advance: "click" },
@@ -208,7 +210,18 @@ export function shotLabel(say: string): string | null {
   return click ? click[1] : null;
 }
 
-export function guideMovesFor(step: { key: string; instruction: string; target?: string }): readonly GuideMove[] {
+/**
+ * Statement first (ledger-r1 board 3·A, owner 2026-11-19): on a money plan the statement step opens the guided one
+ * upload and one confirm (/app/setup/statement) instead of the import dialog, so it has its own script.
+ */
+const FIRST_STATEMENT_MOVES: readonly GuideMove[] = [
+  { target: "first-statement-drop", say: "Drop a commission statement, or click Choose a File", detail: "Excel or CSV, exactly as the carrier sent it. Nothing else is asked.", advance: "click", shot: "upload" },
+  { target: "first-statement-confirm", say: "Check what Insurvas found, then click Looks Right", detail: "Carrier, policies, period, your rate and advance, read off the statement. Change any card first if it's wrong.", advance: "click", shot: "check" },
+  { page: "/app/dashboard", say: "Your money, already checked", detail: "Carriers, states and licences can wait in Fine-tune later.", advance: "done", shot: "check" },
+];
+
+export function guideMovesFor(step: { key: string; instruction: string; target?: string; path?: string }): readonly GuideMove[] {
+  if (step.key === "statement" && step.path?.startsWith("/app/setup/statement")) return FIRST_STATEMENT_MOVES;
   const moves = MOVES[step.key];
   const shots = SHOTS[step.key] ?? [];
   if (moves && moves.length > 0) return moves.map((move, at) => (shots[at] ? { ...move, shot: shots[at] } : move));

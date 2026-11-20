@@ -185,6 +185,31 @@ export async function setMemberLicensedStates(
   states: string[],
   expiries?: Record<string, string | null>,
 ): Promise<{ states: string[]; expiries: Record<string, string> }> {
+  const saved = await saveMemberLicensedStates(tenantId, userId, states, expiries);
+  await refreshProducerGate(tenantId, userId);
+  return saved;
+}
+
+/**
+ * The licence is the submit gate's first item (AG-1.10, producer_checklist), but can_submit is only re-derived when
+ * its one writer runs. Manager walk 2026-11-20: a producer's Florida licence was saved here, the checklist read it as
+ * done, and Submit still refused with "State licence number and expiry missing". So a licence save re-runs the gate
+ * for that member's producer row, if he has one (an agency); best effort, the save already stands.
+ */
+async function refreshProducerGate(tenantId: string, userId: string): Promise<void> {
+  const client = getSupabaseServiceClient();
+  const producer = await client.from("producer" as never).select("id").eq("tenant_id", tenantId).eq("user_id", userId).maybeSingle<{ id: string }>();
+  if (producer.error || !producer.data) return;
+  const { error } = await client.rpc("producer_refresh_can_submit" as never, { p_tenant_id: tenantId, p_producer_id: producer.data.id } as never);
+  if (error && !isPendingSchema(error)) console.error("[team] refresh can_submit", error.message);
+}
+
+async function saveMemberLicensedStates(
+  tenantId: string,
+  userId: string,
+  states: string[],
+  expiries?: Record<string, string | null>,
+): Promise<{ states: string[]; expiries: Record<string, string> }> {
   const client = getSupabaseServiceClient();
   if (expiries !== undefined) {
     const rows = states.map((state) => ({ state, expires_on: expiries[state] ?? null }));

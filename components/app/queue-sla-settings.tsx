@@ -42,7 +42,6 @@ const FIELDS: Array<{ key: keyof Values; label: string; help: string }> = [
   { key: "expire", label: "Expire after", help: "It leaves the active queue marked expired" },
 ];
 
-type Week = { claimed: number; medianClaimSeconds: number | null; expired: number } | null;
 type Member = { id: string; name: string; role: string; acceptedAt: string | null };
 type Team = { buffers: Member[]; seats: { used: number; max: number | null } } | "error" | null;
 
@@ -59,7 +58,6 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
 export function QueueSlaSettings() {
   const [saved, setSaved] = useState<Values | null>(null);
   const [values, setValues] = useState<Values | null>(null);
-  const [lastWeek, setLastWeek] = useState<Week>(null);
   const [nurtureReady, setNurtureReady] = useState(false);
   const [jobState, setJobState] = useState<SlaJobState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -86,7 +84,6 @@ export function QueueSlaSettings() {
           };
           setSaved(next);
           setValues(next);
-          setLastWeek(body.lastSevenDays ? { claimed: body.lastSevenDays.claimed, medianClaimSeconds: body.lastSevenDays.medianClaimSeconds, expired: body.lastSevenDays.expired } : null);
           setNurtureReady(body.schema?.nurtureOnExpiry === true);
           setJobState(typeof body.job?.state === "string" ? (body.job.state as SlaJobState) : null);
           setLoadError("");
@@ -235,12 +232,8 @@ export function QueueSlaSettings() {
       ...(inboundEdits ? ["alerts, buffer agents or routing"] : []),
     ];
   } else {
-    line = [
-      "Saved",
-      lastWeek
-        ? `last 7 days ${lastWeek.claimed} ${lastWeek.claimed === 1 ? "transfer" : "transfers"} claimed${lastWeek.medianClaimSeconds != null ? `, median wait ${durationLabel(lastWeek.medianClaimSeconds)}` : ""}, ${lastWeek.expired} expired`
-        : null,
-    ].filter(Boolean) as string[];
+    // Owner 2026-11-19: no "Saved · last 7 days …" line. When nothing is unsaved and nothing is wrong, the line is gone.
+    line = [];
     if (jobNotice) { tone = jobNotice.tone === "error" ? "danger" : "warning"; line.push(jobNotice.text.replace(/\.$/, "")); }
     if (inbound.available && inbound.loaded && !inbound.loaded.ready) { tone = tone === "danger" ? tone : "warning"; line.push("alerts, buffer handoff and routing need a database update; transfers work as they always have"); }
     if (inbound.error && !inbound.dirty) { tone = "danger"; line.push(inbound.error.replace(/\.$/, "")); }
@@ -259,7 +252,7 @@ export function QueueSlaSettings() {
     <SettingsStack className="min-h-0 flex-1 gap-3">
       {header}
       <LeaveGuard dirty={dirty} onSave={save} onDiscard={discard} what="the inbound settings" />
-      <StatusLine tone={tone} action={action}>{line.map((part, index) => <span key={index}>{index > 0 ? " · " : ""}{part}</span>)}</StatusLine>
+      {line.length > 0 && <StatusLine tone={tone} action={action}>{line.map((part, index) => <span key={index}>{index > 0 ? " · " : ""}{part}</span>)}</StatusLine>}
 
       <section aria-label="Inbound settings" className={cn(cardSurface, "flex min-h-0 flex-1 overflow-hidden lg:min-h-[600px]")}>
         <nav aria-label="Sections" className="w-[180px] shrink-0 border-r border-border py-3 pl-3.5 max-lg:hidden">

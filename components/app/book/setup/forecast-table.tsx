@@ -6,6 +6,7 @@ import Link from "next/link";
 import { DataToolbar } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Segmented } from "@/components/ui/view-tabs";
 import { fileDay } from "@/lib/ingestion/constants";
@@ -48,7 +49,7 @@ export function ForecastTable({ lines, readOnly, title, live = false, autoCheck 
               <tr>
                 <th className="w-[120px]">Day</th><th>Lead</th><th>Policy</th><th>{live ? "What it did" : "Would have"}</th>
                 {!live && <th className="w-[160px]">Was it right?</th>}
-                {checkable && <th className="w-[110px]">Next step</th>}
+                {checkable && <th className="w-[110px] text-right">Next step</th>}
               </tr>
             </thead>
             <PagedBody>
@@ -75,7 +76,7 @@ export function ForecastTable({ lines, readOnly, title, live = false, autoCheck 
                           : <StatusChip tone="warning">Not checked</StatusChip>}
                       </td>
                     )}
-                    {checkable && <td className="whitespace-nowrap"><button type="button" className="hover:underline" onClick={() => openCheck(line.id)}>{line.checked ? "Change ›" : "Check ›"}</button></td>}
+                    {checkable && <RowActionCell><RowAction onClick={() => openCheck(line.id)}>{line.checked ? "Change" : "Check"}</RowAction></RowActionCell>}
                   </tr>
                 );
               })}

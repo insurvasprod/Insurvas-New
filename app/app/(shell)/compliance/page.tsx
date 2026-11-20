@@ -9,6 +9,7 @@ import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { RowAction } from "@/components/ui/row-action";
 import { EmptyState } from "@/components/ui/page-states";
 import { ComplianceFlowPage } from "@/components/app/compliance/compliance-flow";
 import { LinkRow } from "@/components/app/book/setup/link-row";
@@ -67,7 +68,7 @@ export default async function CompliancePage() {
                 <th scope="col" className="h-[40px] whitespace-nowrap px-3 text-right font-medium">How many</th>
                 <th scope="col" className="h-[40px] px-3 font-medium">Date</th>
                 <th scope="col" className="h-[40px] px-3 font-medium">Status</th>
-                <th scope="col" className="h-[40px] px-4 font-medium">Next step</th>
+                <th scope="col" className="h-[40px] px-4 text-right font-medium">Next step</th>
               </tr>
             </thead>
             <PagedBody label="Deadlines and active problems">
@@ -80,7 +81,7 @@ export default async function CompliancePage() {
                   <td className="whitespace-nowrap px-3 text-right tabular-nums">{a.count == null ? <span className="text-muted-foreground">—</span> : a.count.toLocaleString("en-US")}</td>
                   <td className="whitespace-nowrap px-3 tabular-nums text-muted-foreground">{a.since ? day(a.since) : "—"}</td>
                   <td className="whitespace-nowrap px-3"><StatusChip tone={TONE[a.severity]}>{a.chip}</StatusChip></td>
-                  <td className="whitespace-nowrap px-4" title={a.text}>{a.step} ›</td>
+                  <td className="w-px whitespace-nowrap px-4 text-right"><RowAction href={a.href} title={a.text}>{a.step}</RowAction></td>
                 </LinkRow>
               ))}
             </PagedBody>

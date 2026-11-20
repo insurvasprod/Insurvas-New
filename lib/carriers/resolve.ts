@@ -8,7 +8,11 @@ import type { CommissionScheduleRow } from "./service-types";
  * year applies. Never invents a rate — no row, no answer.
  */
 export function resolveCommissionRate(rows: CommissionScheduleRow[], input: { carrierId: string; productCode: string; contractLevelBp: number; policyYear: number; asOf: string }): CommissionScheduleRow | null {
-  const eligible = rows.filter((row) => row.carrier_id === input.carrierId && row.product_code === input.productCode && row.contract_level_bp === input.contractLevelBp && row.effective_from <= input.asOf);
+  const matching = rows.filter((row) => row.carrier_id === input.carrierId && row.product_code === input.productCode && row.contract_level_bp === input.contractLevelBp);
+  // Owner 2026-11-19: before the first row's date, the first row (dated the day the agent set it up, after the book
+  // they bring); every later row still starts on its own date.
+  const first = matching.reduce<string | null>((min, row) => (min === null || row.effective_from < min ? row.effective_from : min), null);
+  const eligible = matching.filter((row) => row.effective_from <= input.asOf || row.effective_from === first);
   const latest = (candidates: CommissionScheduleRow[]) => candidates.sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0] ?? null;
   const exact = latest(eligible.filter((row) => row.policy_year === input.policyYear));
   if (exact) return exact;

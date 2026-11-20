@@ -13,7 +13,7 @@ import { useViewerTimeZone } from "@/components/app/use-viewer-time-zone";
 import { SCHEMA_PENDING_MESSAGE } from "@/lib/appointments/pendingSchema";
 import { dayMonth } from "@/lib/format/dates";
 import { notify } from "@/lib/notify";
-import { baseRoleOf, type MemberRole } from "@/lib/tenantAuth/roles";
+import { MEMBER_ROLE_LABELS, baseRoleOf, type MemberRole } from "@/lib/tenantAuth/roles";
 import type { TeamAccessSnapshot } from "@/lib/tenantTeam/access";
 import { lastSeenCell } from "@/lib/tenantTeam/lastSeen";
 import type { OpenWork } from "@/lib/tenantTeam/openWork";
@@ -250,10 +250,10 @@ export function PersonSheet({ member, members, viewerId, access, statesAvailable
             {agentPicked && (
               <div className="mt-2 flex items-start justify-between gap-4 border-t border-[var(--border)] pt-3">
                 <span className="min-w-0">
-                  <span className="block text-sm font-semibold text-[var(--ink)]">Team lead</span>
+                  <span className="block text-sm font-semibold text-[var(--ink)]">{MEMBER_ROLE_LABELS.manager}</span>
                   <span className="block text-xs text-[var(--muted)]">Sees their team&rsquo;s calls and is told when a transfer escalates. On an agency plan.</span>
                 </span>
-                <Switch checked={role === "manager"} onChange={(on) => setRole(on ? "manager" : "producer")} label="Team lead" />
+                <Switch checked={role === "manager"} onChange={(on) => setRole(on ? "manager" : "producer")} label={MEMBER_ROLE_LABELS.manager} />
               </div>
             )}
           </div>

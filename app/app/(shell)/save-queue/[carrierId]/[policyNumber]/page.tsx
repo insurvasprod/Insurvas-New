@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { scopeFor } from "@/lib/agency/visibility";
@@ -15,6 +14,7 @@ import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { Await, RecordTitle, RetentionPage, retentionTrail } from "@/components/app/retention/retention-page";
 import { CallsTab, FixTab, IncomeTab, SaveCardActions } from "@/components/app/retention/save-card";
 import { cardSurface } from "@/components/ui/card";
+import { RowAction } from "@/components/ui/row-action";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { StreamSection } from "@/components/ui/stream-section";
 import { TableCard } from "@/components/ui/table-card";
@@ -88,7 +88,7 @@ export default async function SaveCardPage({ params, searchParams }: { params: P
                           <li key={f.action} className="flex items-baseline gap-3">
                             <span className="tabular-nums text-foreground">{i + 1}</span>
                             <span className="min-w-0 flex-1 text-foreground" title={f.reason}>{f.label}</span>
-                            {type && canWork && canStartFix && !readOnly ? <Link href={`${base}?tab=fix&fix=${type}`} className="shrink-0 text-foreground hover:underline" title="Start this fix">Start ›</Link> : null}
+                            {type && canWork && canStartFix && !readOnly ? <RowAction href={`${base}?tab=fix&fix=${type}`} className="shrink-0" title="Start this fix">Start</RowAction> : null}
                           </li>
                         );
                       })}

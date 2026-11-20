@@ -10,6 +10,7 @@ import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/com
 import { Field, control } from "@/components/ui/field";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
@@ -131,7 +132,7 @@ const STATE_CHIP: Record<InvoiceState, { tone: StatusTone; label: string }> = {
   nothing: { tone: "neutral", label: "Nothing owed" },
   void: { tone: "neutral", label: "Void" },
 };
-const NEXT_STEP: Record<InvoiceState, string | null> = { review: "Review ›", pay: "Pay ›", paid: null, nothing: null, void: null };
+const NEXT_STEP: Record<InvoiceState, string | null> = { review: "Review", pay: "Pay", paid: null, nothing: null, void: null };
 /** The day `n` days before today, as YYYY-MM-DD. */
 function daysBefore(n: number): string {
   const d = new Date(`${today()}T00:00:00Z`);
@@ -205,7 +206,7 @@ export function PayoutsBoard({ runs, partners, readOnly, status: initialStatus, 
           <NoMatches noun="invoices" onClear={() => { setSearch(""); setPeriod("all"); pick("all"); }} />
         ) : (
           <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
-            <thead><tr><th className="w-[24%]">{partnerFixed ? "Invoice" : "Partner"}</th>{partnerFixed ? null : <th className="w-[16%]">Invoice</th>}<th className="w-[20%]">Pay period</th><th className="w-[12%] text-right">Amount</th><th className="w-[16%]">Status</th><th>Next step</th></tr></thead>
+            <thead><tr><th className="w-[24%]">{partnerFixed ? "Invoice" : "Partner"}</th>{partnerFixed ? null : <th className="w-[16%]">Invoice</th>}<th className="w-[20%]">Pay period</th><th className="w-[12%] text-right">Amount</th><th className="w-[16%]">Status</th><th className="text-right">Next step</th></tr></thead>
             <tbody>
               {shown.rows.map((r) => {
                 const state = stateOf(r);
@@ -223,7 +224,7 @@ export function PayoutsBoard({ runs, partners, readOnly, status: initialStatus, 
                     <td className="whitespace-nowrap tabular-nums text-muted-foreground">{periodLabel(r.periodStart, r.periodEnd)}</td>
                     <td className="whitespace-nowrap text-right tabular-nums">{money(r.netCents)}</td>
                     <td><StatusChip tone={owesYou ? "warning" : STATE_CHIP[state].tone}>{state === "paid" && r.paidOn ? `Paid ${dateLabel(r.paidOn)}` : owesYou ? "Owes you · next invoice" : STATE_CHIP[state].label}</StatusChip></td>
-                    <td className="whitespace-nowrap">{next ?? "Open ›"}</td>
+                    <RowActionCell><RowAction href={`/app/payouts/${r.id}`}>{next ?? "Open"}</RowAction></RowActionCell>
                   </tr>
                 );
               })}

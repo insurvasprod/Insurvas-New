@@ -230,6 +230,8 @@ export type CaseView = {
   clientState: string | null;
   clientPhone: string | null;
   campaignName: string | null;
+  /** The face amount the lead asked for, in cents (e.g. the term-life form's "Coverage wanted"); null when it names none. */
+  requestedFaceCents?: number | null;
   openedAt: string;
   interviews: Partial<Record<InsuredRole, InterviewView>>;
   attempts: AttemptView[];
@@ -240,6 +242,14 @@ export type CaseView = {
    * rules the server's `ready` guard does. Absent in sample data: the defaults apply.
    */
   qaSettings?: { appointmentBlocks: boolean; per1000Band: { min: number; max: number } };
+  /**
+   * AG-1.10 · the case writer's producer submit gate, so Submit says it before Record is pressed. Null or
+   * absent for a solo agent (or when it could not be read): the server still decides on Record.
+   */
+  submitGate?: SubmitGateView | null;
 };
+
+/** AG-1.10 · whether the case's writer may submit, and if not the specific missing item. */
+export type SubmitGateView = { canSubmit: boolean; code: "cannot_submit" | "not_a_producer" | null; reason: string | null };
 
 export type PendingRow = RequirementView & { daysOpen: number; daysSinceChase: number | null; ageing: "ok" | "amber" | "red" };

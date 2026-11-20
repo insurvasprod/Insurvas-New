@@ -3,9 +3,9 @@
 /**
  * Step ① — who is on the line (LA-1.11; board l3-ws-verify). The real check is `VerificationPanel`
  * on the inbound work item; this step shows the identity values the application carries and lets the
- * agent confirm each one by reading it back. A value counts as confirmed when the call's verification
- * completed (computed on the server), the agent confirmed it on the call, or it was checked here or on
- * the Application step.
+ * agent confirm each one by reading it back. A value counts as confirmed when the agent confirmed it
+ * in the call's Verification phase (or that verification completed — never for the address, which
+ * needs its street confirmed), or it was checked here or on the Application step.
  *
  * Owner 2026-10-28: drawn like the interview — one section, two values to a line, each with "It's
  * right"; the section folds to "Complete · 4 of 4" once every value is confirmed. The Social Security
@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { US_STATES } from "@/lib/appointments/constants";
 import type { AttemptView, CaseView, FieldValue } from "@/lib/applications/types";
+import { confirmationOf } from "@/lib/applications/verifyConfirm";
 import { cn } from "@/lib/utils";
 
 import { useWorkspace } from "@/components/app/applications/workspace/context";
@@ -53,14 +54,13 @@ export function verifyItems(attempt: AttemptView, caseView: CaseView): Item[] {
   ];
 }
 
-/** Whether one value is confirmed: the call verified, the agent confirmed it on the call, or it was checked. */
+/**
+ * Whether one value is confirmed: the agent confirmed it in the call's Verification phase (the address
+ * only with its street — a state alone is not an address), or it was checked here or on Application.
+ * The rule is lib/applications/verifyConfirm.ts.
+ */
 export function verifyConfirmed(item: Item, attempt: AttemptView, caseView: CaseView): boolean {
-  if (!item.shown) return false;
-  if (caseView.verification?.complete) return true;
-  const present = item.keys.filter((k) => hasContent(attempt.values[k]));
-  const onCall = new Set(caseView.verification?.confirmedKeys ?? []);
-  if (present.length > 0 && present.every((k) => onCall.has(k))) return true;
-  return present.length > 0 && present.every((k) => attempt.values[k]!.reviewed);
+  return confirmationOf(item, attempt.values, caseView.verification) !== null;
 }
 
 export function VerifyStep() {
@@ -69,7 +69,8 @@ export function VerifyStep() {
   const workItemId = verification?.workItemId ?? null;
   const onCall = new Set(verification?.confirmedKeys ?? []);
   const items = verifyItems(attempt, caseView);
-  const confirmed = items.map((item) => verifyConfirmed(item, attempt, caseView));
+  const sources = items.map((item) => confirmationOf(item, attempt.values, verification));
+  const confirmed = sources.map((s) => s !== null);
   const count = confirmed.filter(Boolean).length;
 
   // Inside the call page (owner 2026-10-28) the call's own step bar goes back; no button here.
@@ -87,7 +88,7 @@ export function VerifyStep() {
       <FoldSection heading="Who you are talking to" done={count} total={items.length} complete={count === items.length} keepOpen unit="confirmed">
         {items.map((item, i) => {
           const ok = confirmed[i];
-          const fromCall = ok && item.keys.filter((k) => hasContent(attempt.values[k])).every((k) => onCall.has(k));
+          const fromCall = sources[i] === "call";
           const isNext = !ok && confirmed.indexOf(false) === i;
           return (
             <div
@@ -136,7 +137,7 @@ export function VerifyStep() {
       </FoldSection>
       <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-3">
         <span className="text-xs text-[var(--muted)]">
-          {verification?.complete ? "Verified on the call." : onCall.size ? "Confirmed on the call where marked; the call's verification is not finished." : workItemId ? "The call's verification is not finished." : "Read each one back and confirm it."}
+          {verification?.complete ? (count === items.length ? "Verified on the call." : "Verified on the call. Confirm what is left here.") : onCall.size ? "Confirmed on the call where marked; the call's verification is not finished." : workItemId ? "The call's verification is not finished." : "Read each one back and confirm it."}
         </span>
         <span className="flex flex-wrap items-center gap-3">
           {backToInbound}

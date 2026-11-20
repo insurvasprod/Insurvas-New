@@ -125,10 +125,12 @@ export function ProducerCarrierForm({ producerId, carrierId }: { producerId: str
     setProblem(null);
     const { error: message } = await sendJson(`/api/app/agency/producers/${producerId}/appointments`, "PUT", { carrierId, state: state.trim(), status: apptStatus, expiresOn: expires || null });
     setBusy(false);
-    if (message) { setProblem(message); return; }
+    // The problem line sits in the other card's body; an appointment error is said where it was pressed too.
+    if (message) { setProblem(message); notify.fail(message); return; }
     notify.done(`${row.carrierName} appointment in ${state.trim().toUpperCase()} saved.`);
     setState(""); setExpires("");
-    reload();
+    // A fresh read (never one already on its way from before the save), so the list shows the new state at once.
+    await reload();
   }
 
   const levelOff = !level.trim() && (!typed.trim() || typed.trim() === row.writingNumber);

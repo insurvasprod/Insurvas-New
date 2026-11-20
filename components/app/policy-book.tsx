@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -44,8 +45,10 @@ const COLUMNS: Array<{ label: string; sort?: SortKey; className?: string; title?
   { label: "Client" },
   { label: "Carrier", sort: "carrier" },
   { label: "Health", sort: "dpd", title: "Paid to, payments behind, or the policy's status; sorted by days behind. Hover a chip for the next date." },
-  { label: "Premium", sort: "premium", className: "text-right", title: "Premium as the carrier bills it; sorted by its yearly amount" },
+  // Owner 2026-11-19: more room for the premium, and a button at the end of every row to open the policy.
+  { label: "Premium", sort: "premium", className: "min-w-[9rem] pr-8 text-right", title: "Premium as the carrier bills it; sorted by its yearly amount" },
   { label: "Commission", title: "First year: earned, advance not yet earned, short, still to come" },
+  { label: "", className: "w-px" },
 ];
 
 /**
@@ -270,11 +273,12 @@ export function PolicyBook({ rows, strip, initialQuery, saved, savedAvailable, s
                     <td className="whitespace-nowrap">{row.clientName ?? <span className="text-muted-foreground">—</span>}</td>
                     <td className="whitespace-nowrap" title={row.product ?? (row.source === "hand" ? "Entered by hand" : undefined)}>{row.carrierName}</td>
                     <td className="whitespace-nowrap">{m ? <span title={[m.next ? `${m.next.label} ${shortDay(m.next.date)}` : null, row.statusRaw ? `The carrier's word: ${row.statusRaw}` : null].filter(Boolean).join(" · ") || undefined}><StatusChip tone={m.health.tone}>{m.health.label}</StatusChip></span> : <span className="text-muted-foreground">—</span>}</td>
-                    <td className="whitespace-nowrap text-right tabular-nums">{row.premiumCents === null ? <span className="text-muted-foreground">—</span> : `${money2(row.premiumCents)}${row.premiumMode ? MODE_SHORT[row.premiumMode] ?? "" : ""}`}</td>
+                    <td className="min-w-[9rem] whitespace-nowrap pr-8 text-right tabular-nums">{row.premiumCents === null ? <span className="text-muted-foreground">—</span> : `${money2(row.premiumCents)}${row.premiumMode ? MODE_SHORT[row.premiumMode] ?? "" : ""}`}</td>
                     <td className="whitespace-nowrap tabular-nums">
                       {m?.sentence ? m.sentence : <span className="text-muted-foreground">—</span>}
-                      {m?.addRate && (canAddRate ? <> · <Link href="/app/rate-card" className="hover:underline">Add the rate ›</Link></> : " · no rate on the Rate card")}
+                      {m?.addRate && (canAddRate ? <> · <Link href="/app/rate-card" className="hover:underline">Add the rate</Link></> : " · no rate on the Rate card")}
                     </td>
+                    <RowActionCell><RowAction href={href} title={`Open ${row.policyNumber}`}>Details</RowAction></RowActionCell>
                   </tr>
                 );
               })}

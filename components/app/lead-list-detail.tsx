@@ -14,6 +14,7 @@ import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import type { LeadListDetail, PoolBlocker, PoolBlockers, RemovalReason } from "@/lib/leadLists/detail";
 import { cn } from "@/lib/utils";
+import { formatPerRecordCents } from "@/lib/money";
 import { StatusChip } from "@/components/ui/status-chip";
 
 /**
@@ -41,7 +42,8 @@ const REMOVAL: Record<RemovalReason, { label: string; chip: string; tone: "dange
 
 const money = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const wholeMoney = (cents: number) => `$${Math.round(cents / 100).toLocaleString("en-US")}`;
-const perRecord = (cents: number | null) => (cents == null ? "—" : `$${(cents / 100).toFixed(3)}`);
+// "$25.00", or "$0.125" for a fraction of a cent: never "$25.000" (lib/money.ts).
+const perRecord = (cents: number | null) => formatPerRecordCents(cents);
 const count = (value: number) => value.toLocaleString("en-US");
 
 function parts(iso: string, timeZone: string | null) {

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { AddCodeDialog, MapCodeDialog, MappedCodeDialog, policiesHref, policiesLabel, type Carrier, type Member, type Outcome } from "@/components/app/book/setup/agent-codes-dialogs";
 import { Button } from "@/components/ui/button";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
@@ -151,9 +152,9 @@ export function AgentCodes({ unmapped, mapped, members, carriers, readOnly, show
   // The row's one chip: a code nobody is mapped to.
   const person = (row: Row) => (row.kind === "mapped" ? row.userName : <StatusChip tone="warning" title="No producer gets the credit">Nobody</StatusChip>);
   const opener = (row: Row) => (
-    <button type="button" className="whitespace-nowrap hover:underline" aria-label={`${row.kind === "unmapped" && !readOnly ? "Map" : "Open"} ${row.agentIdentifier}`} onClick={() => setOpen(row)}>
-      {row.kind === "unmapped" && !readOnly ? "Map ›" : row.kind === "mapped" && !readOnly ? "Change ›" : "Open ›"}
-    </button>
+    <RowAction aria-label={`${row.kind === "unmapped" && !readOnly ? "Map" : "Open"} ${row.agentIdentifier}`} onClick={() => setOpen(row)}>
+      {row.kind === "unmapped" && !readOnly ? "Map" : row.kind === "mapped" && !readOnly ? "Change" : "Open"}
+    </RowAction>
   );
 
   const empty = unmapped.length === 0 && mapped.length === 0;
@@ -175,7 +176,7 @@ export function AgentCodes({ unmapped, mapped, members, carriers, readOnly, show
         ) : (
           <>
             <table className="portal-lead-table hidden w-full min-w-[820px] text-left text-sm sm:table">
-              <thead><tr><th>Code</th><th>Carrier</th><th className="w-[130px] text-right">Policies</th><th>Person</th><th className="w-[110px]">Next step</th></tr></thead>
+              <thead><tr><th>Code</th><th>Carrier</th><th className="w-[130px] text-right">Policies</th><th>Person</th><th className="w-[110px] text-right">Next step</th></tr></thead>
               <tbody>
                 {shown.rows.map((row) => (
                   <tr key={rowKey(row)} className="group cursor-pointer hover:bg-[var(--primary-soft)]" onClick={openRow(row)}>
@@ -183,7 +184,7 @@ export function AgentCodes({ unmapped, mapped, members, carriers, readOnly, show
                     <td className="whitespace-nowrap">{row.carrierName}</td>
                     <td className="text-right">{policies(row)}</td>
                     <td className="whitespace-nowrap">{person(row)}</td>
-                    <td>{opener(row)}</td>
+                    <RowActionCell>{opener(row)}</RowActionCell>
                   </tr>
                 ))}
               </tbody>

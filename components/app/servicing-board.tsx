@@ -9,6 +9,7 @@ import { ActiveFilters, ClearFiltersButton, DataToolbar, FilterField, FilterPopo
 import { personName } from "@/lib/format/personName";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
@@ -92,7 +93,7 @@ export function ServicingBoard({ rows, readOnly }: { rows: ServicingRow[]; readO
               <th>Change asked</th>
               <th className="text-right">Waiting</th>
               <th>Status</th>
-              <th>Next step</th>
+              <th className="text-right">Next step</th>
             </tr>
           </thead>
           <tbody className="m-seq">
@@ -134,7 +135,7 @@ export function ServicingBoard({ rows, readOnly }: { rows: ServicingRow[]; readO
                     <td className="whitespace-nowrap text-right tabular-nums" title={`${sent} · ${showBy}`}>{waited === null ? <span className="text-muted-foreground">—</span> : `${waited} ${waited === 1 ? "day" : "days"}`}</td>
                     <td><StatusChip tone={tone} title={check?.text ?? (pastDate ? showBy : undefined)}>{pastDate ? "Past its date" : STATUS_LABELS[r.status]}</StatusChip></td>
                     {/* The next step as a short verb (2·A); the whole row opens the request. */}
-                    <td className="whitespace-nowrap">{next} ›</td>
+                    <RowActionCell><RowAction href={href}>{next}</RowAction></RowActionCell>
                   </LinkRow>
                 </Fragment>
               );

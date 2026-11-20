@@ -8,6 +8,7 @@ import { configuredAppOrigin } from "@/lib/urls/origin";
 import { getViewerTimezone } from "@/lib/users/viewerTimezone";
 import { digestDue, eventForKind, NOTIFICATION_EVENTS } from "./events";
 import { emailDecision, loadNotificationSettings } from "./preferences";
+import { shouldRetrySend } from "./retry";
 
 /**
  * LA-8.4 (Notion sprint) · the notifications job (app/api/cron/notifications, every few minutes).
@@ -38,8 +39,8 @@ async function people(ids: string[]): Promise<Map<string, Person>> {
 }
 
 /** `tenantId` scopes a run to one agency (a test run, or re-running one agency); absent, every agency. */
-export async function processOutbox(now = new Date(), tenantId?: string): Promise<{ sent: number; queued: number; off: number; held: number; skipped: number; available: boolean }> {
-  const out = { sent: 0, queued: 0, off: 0, held: 0, skipped: 0, available: true };
+export async function processOutbox(now = new Date(), tenantId?: string): Promise<{ sent: number; queued: number; off: number; held: number; skipped: number; retry: number; available: boolean }> {
+  const out = { sent: 0, queued: 0, off: 0, held: 0, skipped: 0, retry: 0, available: true };
   const at = now.toISOString();
   const scoped = <Q extends { eq(column: string, value: string): Q }>(q: Q): Q => (tenantId ? q.eq("tenant_id", tenantId) : q);
   // Notifications whose event does not email through the outbox are done with as far as email goes.
@@ -75,16 +76,24 @@ export async function processOutbox(now = new Date(), tenantId?: string): Promis
     if (decision === "off") { out.off += 1; continue; }
     if (decision === "digest") { out.queued += 1; continue; }
     const rendered = notificationAlertEmail({ name: person.name, title: row.title, body: row.body, url: absolute(row.link), settingsUrl: settingsUrl(), protectedReason: event.is_protected ? event.protected_reason : undefined });
-    await sendEmail({ ...rendered, to: person.email, userId: person.id, tenantId: row.tenant_id, templateKey: "notification.alert", dedupeKey: `notification:${row.id}` });
-    out.sent += 1;
+    const result = await sendEmail({ ...rendered, to: person.email, userId: person.id, tenantId: row.tenant_id, templateKey: "notification.alert", dedupeKey: `notification:${row.id}` });
+    if (shouldRetrySend(result)) {
+      // Not sent: hand it back so a later run tries again, and stop this run — the rest would fail
+      // the same way, and are still unclaimed.
+      await db().from("agent_notifications").update({ email_handled_at: null }).eq("id", row.id);
+      out.retry += 1;
+      break;
+    }
+    if (result.delivered) out.sent += 1;
+    else out.skipped += 1;
   }
   return out;
 }
 
 type DigestItem = { id: string; user_id: string; tenant_id: string | null; cadence: "daily" | "weekly"; title: string; body: string; link: string | null; created_at: string };
 
-export async function sendDigests(now = new Date(), tenantId?: string): Promise<{ sent: number; notDue: number; available: boolean }> {
-  const out = { sent: 0, notDue: 0, available: true };
+export async function sendDigests(now = new Date(), tenantId?: string): Promise<{ sent: number; notDue: number; retry: number; available: boolean }> {
+  const out = { sent: 0, notDue: 0, retry: 0, available: true };
   // A sent line has done its job; a title can name a customer, so it is not kept beyond 30 days.
   await db().from("notification_digest_item").delete().lt("sent_at", new Date(now.getTime() - 30 * 86_400_000).toISOString());
   let pending = db().from("notification_digest_item").select("id, user_id, tenant_id, cadence, title, body, link, created_at").is("sent_at", null);
@@ -113,10 +122,18 @@ export async function sendDigests(now = new Date(), tenantId?: string): Promise<
     if (mark.error || !(mark.data ?? []).length) continue;
     const claimed = new Set(((mark.data ?? []) as { id: string }[]).map((r) => r.id));
     const mine = items.filter((i) => claimed.has(i.id));
-    await db().from("user_notification_settings").upsert({ user_id: userId, [cadence === "daily" ? "daily_digest_sent_at" : "weekly_digest_sent_at"]: at, updated_at: at }, { onConflict: "user_id" });
     const rendered = notificationDigestEmail({ name: person.name, cadence, items: mine.map((i) => ({ title: i.title, body: i.body, url: absolute(i.link) })), settingsUrl: settingsUrl() });
-    await sendEmail({ ...rendered, to: person.email, userId, tenantId, templateKey: "notification.digest", dedupeKey: `digest:${cadence}:${userId}:${at.slice(0, 10)}` });
-    out.sent += 1;
+    const result = await sendEmail({ ...rendered, to: person.email, userId, tenantId, templateKey: "notification.digest", dedupeKey: `digest:${cadence}:${userId}:${at.slice(0, 10)}` });
+    if (shouldRetrySend(result)) {
+      // Not sent: put the lines back in the queue (the digest is still due, so the next run retries)
+      // and stop this run, since the other digests would fail the same way.
+      await db().from("notification_digest_item").update({ sent_at: null }).in("id", [...claimed]);
+      out.retry += 1;
+      break;
+    }
+    // Recorded only once it went (or was deliberately skipped), so a failure leaves the digest due.
+    await db().from("user_notification_settings").upsert({ user_id: userId, [cadence === "daily" ? "daily_digest_sent_at" : "weekly_digest_sent_at"]: at, updated_at: at }, { onConflict: "user_id" });
+    if (result.delivered) out.sent += 1;
   }
   return out;
 }

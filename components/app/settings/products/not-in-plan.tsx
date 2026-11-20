@@ -14,10 +14,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { EmptyState } from "@/components/ui/page-states";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { RowAction } from "@/components/ui/row-action";
 import { addedByText } from "@/lib/products/readiness";
-import { cn } from "@/lib/utils";
 
-import { lineOf, linkClass, type ProductRow } from "./parts";
+import { lineOf, type ProductRow } from "./parts";
 
 export function NotInPlan({ rows, addedBy }: { rows: ProductRow[]; addedBy: Record<string, string[]> | null }) {
   const [open, setOpen] = useState<ProductRow | null>(null);
@@ -41,8 +41,8 @@ export function NotInPlan({ rows, addedBy }: { rows: ProductRow[]; addedBy: Reco
                   <TableCell className="text-[var(--muted)]">{row.name}</TableCell>
                   <TableCell className="text-[var(--muted)]">{lineOf(row.category)}</TableCell>
                   <TableCell className="text-[var(--muted)]">{addedBy === null ? "—" : addedByText(addedBy[row.code]) ?? "A larger plan · ask us"}</TableCell>
-                  <TableCell className="text-right">
-                    <button type="button" onClick={() => setOpen(row)} className={cn("text-sm", linkClass)}>See plans ›</button>
+                  <TableCell className="w-px whitespace-nowrap text-right">
+                    <RowAction onClick={() => setOpen(row)}>See Plans</RowAction>
                   </TableCell>
                 </TableRow>
               ))}

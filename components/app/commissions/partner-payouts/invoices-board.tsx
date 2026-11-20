@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { DataToolbar, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction } from "@/components/ui/row-action";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
@@ -19,7 +20,7 @@ import { listOrder, stateOf, type InvoiceState, type InvoiceTab } from "./invoic
 
 /**
  * Commissions › Partner payouts, the three invoice tabs (round 7, owner pick 9·A, 2026-11-10). One list per tab; a row
- * opens its invoice; one chip says where it stands, and "Next step" is one short verb, never a button. The partner's
+ * opens its invoice; one chip says where it stands, and "Next step" is one short verb on a RowAction button (owner 2026-11-19). The partner's
  * name opens the partner (Partners › terms). One line per row, one text colour (owner 2026-11-11).
  */
 export type InvoiceRow = { id: string; partnerId: string; partnerName: string; periodStart: string; periodEnd: string; status: string; netCents: number; paidOn: string | null; invoiceNumber?: string | null };
@@ -38,7 +39,7 @@ const STATE: Record<InvoiceState, { tone: StatusTone; label: string }> = {
   void: { tone: "neutral", label: "Void" },
 };
 /** The next step: one short verb; the whole row opens the invoice. */
-const NEXT: Record<InvoiceState, string> = { review: "Review ›", pay: "Pay ›", paid: "Open ›", nothing: "Open ›", void: "Open ›" };
+const NEXT: Record<InvoiceState, string> = { review: "Review", pay: "Pay", paid: "Open", nothing: "Open", void: "Open" };
 const FOOT: Record<InvoiceTab, string> = { review: "Drafts: the partner can't see these until you publish", pay: "Published: the partner sees these in their portal; nothing is paid from here", paid: "Paid, nothing owed and void invoices stay on record" };
 const SUM: Record<InvoiceTab, string> = { review: "waiting for your review", pay: "to pay", paid: "paid" };
 
@@ -99,7 +100,7 @@ export function InvoicesBoard({ tab, runs, recordLinks }: {
         <Table>
           <TableHeader><TableRow>
             <TableHead className="w-[22%]">Partner</TableHead><TableHead className="w-[16%]">Invoice</TableHead><TableHead className="w-[20%]">Pay period</TableHead>
-            <TableHead className="w-[13%] text-right">Net payable</TableHead><TableHead>Status</TableHead><TableHead className="w-[12%]">Next step</TableHead>
+            <TableHead className="w-[13%] text-right">Net payable</TableHead><TableHead>Status</TableHead><TableHead className="w-[12%] text-right">Next step</TableHead>
           </TableRow></TableHeader>
           <TableBody>
             {shown.rows.map((r) => {
@@ -116,7 +117,7 @@ export function InvoicesBoard({ tab, runs, recordLinks }: {
                   <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">{period(r)}</TableCell>
                   <TableCell className="whitespace-nowrap text-right tabular-nums">{money(r.netCents)}</TableCell>
                   <TableCell><StatusChip tone={owesYou ? "warning" : STATE[state].tone}>{label}</StatusChip></TableCell>
-                  <TableCell className="whitespace-nowrap">{NEXT[state]}</TableCell>
+                  <TableCell className="w-px whitespace-nowrap text-right"><RowAction href={open(r)}>{NEXT[state]}</RowAction></TableCell>
                 </TableRow>
               );
             })}

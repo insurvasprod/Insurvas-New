@@ -132,6 +132,7 @@ const ON_THE_DIARY = ["booked", "confirmed", "pending", "showed", "no_show"];
 type Result = PromiseLike<{ data: unknown; error: { message: string } | null; count?: number | null }>;
 type Chain = Result & {
   eq(column: string, value: unknown): Chain;
+  neq(column: string, value: unknown): Chain;
   in(column: string, values: string[]): Chain;
   or(filters: string): Chain;
   is(column: string, value: null): Chain;
@@ -265,7 +266,7 @@ export async function getDashboardToday(input: { tenantId: string; userId: strin
   })().catch(() => null) : Promise.resolve(null);
 
   const policiesRead = has("book_of_business") && wants("policies") ? (async () => {
-    let query = db().from("tenant_policies").select("annual_premium_cents").eq("tenant_id", input.tenantId).gte("created_at", new Date(now - 30 * 86_400_000).toISOString());
+    let query = db().from("tenant_policies").select("annual_premium_cents").eq("tenant_id", input.tenantId).neq("source", "carrier_file").gte("created_at", new Date(now - 30 * 86_400_000).toISOString());
     if (scope === "you") query = query.eq("created_by", input.userId);
     const result = await query.limit(5000);
     if (result.error) return null;
@@ -327,13 +328,16 @@ export async function getDashboardToday(input: { tenantId: string; userId: strin
       return count(isolated ? query.eq("owner_user_id", input.userId) : query);
     })() : Promise.resolve(null),
     has("callback_calendar") && wants("callbacks") ? (async () => {
-      let query = db().from("tenant_callbacks").select("scheduled_at_utc, customer_timezone, lead:agent_leads!tenant_callbacks_lead_id_fkey(values)").eq("tenant_id", input.tenantId).in("status", ["scheduled", "due"]).gte("scheduled_at_utc", new Date(now).toISOString());
+      let query = db().from("tenant_callbacks").select("scheduled_at_utc, customer_timezone, lead:agent_leads!tenant_callbacks_lead_id_fkey(tenant_id, values)").eq("tenant_id", input.tenantId).in("status", ["scheduled", "due"]).gte("scheduled_at_utc", new Date(now).toISOString());
       // AG-0.5: scoped, the next callback assigned to the scope or the reader (D1: assigned_to).
       if (heldBy !== null) query = query.in("assigned_to", [...heldBy]);
       const result = await query.order("scheduled_at_utc", { ascending: true }).limit(1);
-      const row = ((result.error ? [] : result.data ?? []) as Array<{ scheduled_at_utc: string; customer_timezone: string; lead: { values: Record<string, unknown> | null } | Array<{ values: Record<string, unknown> | null }> | null }>)[0];
+      const row = ((result.error ? [] : result.data ?? []) as Array<{ scheduled_at_utc: string; customer_timezone: string; lead: { tenant_id?: string; values: Record<string, unknown> | null } | Array<{ tenant_id?: string; values: Record<string, unknown> | null }> | null }>)[0];
       if (!row) return null;
-      const lead = Array.isArray(row.lead) ? row.lead[0] : row.lead;
+      // The embed has no tenant predicate of its own (the foreign key is not tenant-composite): a lead of another
+      // tenant is never named (audit 2026-11-19, as lib/callbacks/service.ts).
+      const embedded = Array.isArray(row.lead) ? row.lead[0] : row.lead;
+      const lead = embedded && embedded.tenant_id === input.tenantId ? embedded : null;
       return { name: leadName(lead?.values), atUtc: row.scheduled_at_utc, customerTimezone: row.customer_timezone };
     })().catch(() => null) : Promise.resolve(null),
     has("callback_calendar") && wants("callbacks") ? listDueCallbacks(input.tenantId, heldBy).catch(() => null) : Promise.resolve(null),

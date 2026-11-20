@@ -45,15 +45,20 @@ export function useFittingPageSize(reserved: number, rowHeight: number, { fallba
       const header = document.querySelector<HTMLElement>('main [data-page-header="visible"]')?.getBoundingClientRect().height ?? 0;
       return clamp(Math.floor((window.innerHeight - reserved - header) / rowHeight));
     };
-    // From the space the rows take now: shrink when they run past the room, grow only when a whole
-    // row (and a bit) is free, so rows of different heights never flip the size back and forth.
+    // From the room alone: how many rows of the height they have fit between the rows' top and the line, whatever is
+    // showing now. 2026-11-19 (owner: the Policies list flipped between 9 and 10 rows): sizing from the rows on screen
+    // chased its own last render (shrink on 10, grow on 9), and a measure inside the state updater read the page
+    // mid-update. Measured once per frame, outside React's update, it settles in one step.
     const measure = (current: number) => {
       const card = listCard();
       const body = card?.querySelector<HTMLElement>("tbody");
       if (!card || !body) return current;
       const rows = [...body.children].map((row) => (row as HTMLElement).offsetHeight).filter(Boolean);
       if (!rows.length) return current;
-      const each = rows.reduce((sum, height) => sum + height, 0) / rows.length;
+      // The usual row: the most common height, so one two-line row does not shrink the page.
+      const counts = new Map<number, number>();
+      for (const height of rows) counts.set(height, (counts.get(height) ?? 0) + 1);
+      const each = [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0][0];
       const footer = card.lastElementChild !== body.closest(".overflow-x-auto") ? (card.lastElementChild as HTMLElement | null)?.offsetHeight ?? 0 : 0;
       // The line the card may reach (table foundation §6b): a merged page's column foot, less a footnote
       // under the card (Files' stage legend, owner 2026-11-02: "remove that scroll"); else the window's.
@@ -64,19 +69,22 @@ export function useFittingPageSize(reserved: number, rowHeight: number, { fallba
       const top = body.getBoundingClientRect().top + offset;
       // The card's own border at the foot, and a pixel so rounding never adds a scrollbar.
       const room = line - top - footer - 2;
-      const used = rows.reduce((sum, height) => sum + height, 0);
-      if (used > room) return clamp(rows.length - Math.ceil((used - room) / each));
-      // A short last page leaves room on purpose: grow only from a full page.
-      if (rows.length < current) return current;
-      const spare = Math.floor((room - used) / (each * 1.15));
-      return spare > 0 ? clamp(rows.length + spare) : current;
+      const fits = clamp(Math.floor(room / each));
+      // A short last page leaves room on purpose: it keeps the size the full pages have.
+      if (rows.length < current && fits >= rows.length) return current;
+      return fits;
     };
     let frame = 0;
+    let size = fallback;
     const fit = () => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => setSize((current) => measure(current)));
+      frame = requestAnimationFrame(() => {
+        const next = measure(size);
+        if (next !== size) { size = next; setSize(next); }
+      });
     };
-    setSize(estimate()); // eslint-disable-line react-hooks/set-state-in-effect
+    size = estimate();
+    setSize(size); // eslint-disable-line react-hooks/set-state-in-effect
     fit();
     // Anything above the list that grows or shrinks (a strip loading, a filter panel opening) moves it.
     const main = document.querySelector("main");
@@ -88,6 +96,6 @@ export function useFittingPageSize(reserved: number, rowHeight: number, { fallba
     if (main) changes?.observe(main, { childList: true, subtree: true });
     window.addEventListener("resize", fit);
     return () => { cancelAnimationFrame(frame); observer?.disconnect(); changes?.disconnect(); window.removeEventListener("resize", fit); };
-  }, [reserved, rowHeight, min, max]);
+  }, [reserved, rowHeight, min, max, fallback]);
   return size;
 }

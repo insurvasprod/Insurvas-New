@@ -165,7 +165,7 @@ const HAND_STATUS: Record<string, string> = { active: "active", pending: "submit
 export async function loadHandPolicies(viewer: Viewer): Promise<BookRow[]> {
   const [read, carrierRead] = await Promise.all([
     everyRow(() => {
-      let query = db().from("tenant_policies").select("id, policy_number, insured_name, carrier, product, effective_date, annual_premium_cents, status, source").eq("tenant_id", viewer.tenantId);
+      let query = db().from("tenant_policies").select("id, policy_number, insured_name, carrier, product, effective_date, annual_premium_cents, status, source").eq("tenant_id", viewer.tenantId).neq("source", "carrier_file");
       if (viewer.role === "producer") query = query.eq("created_by", viewer.userId);
       return inScope(viewer, query, "created_by").order("id");
     }),

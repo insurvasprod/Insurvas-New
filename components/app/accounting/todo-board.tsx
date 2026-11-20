@@ -7,6 +7,7 @@ import { useMemo, useState, useTransition } from "react";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { Segmented } from "@/components/ui/view-tabs";
@@ -84,7 +85,7 @@ export function TodoBoard({ items, groupLabel }: { items: TodoItem[]; groupLabel
         <NoMatches noun="things waiting" onClear={() => { setQ(""); pick("all"); }} />
       ) : (
         <table className="portal-lead-table w-full min-w-[920px] text-left text-sm">
-          <thead><tr><th>What&apos;s waiting</th><th>Where</th><th className="text-right">Amount</th><th>Since</th><th>Status</th><th>Next step</th></tr></thead>
+          <thead><tr><th>What&apos;s waiting</th><th>Where</th><th className="text-right">Amount</th><th>Since</th><th>Status</th><th className="text-right">Next step</th></tr></thead>
           {/* Keyed by the pick and the order (not the typed search, which would flicker per key): a new set of rows
               settles in (§ Motion, "rows-filter"). */}
           <tbody key={`${show}|${order}`} className="m-rows-settle">
@@ -100,7 +101,7 @@ export function TodoBoard({ items, groupLabel }: { items: TodoItem[]; groupLabel
                 </td>
                 <td className="whitespace-nowrap tabular-nums text-muted-foreground">{i.sinceLabel ?? (i.since ? dayMonth(i.since) : "—")}</td>
                 <td><StatusChip tone={i.chip.tone}>{i.chip.amount && i.amountCents != null ? `${formatCentsAsCurrency(Math.abs(i.amountCents))} ${i.chip.label}` : i.chip.label}</StatusChip></td>
-                <td className="whitespace-nowrap" title={i.next}>{i.step} ›</td>
+                <RowActionCell><RowAction href={i.href} title={i.next}>{i.step}</RowAction></RowActionCell>
               </tr>
             ))}
           </tbody>

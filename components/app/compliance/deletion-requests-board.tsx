@@ -15,6 +15,7 @@ import { LeaveGuard } from "@/components/ui/leave-guard";
 import { MoreMenu } from "@/components/ui/more-menu";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
@@ -108,7 +109,7 @@ export function DeletionRequestsBoard({ requests, holdDays, queue, mayPerform, r
           // One line a request, one chip, the next step a verb (r7 5·A). The whole row opens the request; nothing
           // deletes from the list. Email is the name's tooltip; Phone keeps a column, as the DNC entry is kept by number.
           <table className="portal-lead-table w-full min-w-[680px] text-left text-sm">
-            <thead><tr><th>Person</th><th>Phone</th><th>Received</th><th>Status</th><th>Next step</th></tr></thead>
+            <thead><tr><th>Person</th><th>Phone</th><th>Received</th><th>Status</th><th className="text-right">Next step</th></tr></thead>
             <tbody>
               {shown.rows.map((r) => {
                 const chip = deletionChip(r, now);
@@ -119,7 +120,7 @@ export function DeletionRequestsBoard({ requests, holdDays, queue, mayPerform, r
                     <td className={cn("whitespace-nowrap tabular-nums", !r.phoneDigits && "text-muted-foreground")}>{r.phoneDigits ? formatPhone(r.phoneDigits) : "—"}</td>
                     <td className="whitespace-nowrap tabular-nums text-muted-foreground">{day(r.receivedAt)}</td>
                     <td className="whitespace-nowrap"><StatusChip tone={chip.tone}>{chip.label}</StatusChip></td>
-                    <td className="whitespace-nowrap" title={nextStep.sentence}>{nextStep.verb} ›</td>
+                    <RowActionCell><RowAction href={`/app/deletion-requests/${r.id}`} title={nextStep.sentence}>{nextStep.verb}</RowAction></RowActionCell>
                   </tr>
                 );
               })}

@@ -266,7 +266,7 @@ export async function loadPolicyPipeline(tenantId: string, leadId: string | null
 
 // ─── Commissions: findings ──────────────────────────────────────────────────────────────────────
 
-export type PolicyFinding = { id: string; type: string; severity: string; status: string; explanation: string | null; expectedCents: number | null; reportedCents: number | null; differenceCents: number | null; lastSeenAt: string | null };
+export type PolicyFinding = { id: string; type: string; severity: string; status: string; explanation: string | null; expectedCents: number | null; reportedCents: number | null; differenceCents: number | null; lastSeenAt: string | null; href?: string };
 
 export const FINDING_WORDS: Record<string, string> = {
   missing: "Commission missing", short_paid: "Paid short", over_paid: "Paid over", mis_rated: "Wrong rate",
@@ -274,18 +274,38 @@ export const FINDING_WORDS: Record<string, string> = {
   held_building_up: "Held money building up", debit_balance_growing: "Debit balance growing",
 };
 
-/** The discrepancy engine's open findings for this policy (LA-4.15), worst first. */
+/**
+ * The statement check's open pay issues on this policy's mirror (lib/ledger/statementMirror.ts): a carrier-file
+ * policy paid through a statement imported by hand is judged there, not by the carrier-file engine (owner
+ * 2026-11-20 walk: Victor's $42.50 short was on Pay issues but not on his policy's Money tab).
+ */
+async function mirrorFindings(tenantId: string, carrierId: string, policyNumber: string): Promise<PolicyFinding[]> {
+  const mirrors = await db().from("tenant_policies").select("id").eq("tenant_id", tenantId).eq("source", "carrier_file").eq("policy_number", policyNumber);
+  const ids = ((mirrors.data ?? []) as Loose[]).map((row) => row.id);
+  if (mirrors.error || !ids.length) return [];
+  const read = await db().from("tenant_commission_discrepancies").select("id, kind, owed_cents, detail, status, last_seen_at").eq("tenant_id", tenantId).eq("carrier_id", carrierId).in("policy_id", ids).in("status", ["open", "disputed"]).limit(100);
+  if (read.error) return [];
+  const n = (v: unknown) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Number(v));
+  return ((read.data ?? []) as Loose[]).map((d) => ({
+    id: d.id, type: d.kind === "never_paid" ? "missing" : d.kind, severity: "action", status: d.status, explanation: d.detail?.explanation ?? null,
+    expectedCents: n(d.detail?.expectedCents), reportedCents: n(d.detail?.receivedCents), differenceCents: -Number(d.owed_cents ?? 0), lastSeenAt: d.last_seen_at,
+    href: `/app/discrepancies/${d.id}`,
+  }));
+}
+
+/** The discrepancy engine's open findings for this policy (LA-4.15), worst first, and the statement check's on its mirror. */
 export async function loadPolicyFindings(tenantId: string, carrierId: string, policyNumber: string): Promise<{ available: boolean; items: PolicyFinding[] }> {
-  const { data, error } = await db().from("commission_discrepancy").select("id, discrepancy_type, severity, status, explanation, expected_amount_cents, reported_amount_cents, difference_cents, last_seen_at").eq("tenant_id", tenantId).eq("carrier_id", carrierId).eq("policy_number", policyNumber).in("status", ["open", "disputed"]).limit(100);
+  const [{ data, error }, fromStatements] = await Promise.all([db().from("commission_discrepancy").select("id, discrepancy_type, severity, status, explanation, expected_amount_cents, reported_amount_cents, difference_cents, last_seen_at").eq("tenant_id", tenantId).eq("carrier_id", carrierId).eq("policy_number", policyNumber).in("status", ["open", "disputed"]).limit(100),
+    mirrorFindings(tenantId, carrierId, policyNumber)]);
   if (error) {
-    if (isSchemaGap(error)) return { available: false, items: [] };
+    if (isSchemaGap(error)) return { available: !!fromStatements.length, items: fromStatements };
     throw new Error(`Could not load the policy's findings: ${error.message}`);
   }
   const rank: Record<string, number> = { action: 0, warning: 1, info: 2 };
   const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
   return {
     available: true,
-    items: ((data ?? []) as Loose[]).sort((a, b) => (rank[a.severity] ?? 3) - (rank[b.severity] ?? 3)).map((d) => ({ id: d.id, type: d.discrepancy_type, severity: d.severity, status: d.status, explanation: d.explanation, expectedCents: n(d.expected_amount_cents), reportedCents: n(d.reported_amount_cents), differenceCents: n(d.difference_cents), lastSeenAt: d.last_seen_at })),
+    items: [...fromStatements, ...((data ?? []) as Loose[]).sort((a, b) => (rank[a.severity] ?? 3) - (rank[b.severity] ?? 3)).map((d) => ({ id: d.id, type: d.discrepancy_type, severity: d.severity, status: d.status, explanation: d.explanation, expectedCents: n(d.expected_amount_cents), reportedCents: n(d.reported_amount_cents), differenceCents: n(d.difference_cents), lastSeenAt: d.last_seen_at }))],
   };
 }
 

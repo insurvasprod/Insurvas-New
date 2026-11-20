@@ -2,7 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Activity, Award, BadgeDollarSign, Brain, ChartColumn, ChartLine, ChartNoAxesCombined, ChevronsLeft, ChevronsRight, Gauge, Network, UserRoundCheck, type LucideIcon } from "lucide-react";
+import { Activity, Award, BadgeDollarSign, Brain, CalendarCheck, ChartColumn, ChartLine, ChartNoAxesCombined, ChevronsLeft, ChevronsRight, Gauge, Network, Package, UserRoundCheck, type LucideIcon } from "lucide-react";
 
 import { useMenuSections } from "@/components/ui/page-trail";
 import { CountBadge } from "@/components/ui/count-badge";
@@ -18,7 +18,7 @@ const CLOSE_OUT_KEY = "/api/app/appointments/close-out";
 type CloseOutBody = { appointments?: unknown[] } | null;
 const countOf = (body: CloseOutBody | undefined) => (Array.isArray(body?.appointments) ? body.appointments.length : 0);
 
-const ICONS: Record<ReportsView, LucideIcon> = { sales: ChartColumn, activity: Activity, scoring: Brain, book: Gauge, cpa: BadgeDollarSign, partner: Award, retention: ChartNoAxesCombined, retentionResults: ChartLine, producers: UserRoundCheck, hierarchy: Network };
+const ICONS: Record<ReportsView, LucideIcon> = { sales: ChartColumn, activity: Activity, scoring: Brain, book: Gauge, cpa: BadgeDollarSign, partner: Award, sources: Package, callbacks: CalendarCheck, retention: ChartNoAxesCombined, retentionResults: ChartLine, producers: UserRoundCheck, hierarchy: Network };
 
 /**
  * The Reports menu (owner 2026-10-30, canvas "Reports in one page", board RpS1), the Leads in menu's

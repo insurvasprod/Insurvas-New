@@ -23,7 +23,6 @@ import {
   CalendarClock,
   CalendarDays,
   ChartNoAxesCombined,
-  ChevronDown,
   Circle,
   ClipboardList,
   ContactRound,
@@ -93,7 +92,7 @@ import {
 import type { MenuItem, MenuSection } from "@/lib/menu/definition";
 import { SETTINGS_SECTIONS } from "@/lib/settings/sections";
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
-import { buildSidebarTree, initialOpenGroups, type ModuleAccess } from "@/lib/menu/sidebar";
+import { buildSidebarTree, type ModuleAccess } from "@/lib/menu/sidebar";
 import { titleCaseNode } from "@/components/ui/title-case";
 import { Popover, PopoverAnchor, PopoverArrow, PopoverContent } from "@/components/ui/popover";
 import { leadsInStepOf } from "@/lib/leadSources/steps";
@@ -165,13 +164,16 @@ function NavItemLink({
   item,
   onNavigate,
   nested = false,
+  activeWhen,
 }: {
   item: MenuItem;
   onNavigate?: () => void;
   nested?: boolean;
+  /** A group's link is chosen while any of its pages is open, not only its first. */
+  activeWhen?: boolean;
 }) {
   const pathname = usePagePathname();
-  const active = isActivePath(pathname, item.path);
+  const active = activeWhen ?? isActivePath(pathname, item.path);
   const Icon = iconFor(item.icon);
   const label = item.navLabel ?? item.label;
 
@@ -206,76 +208,6 @@ function NavItemLink({
       </IntentLink>
     </li>
   );
-}
-
-function DisclosureSection({
-  label,
-  icon: Icon,
-  items,
-  children,
-  open,
-  onToggle,
-  onNavigate,
-  active,
-  nested = false,
-  collapsed = false,
-}: {
-  label: string;
-  icon: typeof BriefcaseBusiness;
-  items: MenuItem[];
-  children?: ReactNode;
-  open: boolean;
-  onToggle: () => void;
-  onNavigate?: () => void;
-  active: boolean;
-  nested?: boolean;
-  collapsed?: boolean;
-}) {
-  if (items.length === 0 && !children) return null;
-
-  const sectionId = `agent-nav-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-
-  const section = (
-    <section
-      className={`portal-agent-nav-section ${nested ? "portal-agent-nav-business-group" : ""} ${active ? "is-active" : ""}`}
-    >
-      <button
-        type="button"
-        className="portal-agent-nav-disclosure"
-        aria-label={label}
-        aria-expanded={open}
-        aria-controls={sectionId}
-        onClick={onToggle}
-      >
-        <span className="portal-agent-nav-disclosure-copy">
-          <Icon className="portal-agent-nav-icon" aria-hidden="true" />
-          <span>{titleCaseNode(label)}</span>
-        </span>
-        <ChevronDown
-          className={`portal-agent-nav-chevron ${open ? "is-open" : ""}`}
-          aria-hidden="true"
-        />
-      </button>
-      {children ? (
-        <div id={sectionId} className="portal-agent-nav-disclosure-content" hidden={!open}>
-          {children}
-        </div>
-      ) : (
-        <ul id={sectionId} hidden={!open} className={`portal-agent-nav-sublist ${nested ? "portal-agent-nav-sublist-nested" : ""}`}>
-          {items.map((item) => (
-            <NavItemLink
-              key={item.key}
-              item={item}
-              nested
-              onNavigate={onNavigate}
-            />
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-
-  return collapsed ? <CollapsedFlyout label={label} icon={Icon} items={items}>{section}</CollapsedFlyout> : section;
 }
 
 /** How long the pointer may be off both the icon and the flyout before it shuts (crossing the gap). */
@@ -406,27 +338,17 @@ function NavList({
   moduleAccess,
   onNavigate,
   isCollapsed = false,
-  onExpand,
 }: {
   menu: MenuSection[];
   moduleAccess?: AgentModuleAccess;
   onNavigate?: () => void;
   isCollapsed?: boolean;
+  /** Kept for callers; groups no longer open in place (2026-11-19), so nothing expands. */
   onExpand?: (groupLabel: string) => void;
 }) {
   const pathname = usePagePathname();
   const tree = buildSidebarTree(menu, moduleAccess);
   const isActive = (item: MenuItem) => isActivePath(pathname, item.path);
-  const activeGroupLabel = tree.groups.find((group) => group.items.some(isActive))?.label;
-  const [navState, setNavState] = useState<{ pathname: string; openGroup: string | null }>(() => ({
-    pathname,
-    openGroup: initialOpenGroups(tree, isActive)[0] ?? null,
-  }));
-  let openGroup = navState.openGroup;
-  if (navState.pathname !== pathname) {
-    openGroup = activeGroupLabel ?? navState.openGroup;
-    setNavState({ pathname, openGroup });
-  }
 
   return (
     <nav className={`portal-agent-nav ${isCollapsed ? "is-collapsed" : ""}`} aria-label="Agent workspace navigation">
@@ -436,40 +358,19 @@ function NavList({
         ))}
       </ul>
 
-      {tree.groups.map((group) => group.items.length === 1 && group.items[0].groupLink ? (() => {
-        // A group that is one page (Compliance): one link under the group's own name and icon, no dropdown.
+      {tree.groups.map((group) => {
+        // Owner 2026-11-19: no dropdowns. Every group is one link under its own name and icon (to its first page, chosen
+        // while any of its pages is open), and hovering it lists its pages beside the rail, expanded or collapsed.
+        const pages = group.items.length === 1 && group.items[0].groupLink && group.steps ? group.steps : group.items;
         const link = (
           <ul key={group.label} className="portal-agent-nav-home">
-            <NavItemLink item={{ ...group.items[0], navLabel: group.label, icon: group.icon }} onNavigate={onNavigate} />
+            <NavItemLink item={{ ...group.items[0], navLabel: group.label, icon: group.icon }} activeWhen={group.items.some(isActive) || pages.some(isActive) || undefined} onNavigate={onNavigate} />
           </ul>
         );
-        // Collapsed, hovering it lists its pages beside the rail, as a group's icon does (owner 2026-11-06).
-        return isCollapsed && group.steps
-          ? <CollapsedFlyout key={group.label} label={group.label} icon={iconFor(group.icon)} items={group.steps}>{link}</CollapsedFlyout>
+        return pages.length > 1 || group.items.length > 1
+          ? <CollapsedFlyout key={group.label} label={group.label} icon={iconFor(group.icon)} items={pages}>{link}</CollapsedFlyout>
           : link;
-      })() : (
-        <DisclosureSection
-          key={group.label}
-          label={group.label}
-          icon={iconFor(group.icon)}
-          items={group.items}
-          open={openGroup === group.label}
-          active={group.items.some(isActive)}
-          collapsed={isCollapsed}
-          onToggle={() => {
-            if (isCollapsed) {
-              onExpand?.(group.label);
-              setNavState({ pathname, openGroup: group.label });
-              return;
-            }
-            setNavState({
-              pathname,
-              openGroup: openGroup === group.label ? null : group.label,
-            });
-          }}
-          onNavigate={onNavigate}
-        />
-      ))}
+      })}
 
       {/* The rail's foot (owner 2026-11-13): Docs, then Settings under it, pinned to the bottom. */}
       <div className="portal-agent-nav-foot">

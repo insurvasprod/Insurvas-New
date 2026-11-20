@@ -11,6 +11,7 @@ import {
   pctChange,
   placementOf,
   premiumByState,
+  producerCountGoals,
   producerGoals,
   submittedIn,
   type AgencyPeriod,
@@ -71,6 +72,14 @@ export async function AgencyView({ props, period }: { props: DashViewProps; peri
   if (persistency) {
     tiles.push(<StatTile key="m13" label="13-month persistency" value={persistency.text} footnote="Still paying after a year" href={links.persistency ?? undefined} />);
   }
+  // A reader without the money permission (a manager) gets the book's size and his roster in counts instead of the
+  // two money tiles (owner 2026-11-20 manager walk: one lonely tile across the whole strip).
+  if (!money && book?.book) {
+    tiles.push(<StatTile key="inforce" label="In force" value={n(book.book.totals.inForce)} footnote={`${n(book.book.totals.all)} ${book.book.totals.all === 1 ? "policy" : "policies"} in all`} href={policiesHref ? `${policiesHref}?show=inforce` : undefined} />);
+  }
+  if (!money && agency) {
+    tiles.push(<StatTile key="producers" label={props.scope ? "Your team" : "Producers"} value={n(agency.producers.length)} footnote={props.scope ? (agency.producers.length > 1 ? `you and ${n(agency.producers.length - 1)} ${agency.producers.length === 2 ? "report" : "reports"}` : "No producer reports to you yet") : "on the roster"} href={links.producers ?? undefined} />);
+  }
   if (clawed !== null && money) {
     const change = clawedBefore !== null ? pctChange(clawed, clawedBefore) : null;
     tiles.push(<StatTile key="chargebacks" label="Chargebacks" value={dollars(clawed)} valueTone={clawed > 0 ? "warning" : undefined} delta={change ? { value: change, goodWhen: "down" } : undefined} footnote={clawedBy ? `Clawed back · ${n(clawedBy)} ${clawedBy === 1 ? "producer" : "producers"}` : "Nothing clawed back"} href={links.ledger ?? undefined} />);
@@ -93,10 +102,33 @@ export async function AgencyView({ props, period }: { props: DashViewProps; peri
   /* ── Row 2: producer goals, carriers, states ───────────────────────────────────────────────── */
   const left = daysLeft(today);
   const goals = rows && money ? producerGoals(rows, month, previous) : null;
+  const countGoals = rows && !money ? producerCountGoals(rows, month, previous) : null;
   // Every producer on the roster, not only those with a policy this month or last: their policies and placement too.
   const roster = new Map((agency?.producers ?? []).map((row) => [row.producerUserId, row]));
   const goalRows = goals ? [...goals] : [];
   for (const row of roster.values()) if (!goalRows.some((goal) => goal.userId === row.producerUserId)) goalRows.push({ userId: row.producerUserId, name: row.name, cents: 0, goalCents: 0, count: 0 });
+  const countRows = countGoals ? [...countGoals] : [];
+  for (const row of roster.values()) if (!countRows.some((goal) => goal.userId === row.producerUserId)) countRows.push({ userId: row.producerUserId, name: row.name, count: 0, goalCount: 0 });
+  const countCard = countGoals && links.producers ? (
+    <DashGoals
+      title="Producer goals"
+      sub={`Policies issued · ${name} against ${before}`}
+      link={{ label: "Producers", href: links.producers }}
+      rows={countRows.map((row) => {
+        const record = roster.get(row.userId);
+        return {
+          key: row.userId,
+          name: row.name,
+          note: period === "this" ? `${left} ${left === 1 ? "day" : "days"} left` : name,
+          value: `${n(row.count)} ${row.count === 1 ? "policy" : "policies"}`,
+          of: row.goalCount ? `of ${n(row.goalCount)}` : "first month",
+          share: row.goalCount ? Math.min(1, row.count / row.goalCount) : row.count ? 1 : 0,
+          href: record?.producerId ? `/app/producers/${record.producerId}` : policiesHref ? `${policiesHref}?agent=${encodeURIComponent(row.userId)}&from=${month}-01&to=${lastDay(month)}` : undefined,
+        };
+      })}
+      empty={props.scope ? "No producer reports to you yet. The owner sets who reports to whom on Producers." : `No producer has a policy in ${name} or ${before} yet.`}
+    />
+  ) : null;
   const goalsCard = goals && links.producers ? (
     <DashGoals
       title="Producer goals"
@@ -189,14 +221,15 @@ export async function AgencyView({ props, period }: { props: DashViewProps; peri
     events.push({ key: `p-${row.carrierId}-${row.policyNumber}`, mark: "✓", tone: "good", title: "Policy issued", detail: `${row.agentName ?? row.clientName ?? "Policy"} · ${row.carrierName}`, value: money && row.annualCents ? `+${dollars(row.annualCents)}/yr` : undefined, when: row.issueDate.slice(5).replace("-", "/"), href: row.href ?? `${policiesHref ?? "/app/policies"}?q=${encodeURIComponent(row.policyNumber)}`, on: row.issueDate });
   }
   events.sort((a, b) => (a.on < b.on ? 1 : a.on > b.on ? -1 : 0));
-  const activity = events.length || book?.changes || accounting?.recent ? (
-    <DashList title="Recent activity" link={book?.links.changes ? { label: "All changes", href: book.links.changes } : undefined} items={events.slice(0, 12)} empty="Nothing has happened yet." />
-  ) : null;
+  // Always drawn (owner 2026-11-20): without it a manager's right column was 300px of nothing.
+  const activity = (
+    <DashList title="Recent activity" link={book?.links.changes ? { label: "All changes", href: book.links.changes } : undefined} items={events.slice(0, 12)} empty="No policy issued this month yet." />
+  );
 
   /* ── The page, as drawn ────────────────────────────────────────────────────────────────────── */
   const fill = "lg:[&>*]:h-full lg:[&>*]:min-h-0 lg:[&>*]:overflow-hidden";
   const row1 = [premium, funnel].filter(Boolean);
-  const row2 = [goalsCard, carriers, statesCard].filter(Boolean);
+  const row2 = [goalsCard ?? countCard, carriers, statesCard].filter(Boolean);
   const rowCount = (row1.length > 0 ? 1 : 0) + (row2.length > 0 ? 1 : 0);
   return (
     // m-dash-ov (§ Motion, 2026-11-09): the cards rise in one after another. Roles r1 (owner 2026-11-18): from lg up the
@@ -206,7 +239,7 @@ export async function AgencyView({ props, period }: { props: DashViewProps; peri
       <div className="grid min-w-0 grid-cols-1 items-stretch gap-4 lg:min-h-0 lg:flex-1 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className={cn("grid min-w-0 grid-cols-1 gap-4 lg:min-h-0", rowCount === 2 ? "lg:grid-rows-[minmax(0,1.05fr)_minmax(0,1fr)]" : "lg:grid-rows-[minmax(0,1fr)]")}>
           {row1.length > 0 && <div className={cn("grid min-w-0 grid-cols-1 gap-4 lg:min-h-0", fill, row1.length === 2 && "lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]")}>{premium}{funnel}</div>}
-          {row2.length > 0 && <div className={cn("grid min-w-0 grid-cols-1 gap-4 lg:min-h-0", fill, row2.length === 3 ? "lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)]" : row2.length === 2 && "lg:grid-cols-2")}>{goalsCard}{carriers}{statesCard}</div>}
+          {row2.length > 0 && <div className={cn("grid min-w-0 grid-cols-1 gap-4 lg:min-h-0", fill, row2.length === 3 ? "lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)]" : row2.length === 2 && "lg:grid-cols-2")}>{goalsCard ?? countCard}{carriers}{statesCard}</div>}
         </div>
         {/* The right column ends where the main column ends (owner: "in the same line"): it takes the row's height, never sets it. */}
         <div className="relative min-w-0">

@@ -39,7 +39,10 @@ export function bookIssuedChart(data: Awaited<ReturnType<typeof loadBookView>>) 
       totalLine={`issued · last ${book.issued.length} months`}
       legend={book.lapsed ? [{ label: "Issued", tone: "primary" }, { label: "Lapsed", tone: "info" }] : undefined}
     >
-      <LineSeries
+      {/* Nothing issued and nothing lapsed: a flat line on a made-up 0–6 scale says nothing (owner 2026-11-20). */}
+      {issuedTotal === 0 && !(book.lapsed ?? []).some((point) => point.value > 0) ? (
+        <p className="m-0 text-sm text-muted-foreground">No policy issued in the last {book.issued.length} months yet. Each one lands here the month the carrier issues it.</p>
+      ) : <LineSeries
         points={book.issued}
         compare={book.lapsed ? { points: book.lapsed, label: "Lapsed" } : undefined}
         summary={`Policies issued each month over the last ${book.issued.length} months${book.lapsed ? ", with the policies a carrier file moved to lapsed" : ""}.`}
@@ -49,7 +52,7 @@ export function bookIssuedChart(data: Awaited<ReturnType<typeof loadBookView>>) 
           const range = monthRange(point.key);
           return `/app/policies?from=${range.from}&to=${range.to}`;
         }}
-      />
+      />}
     </DashChart>
   ) : null;
   return big;

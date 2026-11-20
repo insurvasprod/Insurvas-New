@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { TableCard } from "@/components/ui/table-card";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction } from "@/components/ui/row-action";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
@@ -179,7 +180,7 @@ export function ReconciliationBoard({ view, period, threshold, readOnly, produce
                       <TableCell className="whitespace-nowrap">{REVIEW_KIND[r.kind]}</TableCell>
                       <TableCell className="text-right">{figureLink(r.producerUserId, r.varianceCents)}</TableCell>
                       <TableCell className="whitespace-nowrap">{r.status === "reviewed" ? (r.note ?? "Reviewed") : <StatusChip tone="warning">Open</StatusChip>}</TableCell>
-                      <TableCell className="whitespace-nowrap text-right">{r.status === "reviewed" ? "Open ›" : "Review ›"}</TableCell>
+                      <TableCell className="w-px whitespace-nowrap text-right"><RowAction onClick={() => setReviewing(r)}>{r.status === "reviewed" ? "Open" : "Review"}</RowAction></TableCell>
                     </TableRow>
                   );
                 })}

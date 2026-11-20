@@ -20,6 +20,7 @@ import { ProducerOnboardingTab } from "./producer-onboarding-tab";
 import { ProducerMoneyTab } from "./producer-money-tab";
 import type { MoneyView } from "@/components/app/commissions/producer-pay/money-core";
 import { ProducerSupportCard } from "./producer-support-card";
+import type { ManagerCandidate } from "./producer-record-core";
 import { sendJson, useAgencyData } from "./use-agency-data";
 
 type Detail = {
@@ -59,7 +60,7 @@ export function ProducerDetail({ producerId, tab, viewer, money }: {
   if (loading || !data) return <TableCard><SectionLoading rows={6} columns={2} label="Loading the producer" /></TableCard>;
 
   if (tab === "carriers") return <ProducerCarriersTab producerId={producerId} canEdit={viewer.isOwner} />;
-  if (tab === "onboarding") return <ProducerOnboardingTab producerId={producerId} isOwner={viewer.isOwner} isSelf={data.isSelf} />;
+  if (tab === "onboarding") return <ProducerOnboardingTab producerId={producerId} userId={data.userId} isOwner={viewer.isOwner} isSelf={data.isSelf} />;
   if (tab === "money") return <ProducerMoneyTab url={`/api/app/agency/producers/${producerId}/money`} audience={data.isSelf ? "self" : "owner"} name={money?.name ?? data.displayName} initialView={money?.initialView} initialSelection={money?.initialSelection} months={money?.months} />;
 
   return (
@@ -101,13 +102,13 @@ export function ProducerDetail({ producerId, tab, viewer, money }: {
  * Everyone else gets only those links. Each step is a confirm pop-up; after it the header re-reads on the server.
  */
 export function ProducerActions({ producer, canManage, scorecards }: {
-  producer: { id: string; userId: string; displayName: string; status: ProducerStatus; email: string | null; reactivatableUntil: string | null; isSelf: boolean };
+  producer: { id: string; userId: string; displayName: string; status: ProducerStatus; email: string | null; reactivatableUntil: string | null; isSelf: boolean; managerProducerId: string | null };
   canManage: boolean;
   scorecards: boolean;
 }) {
   const router = useRouter();
   const [dialog, setDialog] = useState<null | "offboard" | "suspend" | "reactivate" | "manager">(null);
-  const roster = useAgencyData<{ rows: Array<{ id: string; displayName: string; status: string }> }>(canManage && dialog === "manager" ? "/api/app/agency/producers" : null);
+  const roster = useAgencyData<{ rows: ManagerCandidate[] }>(canManage && dialog === "manager" ? "/api/app/agency/producers" : null);
   const manage = canManage && !producer.isSelf;
   const s = producer.status;
   const done = () => { window.dispatchEvent(new Event(CHANGED)); refreshStepCounts(); router.refresh(); };
@@ -134,7 +135,7 @@ export function ProducerActions({ producer, canManage, scorecards }: {
           <OffboardDialog producerId={producer.id} open={dialog === "offboard"} onOpenChange={(o) => setDialog(o ? "offboard" : null)} onDone={done} />
           <StatusDialog producerId={producer.id} name={producer.displayName} action="suspend" open={dialog === "suspend"} onOpenChange={(o) => setDialog(o ? "suspend" : null)} onDone={done} />
           <StatusDialog producerId={producer.id} name={producer.displayName} action="reactivate" open={dialog === "reactivate"} onOpenChange={(o) => setDialog(o ? "reactivate" : null)} onDone={done} />
-          <ManagerDialog producerId={producer.id} name={producer.displayName} managers={(roster.data?.rows ?? []).filter((r) => r.status !== "offboarded" && r.status !== "invited").map((r) => ({ id: r.id, name: r.displayName }))} open={dialog === "manager"} onOpenChange={(o) => setDialog(o ? "manager" : null)} onDone={done} />
+          <ManagerDialog producerId={producer.id} name={producer.displayName} currentManagerId={producer.managerProducerId} candidates={roster.data?.rows ?? []} loadingCandidates={roster.loading && !roster.data} open={dialog === "manager"} onOpenChange={(o) => setDialog(o ? "manager" : null)} onDone={done} />
         </>
       )}
     </>

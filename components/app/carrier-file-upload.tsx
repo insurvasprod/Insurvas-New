@@ -14,6 +14,7 @@ import { afterStamp } from "@/components/ui/use-done-stamps";
 import { CARRIER_FILE_ACCEPT, FILE_TYPE_LABELS, MAX_UPLOAD_BYTES, carrierFileKind, fileDay, type CarrierFileType } from "@/lib/ingestion/constants";
 import { prefillFromFilename, type CarrierChoice } from "@/lib/ingestion/path";
 import { fileHref } from "@/lib/ingestion/trace";
+import { titleCase } from "@/lib/format/titleCase";
 import { notify } from "@/lib/notify";
 
 const selectClass = `${toolbarControl} w-full`;
@@ -159,8 +160,9 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false, label = "U
       <Dialog open={open} onOpenChange={(next) => { if (busy) return; setOpen(next); if (!next) reset(); }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            {/* The title is for screen readers only (owner 2026-11-02); the one short line says what to drop. */}
-            <DialogTitle className="sr-only">Upload a carrier file</DialogTitle>
+            {/* Walk 2026-11-20: the pop-up had no visible title (it was screen-reader only since 2026-11-02). Every
+                dialog names itself in the shared title slot, which is also its accessible name. */}
+            <DialogTitle>{titleCase(preset?.fileDate ? "Upload a corrected file" : "Upload a carrier file")}</DialogTitle>
             <DialogDescription>Policy or commission file: CSV, Excel or PDF.</DialogDescription>
           </DialogHeader>
 

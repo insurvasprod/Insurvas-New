@@ -29,7 +29,7 @@ export type PoolLead = {
 export async function readUnassignedPool(tenantId: string, now = Date.now()): Promise<PoolLead[]> {
   const { data, error } = await db()
     .from("lead_queue")
-    .select("id, lead_id, product_line, queued_at, created_at, partner_id, agent_leads(values)")
+    .select("id, lead_id, product_line, queued_at, created_at, partner_id, agent_leads(tenant_id, values)")
     .eq("tenant_id", tenantId)
     .eq("status", "unclaimed")
     .is("owner_user_id", null)
@@ -37,7 +37,9 @@ export async function readUnassignedPool(tenantId: string, now = Date.now()): Pr
     .limit(500);
   if (error) throw new Error(`readUnassignedPool: ${error.message}`);
   return ((data ?? []) as Array<Record<string, unknown>>).map((row) => {
-    const values = ((row.agent_leads as { values?: Record<string, unknown> } | null)?.values ?? {}) as Record<string, unknown>;
+    // The embed has no tenant predicate of its own: another tenant's lead is never named (audit 2026-11-19).
+    const lead = row.agent_leads as { tenant_id?: string; values?: Record<string, unknown> } | null;
+    const values = ((lead && lead.tenant_id === tenantId ? lead.values : null) ?? {}) as Record<string, unknown>;
     const queuedAt = (row.queued_at as string | null) ?? (row.created_at as string);
     const name = [values.first_name, values.last_name].filter((v) => typeof v === "string" && v.trim()).join(" ") || "Unnamed lead";
     const state = typeof values.state === "string" ? values.state.toUpperCase() : null;

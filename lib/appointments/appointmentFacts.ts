@@ -6,6 +6,8 @@
  * not carry a figure, the helper returns null and the screen says nothing rather than a sample.
  */
 
+import { productLineLabel } from "../format/productLine.ts";
+
 export const APPOINTMENT_STATUS_LABEL: Record<string, string> = {
   booked: "Booked",
   confirmed: "Confirmed",
@@ -43,10 +45,9 @@ export function faceLabel(amountCents: number | null): string | null {
   return `$${Math.round(dollars).toLocaleString("en-US")} face`;
 }
 
-/** "final_expense" → "Final expense". */
+/** "final_expense" → "Final Expense": Title Case, the one product-label rule (lib/format/productLine.ts). */
 export function productLabel(productLine: string | null | undefined): string | null {
-  const text = (productLine ?? "").trim().replace(/_/g, " ");
-  return text ? `${text[0].toUpperCase()}${text.slice(1)}` : null;
+  return (productLine ?? "").trim() ? productLineLabel(productLine) : null;
 }
 
 /** "in 24 min", "in 1 h 5 min" — only for an appointment still to come within the next three hours. */

@@ -15,6 +15,7 @@ import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { Segmented } from "@/components/ui/view-tabs";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import type { ColumnMap } from "@/lib/accounting/bankCore";
@@ -298,7 +299,7 @@ export function DepositsBoard({ data, readOnly, show, account: accountParam, ope
           : left.rows.length === 0 ? <EmptyState title="Nothing to match" hint="Every deposit is matched to a carrier statement, or set aside with a reason. Import the latest bank export to bring in new deposits." />
           : (
             <table className="portal-lead-table w-full min-w-[960px] text-left text-sm">
-              <thead><tr><th>On the bank statement</th><th>Date</th><th className="text-right">Amount</th><th>What explains it</th><th>Status</th><th>Next step</th></tr></thead>
+              <thead><tr><th>On the bank statement</th><th>Date</th><th className="text-right">Amount</th><th>What explains it</th><th>Status</th><th className="text-right">Next step</th></tr></thead>
               <tbody>
                 {paged.rows.map((t) => {
                   const why = explains(t);
@@ -313,7 +314,7 @@ export function DepositsBoard({ data, readOnly, show, account: accountParam, ope
                       <td className="whitespace-nowrap text-right tabular-nums"><button type="button" className="hover:underline" onClick={(e) => { e.stopPropagation(); setOpen({ ids: [t.id], at: 0, stepping: false }); }}>{money(t.amountCents)}</button></td>
                       <td className="whitespace-nowrap" title={why.sub}>{why.text}</td>
                       <td>{stamped && depositFilterOf(t.status) === "to_match" ? <DoneStamp label={stamped} /> : <StatusChip tone={TONE[t.status]}>{STATUS_WORDS[t.status]}</StatusChip>}</td>
-                      <td className="whitespace-nowrap" title={next ?? undefined}>{depositStep(t.status, pending)} ›</td>
+                      <RowActionCell><RowAction title={next ?? undefined} onClick={() => setOpen({ ids: [t.id], at: 0, stepping: false })}>{depositStep(t.status, pending)}</RowAction></RowActionCell>
                     </tr>
                   );
                 })}

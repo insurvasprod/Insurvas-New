@@ -29,6 +29,7 @@ type QueryResult<T = unknown> = { data: T | null; error: { code?: string; messag
 type Query = PromiseLike<QueryResult> & {
   select(columns: string): Query;
   eq(column: string, value: unknown): Query;
+  neq(column: string, value: unknown): Query;
   order(column: string, options?: { ascending?: boolean }): Query;
   insert(value: unknown): Query;
   update(value: unknown): Query;
@@ -42,7 +43,7 @@ function db() { return getSupabaseServiceClient() as unknown as Db; }
 export async function GET() {
   const auth = await requireFeatureRole("book_of_business", roles);
   if (auth instanceof NextResponse) return auth;
-  const result = await db().from("tenant_policies").select("id, policy_number, insured_name, carrier, product, effective_date, annual_premium_cents, status, renewal_date, source, created_at, updated_at").eq("tenant_id", auth.context.tenantId).order("effective_date", { ascending: false });
+  const result = await db().from("tenant_policies").select("id, policy_number, insured_name, carrier, product, effective_date, annual_premium_cents, status, renewal_date, source, created_at, updated_at").eq("tenant_id", auth.context.tenantId).neq("source", "carrier_file").order("effective_date", { ascending: false });
   if (result.error) {
     const unavailable = result.error.code === "42P01";
     return NextResponse.json({ error: unavailable ? "Policy storage is not available yet" : "Could not load policies", code: unavailable ? "policy_storage_unavailable" : "policy_load_failed" }, { status: unavailable ? 503 : 500 });

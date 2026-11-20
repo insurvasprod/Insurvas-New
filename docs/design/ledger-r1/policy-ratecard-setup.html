@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledger r1 · Policy page, Rate card, Setup</title>
+<style>
+:root{--board:#050b09;--canvas:#08110f;--card:#0d1714;--card-border:rgba(255,255,255,.09);--tile:rgba(255,255,255,.035);--border:#22342e;--ink:#f2f7f5;--body:#c9d6d1;--muted:#93a69f;--primary:#07d6a0;--primary-soft:#0f3a30;--accent-ink:#4fe3bb;--gold:#c9a24a;--warn:#e8925a;--danger:#ef6b6b;--rail:#0f3d33}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--board);color:var(--ink)}
+.wrap{max-width:1480px;margin:0 auto;padding:32px 24px 80px}
+h1{font-size:24px;margin:0 0 6px}
+h2{font-size:24px;margin:56px 0 4px}
+h3{font-size:16px;margin:28px 0 10px;color:var(--accent-ink)}
+p.lead{color:var(--body);max-width:880px;margin:0 0 8px}
+.note{color:var(--muted);font-size:12px}
+.crit{background:var(--card);border:1px solid var(--card-border);border-radius:12px;padding:14px 18px;margin:14px 0;color:var(--body)}
+.crit li{margin:4px 0}
+.pick{display:inline-block;font-size:12px;font-weight:700;background:var(--primary-soft);color:var(--accent-ink);border-radius:6px;padding:2px 8px;margin-left:8px;vertical-align:middle}
+/* app frame */
+.app{display:grid;grid-template-columns:56px 1fr;height:760px;background:var(--canvas);border-radius:14px;border:1px solid var(--card-border);overflow:hidden;margin-top:10px}
+.rail{background:var(--rail);display:flex;flex-direction:column;gap:14px;align-items:center;padding:14px 0}
+.rail i{width:22px;height:22px;border-radius:6px;background:rgba(255,255,255,.14);display:block}
+.rail i.on{background:var(--primary)}
+.main{padding:20px 24px;overflow:hidden;display:flex;flex-direction:column;gap:14px}
+.crumb{font-size:12px;color:var(--muted)}
+.titleline{display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);padding-bottom:10px}
+.titleline .t{font-size:24px;font-weight:700;letter-spacing:-.01em}
+.tabs{display:flex;gap:18px;margin-left:8px;font-size:14px;color:var(--muted)}
+.tabs b{color:var(--ink);border-bottom:2px solid var(--primary);padding-bottom:6px}
+.sp{flex:1}
+.btn{height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--ink);font-weight:600;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.btn.pri{background:var(--primary);color:#0d4037;border-color:var(--primary)}
+.btn.sm{height:26px;font-size:12px;padding:0 9px}
+.chip{font-size:12px;font-weight:600;border-radius:6px;padding:2px 8px;display:inline-flex;align-items:center;gap:6px}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.ok{background:rgba(7,214,160,.12);color:var(--accent-ink)}
+.chip.bad{background:rgba(239,107,107,.13);color:var(--danger)}
+.chip.warn{background:rgba(232,146,90,.14);color:var(--warn)}
+.strip{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid var(--card-border);border-radius:12px;background:var(--card)}
+.strip>div{padding:12px 16px;border-right:1px solid var(--border)}
+.strip>div:last-child{border-right:0}
+.k{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.v{font-size:24px;font-weight:700;margin-top:2px}
+.f{font-size:12px;color:var(--muted)}
+.v.warn{color:var(--warn)}
+.grid{display:grid;gap:14px;flex:1;min-height:0}
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:12px;padding:14px 16px;min-height:0;overflow:hidden}
+.card h4{margin:0 0 10px;font-size:14px;display:flex;align-items:center;gap:8px}
+.card h4 .sp{flex:1}
+dl{display:grid;grid-template-columns:auto 1fr;gap:6px 18px;margin:0;font-size:14px}
+dt{color:var(--muted);font-size:12px;align-self:center}
+dd{margin:0;font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{font-size:12px;color:var(--muted);font-weight:600;text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)}
+td{padding:9px 8px;border-bottom:1px solid var(--border)}
+td.r,th.r{text-align:right}
+td.m{color:var(--muted)}
+.neg{color:var(--danger)}
+.timeline{display:grid;gap:10px}
+.ev{display:grid;grid-template-columns:22px 1fr auto;gap:10px;align-items:start}
+.dot{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700}
+.dot.g{background:rgba(7,214,160,.15);color:var(--accent-ink)}
+.dot.r{background:rgba(239,107,107,.15);color:var(--danger)}
+.dot.y{background:rgba(201,162,74,.16);color:var(--gold)}
+.bar{height:8px;border-radius:4px;background:var(--tile);overflow:hidden}
+.bar>span{display:block;height:100%;background:var(--primary)}
+.input{height:32px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.02);padding:0 10px;display:flex;align-items:center;color:var(--body);font-size:13px}
+.formrow{display:grid;grid-template-columns:1.4fr .7fr .7fr .8fr 1fr auto;gap:8px;align-items:center;margin-top:8px}
+.steps{display:flex;gap:8px;font-size:12px;color:var(--muted)}
+.steps span{padding:4px 10px;border-radius:999px;border:1px solid var(--border)}
+.steps span.on{background:var(--primary-soft);color:var(--accent-ink);border-color:transparent;font-weight:700}
+.drop{border:1.5px dashed var(--border);border-radius:12px;display:grid;place-items:center;text-align:center;padding:40px;color:var(--body)}
+.found{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.found .card{padding:12px 14px}
+.tick{color:var(--accent-ink);font-weight:700}
+.edit{color:var(--muted);font-size:12px;text-decoration:underline}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.split{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;flex:1;min-height:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Ledger r1 · policy page, rate card page, simpler setup</h1>
+<p class="lead">Owner, 2026-11-19, after walking demo.ledger. Three boards, each with a recommended option. Already <b>built</b> today, so not drawn here: <b>Details</b> buttons on every policy row, next-step cells as buttons everywhere, <b>Actions</b> in place of ⋯, the inbound status line removed, Ledger without Inbound / Pipelines / Application forms, and the sidebar with no dropdowns and a hover flyout.</p>
+
+<!-- ═════════════════════════ 1. POLICY PAGE ═════════════════════════ -->
+<h2>1 · The policy page</h2>
+<div class="crit"><b>What's wrong today</b> (your screenshots of AM-LD-23911):
+<ul>
+<li>Overview is nine labels in a sea of empty card: three columns of facts, then nothing. It doesn't answer the one question an agent opens a policy for: <i>is my money right on this one?</i></li>
+<li>Money shows "Advance received $0.00 · $684 expected" next to "Carrier paid −$684 · $969 short". These contradict each other: the $684 advance <i>was</i> paid (statement line 8 is the chargeback of it) but isn't linked to the advance it reverses.</li>
+<li>"What your contract expects" lists two rows and leaves 80% of the page empty. What was <i>paid</i> sits on another page (Commission ledger).</li>
+<li>Two tabs split one story; the ⋯ menu hid the only actions (now an <b>Actions</b> button).</li>
+</ul></div>
+
+<h3>A · One page: the money check first <span class="pick">Recommended</span></h3>
+<div class="app"><div class="rail"><i></i><i class="on"></i><i></i><i></i><i></i></div>
+<div class="main">
+  <div class="crumb">Book of Business › Policies</div>
+  <div class="titleline"><span class="t">Patricia Lowe · AM-LD-23911</span><span class="chip bad">Lapsed</span><div class="tabs"><b>Policy</b><span>History</span></div><span class="sp"></span><button class="btn">Open Pay Issue</button><button class="btn">Actions ▾</button></div>
+  <div class="strip">
+    <div><div class="k">Premium</div><div class="v">$912</div><div class="f">a year · Final Expense · Americo</div></div>
+    <div><div class="k">Contract expects</div><div class="v">$684</div><div class="f">75% advance at 100%</div></div>
+    <div><div class="k">Carrier paid</div><div class="v">$0</div><div class="f">$684 advanced, $684 taken back</div></div>
+    <div><div class="k">Difference</div><div class="v">$0</div><div class="f">a lapse inside 12 months: expected</div></div>
+    <div><div class="k">Chargeback exposure</div><div class="v">—</div><div class="f">not in force</div></div>
+  </div>
+  <div class="split">
+    <div class="card"><h4>Expected vs paid <span class="sp"></span><span class="note">every line, both sides</span></h4>
+      <table><thead><tr><th>Date</th><th>What</th><th class="r">Expected</th><th class="r">Paid</th><th>From</th><th></th></tr></thead>
+      <tbody>
+        <tr><td>10 Jun 2026</td><td>Advance · 9 months at 75%</td><td class="r">$684.00</td><td class="r">$684.00</td><td class="m">Jun statement · line 3</td><td><span class="chip ok">Matches</span></td></tr>
+        <tr><td>20 Oct 2026</td><td>Chargeback · lapsed month 4</td><td class="r neg">−$684.00</td><td class="r neg">−$684.00</td><td class="m">Oct statement · line 8</td><td><span class="chip ok">Matches</span></td></tr>
+        <tr><td colspan="2"><b>Net</b></td><td class="r"><b>$0.00</b></td><td class="r"><b>$0.00</b></td><td></td><td></td></tr>
+      </tbody></table>
+      <p class="note" style="margin-top:10px">A row where the two sides differ shows its gap in orange, with <b>Open Pay Issue</b> on that row.</p>
+    </div>
+    <div class="card"><h4>The policy</h4>
+      <dl>
+        <dt>Client</dt><dd>Patricia Lowe · 74 · TX</dd>
+        <dt>Carrier</dt><dd>Americo · Final Expense</dd>
+        <dt>Issued</dt><dd>10 Jun 2026</dd>
+        <dt>Lapsed</dt><dd>Oct 2026 (month 4)</dd>
+        <dt>Renewal</dt><dd>10 Jun 2027</dd>
+        <dt>Your level</dt><dd>100% · rate 100%</dd>
+        <dt>Source</dt><dd>Entered by hand</dd>
+        <dt>Lead source</dt><dd>Unattributed</dd>
+      </dl>
+      <div style="height:1px;background:var(--border);margin:14px 0"></div>
+      <h4>Recent</h4>
+      <div class="timeline">
+        <div class="ev"><span class="dot r">!</span><div>Lapsed<div class="f">Oct statement · chargeback −$684</div></div><span class="f">Oct 20</span></div>
+        <div class="ev"><span class="dot g">✓</span><div>Advance paid<div class="f">$684 · Jun statement</div></div><span class="f">Jun 10</span></div>
+        <div class="ev"><span class="dot y">+</span><div>Added to your book<div class="f">Import Policies</div></div><span class="f">Nov 19</span></div>
+      </div>
+    </div>
+  </div>
+</div></div>
+<p class="note">Why A: the page opens on the answer (expected, paid, difference), every money line shows both sides with where each came from, and the facts sit in a narrow side card instead of a near-empty page. Two tabs: Policy and History (carrier-file changes).</p>
+
+<h3>B · Keep the tabs, fill them</h3>
+<div class="app" style="height:560px"><div class="rail"><i></i><i class="on"></i><i></i><i></i><i></i></div>
+<div class="main">
+  <div class="crumb">Book of Business › Policies</div>
+  <div class="titleline"><span class="t">AM-LD-23911 · Patricia Lowe</span><span class="chip bad">Lapsed</span><div class="tabs"><b>Overview</b><span>Money</span><span>History</span></div><span class="sp"></span><button class="btn">Actions ▾</button></div>
+  <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
+    <div class="card"><h4>Coverage</h4><dl><dt>Carrier</dt><dd>Americo</dd><dt>Product</dt><dd>Final Expense</dd><dt>Premium</dt><dd>$912 a year</dd><dt>Status</dt><dd>Lapsed</dd></dl></div>
+    <div class="card"><h4>Dates</h4><dl><dt>Issued</dt><dd>10 Jun 2026</dd><dt>Lapsed</dt><dd>Oct 2026</dd><dt>Renewal</dt><dd>10 Jun 2027</dd></dl></div>
+    <div class="card"><h4>Money in short</h4><dl><dt>Expected</dt><dd>$684</dd><dt>Paid</dt><dd>$684 − $684</dd><dt>Difference</dt><dd>$0</dd></dl><button class="btn sm" style="margin-top:10px">Open Money ›</button></div>
+  </div>
+</div></div>
+<p class="note">B keeps today's structure and fills Overview with three grouped cards; Money gets the two-sided table from A. Less change, but the agent still clicks a tab for the answer.</p>
+
+<!-- ═════════════════════════ 2. RATE CARD PAGE ═════════════════════════ -->
+<h2>2 · The rate card, as a page</h2>
+<div class="crit"><b>What's wrong today:</b> one carrier's level, product mapping, rates, age bands and advance rules are five forms stacked in a scrolling pop-up. Saved rows and the add form look alike, dates default to today (fixed: the first row now reaches back), and you can't see the effect of a change on your book until you close it.</div>
+
+<h3>A · /app/rate-card/americo: contract on top, a table per thing <span class="pick">Recommended</span></h3>
+<div class="app"><div class="rail"><i></i><i></i><i class="on"></i><i></i><i></i></div>
+<div class="main">
+  <div class="crumb">Carrier Sync › Rate card › Americo</div>
+  <div class="titleline"><span class="t">Americo</span><span class="chip ok">11 of 11 checkable</span><span class="sp"></span><button class="btn">‹ Rate card</button><button class="btn">Actions ▾</button></div>
+  <div class="strip" style="grid-template-columns:repeat(4,1fr)">
+    <div><div class="k">Your level</div><div class="v">100%</div><div class="f">since you started · Edit</div></div>
+    <div><div class="k">Pays</div><div class="v">On issue</div><div class="f">usually within 35 days</div></div>
+    <div><div class="k">Policies</div><div class="v">11</div><div class="f">$932 / month premium</div></div>
+    <div><div class="k">Expected so far</div><div class="v">$8,289</div><div class="f">from these rates</div></div>
+  </div>
+  <div class="grid" style="grid-template-columns:1.25fr 1fr">
+    <div class="card"><h4>Rates <span class="sp"></span><button class="btn sm">Add Rate</button></h4>
+      <table><thead><tr><th>Product</th><th>Year</th><th class="r">Rate</th><th class="r">At level</th><th>From</th><th>Age bands</th><th></th></tr></thead><tbody>
+        <tr><td>Final Expense</td><td>1</td><td class="r">100%</td><td class="r">100%</td><td class="m">your first</td><td class="m">80–85: 50%</td><td><button class="btn sm">Edit</button></td></tr>
+        <tr><td>Term Life</td><td>1</td><td class="r">100%</td><td class="r">100%</td><td class="m">your first</td><td class="m">—</td><td><button class="btn sm">Edit</button></td></tr>
+        <tr><td>Term Life</td><td>2+</td><td class="r">5%</td><td class="r">100%</td><td class="m">your first</td><td class="m">—</td><td><button class="btn sm">Edit</button></td></tr>
+      </tbody></table>
+      <div class="formrow"><div class="input">Whole Life ▾</div><div class="input">Year 1</div><div class="input">Rate %</div><div class="input">Level 100%</div><div class="input">From: your first</div><button class="btn pri sm">Save</button></div>
+      <p class="note">Add Rate opens one new row in the table itself, not a form under it.</p>
+    </div>
+    <div class="grid" style="grid-template-rows:auto auto">
+      <div class="card"><h4>Advances <span class="sp"></span><button class="btn sm">Add Advance</button></h4>
+        <table><thead><tr><th>Product</th><th class="r">Advanced</th><th class="r">Clawback</th><th>Type</th><th></th></tr></thead><tbody>
+          <tr><td>Final Expense</td><td class="r">75% · 9 mo</td><td class="r">12 mo</td><td>Prorated</td><td><button class="btn sm">Edit</button></td></tr>
+          <tr><td>Term Life</td><td class="r">75% · 9 mo</td><td class="r">12 mo</td><td>Prorated</td><td><button class="btn sm">Edit</button></td></tr>
+        </tbody></table></div>
+      <div class="card"><h4>Products in your book</h4>
+        <table><tbody>
+          <tr><td>"Final Expense"</td><td class="m">is</td><td>Final Expense</td><td class="r"><span class="chip ok">8 policies</span></td></tr>
+          <tr><td>"Term Life"</td><td class="m">is</td><td>Term Life</td><td class="r"><span class="chip ok">3 policies</span></td></tr>
+        </tbody></table></div>
+    </div>
+  </div>
+</div></div>
+
+<h3>B · A guided form, one thing per step</h3>
+<div class="app" style="height:520px"><div class="rail"><i></i><i></i><i class="on"></i><i></i><i></i></div>
+<div class="main">
+  <div class="crumb">Carrier Sync › Rate card › Americo</div>
+  <div class="titleline"><span class="t">Americo</span><div class="steps"><span>1 Level</span><span class="on">2 Rates</span><span>3 Advances</span><span>4 Check</span></div><span class="sp"></span><button class="btn">Back</button><button class="btn pri">Next: Advances</button></div>
+  <div class="card" style="max-width:760px"><h4>What does Americo pay you, per product?</h4>
+    <table><thead><tr><th>Product in your book</th><th>Policies</th><th class="r">Year one rate</th><th class="r">Later years</th></tr></thead><tbody>
+      <tr><td>Final Expense</td><td>8</td><td class="r"><div class="input" style="justify-content:flex-end">100%</div></td><td class="r"><div class="input" style="justify-content:flex-end">—</div></td></tr>
+      <tr><td>Term Life</td><td>3</td><td class="r"><div class="input" style="justify-content:flex-end">100%</div></td><td class="r"><div class="input" style="justify-content:flex-end">5%</div></td></tr>
+    </tbody></table>
+    <p class="note">Only the products in your book are asked about. Step 4 shows what your book is expected to pay with these numbers.</p></div>
+</div></div>
+<p class="note">A is the editing page (everything visible, edit in place); B is the first-time path. They combine well: B the first time a carrier has no rates, A every time after.</p>
+
+<!-- ═════════════════════════ 3. SIMPLER SETUP ═════════════════════════ -->
+<h2>3 · Could a salesperson set this up? Not today.</h2>
+<div class="crit"><b>Walking it as demo.ledger took ten separate stops, each with its own words:</b>
+<ol>
+<li>Settings › Carriers: tick carriers, type a "contract level" (what's a level?)</li>
+<li>States: tick states, then tick carriers per state</li>
+<li>Statements: upload, pick carrier and period, check column mapping, preview, import</li>
+<li>Every line "No match": the book was empty, nothing said why</li>
+<li>Policies: a <i>different</i> import with its own template</li>
+<li>Back to the statement: Re-Match, then Accept All</li>
+<li>Rate card: per carrier, product → rate → "for level" → from-date</li>
+<li>Advance rules: months, %, clawback months, prorated vs full</li>
+<li>Pay issues: Check Now</li>
+<li>Only then: "$882 owed to you"</li>
+</ol>
+Steps 5, 7 and 8 need insurance-back-office words ("level", "advance %", "clawback") and none of it is required to see the money a statement already holds. <b>Most of it can be read off the statement itself:</b> the carrier from the file, policies from the policy numbers and names, the rate from the Rate column, the advance from "paid ÷ premium" (810 on 1,080 = 75%).</div>
+
+<h3>A · Statement first: one upload, one confirm <span class="pick">Recommended</span></h3>
+<div class="cmp">
+<div class="app" style="height:500px"><div class="rail"><i></i><i class="on"></i><i></i><i></i><i></i></div>
+<div class="main">
+  <div class="titleline"><span class="t">Get set up</span><div class="steps"><span class="on">1 Your statement</span><span>2 Check what we found</span><span>3 Your money</span></div></div>
+  <div class="drop"><div><div style="font-size:16px;font-weight:700;color:var(--ink)">Drop a commission statement from any carrier</div><div class="f" style="margin-top:6px">PDF, Excel or CSV, exactly as the carrier sent it. Nothing else needed.</div><button class="btn pri" style="margin-top:14px">Choose a File</button></div></div>
+  <p class="note">Carriers, states and licences move to "Fine-tune later"; nothing blocks seeing money.</p>
+</div></div>
+<div class="app" style="height:500px"><div class="rail"><i></i><i class="on"></i><i></i><i></i><i></i></div>
+<div class="main">
+  <div class="titleline"><span class="t">Check what we found</span><span class="sp"></span><button class="btn pri">Looks Right</button></div>
+  <div class="found">
+    <div class="card"><div class="k">Carrier</div><div class="v" style="font-size:18px">Americo</div><div class="f">from the file name and layout · <span class="edit">change</span></div></div>
+    <div class="card"><div class="k">Policies</div><div class="v" style="font-size:18px">10 new</div><div class="f">added to your book from the lines · <span class="edit">see them</span></div></div>
+    <div class="card"><div class="k">Period</div><div class="v" style="font-size:18px">October 2026</div><div class="f">from the line dates · <span class="edit">change</span></div></div>
+    <div class="card"><div class="k">Your rate</div><div class="v" style="font-size:18px">100%</div><div class="f">the Rate column on 9 of 10 lines</div></div>
+    <div class="card"><div class="k">Advance</div><div class="v" style="font-size:18px">75% · 9 mo</div><div class="f">paid ÷ annual premium, every advance line</div></div>
+    <div class="card"><div class="k">Already wrong</div><div class="v warn" style="font-size:18px">1 line</div><div class="f">Deborah Finch paid at 80%, not 100%</div></div>
+  </div>
+  <p class="note">"Looks Right" writes the carrier, level, rates, advance rule and policies in one go, accepts the matched lines, and opens step 3: the Ledger home with the money already checked.</p>
+</div></div>
+</div>
+
+<h3>B · Keep the steps, explain each one</h3>
+<div class="card" style="max-width:900px;margin-top:10px">Today's order stays (carriers → states → statement), but every step gets a one-line "why" and the jargon is replaced: "contract level" → <b>"What % of the carrier's commission do you get?"</b>, advance rule → <b>"Does Americo pay you up front? How many months?"</b>, and Import Policies is folded into the statement step ("These 10 policies aren't in your book yet. Add them?"). Smaller change, but still about seven stops.</div>
+
+<p class="note" style="margin-top:40px">Pick one per board (1·A/B, 2·A/B, 3·A/B). Nothing here is built.</p>
+</div>
+</body>
+</html>

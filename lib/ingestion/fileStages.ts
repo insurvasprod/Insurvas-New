@@ -236,6 +236,21 @@ export function fileWhere(file: { status: string; waitingForLayout: boolean }, v
   return "done";
 }
 
+/**
+ * What the "Needs you" figure is made of, said in words (walk 2026-11-20: "Needs you 1" sat over "0 rows
+ * waiting" and an empty file list, because the 1 was an open problem the agents raised, not a file). The
+ * chip counts files that need a person plus open problems found (owner 2026-11-02); this names both parts,
+ * so the figure and what is listed under it agree. Null when nothing waits.
+ */
+export function needsYouParts(input: { files: number; rows: number; problems: number }): string | null {
+  const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
+  const parts = [
+    input.files > 0 ? `${plural(input.files, "file", "files")} · ${plural(input.rows, "row", "rows")} waiting` : null,
+    input.problems > 0 ? plural(input.problems, "problem found", "problems found") : null,
+  ].filter((part): part is string => part !== null);
+  return parts.length ? parts.join(" · ") : null;
+}
+
 /** The Files step's filter chips (round 3, owner 2026-11-02): one list, no tabs. */
 export const FILE_FILTERS = [
   { key: "all", label: "All" },

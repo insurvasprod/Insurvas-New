@@ -23,6 +23,7 @@ import { DEFAULT_QUOTE_VALID_DAYS, quoteExpired } from "@/lib/applications/listR
 import { FE_TIERS, PAYMENT_METHOD_LABEL } from "@/lib/applications/constants";
 import type { AttemptView, CaseView, FieldValue, InterviewView, QuoteView } from "@/lib/applications/types";
 import { formatCents } from "@/lib/money";
+import { initialFaceCents } from "@/lib/applications/quoteFace";
 import { estimatePayout } from "@/lib/quotes/math";
 
 import { AddQuoteForm, type QuoteDraft } from "@/components/app/applications/quotes/add-quote-form";
@@ -61,7 +62,7 @@ function interviewText(interview: InterviewView | null): Record<string, string> 
   return out;
 }
 
-function initialTemplate(attempt: AttemptView, caseView: CaseView, interview: InterviewView | null): { template: RatingTemplate; fromInterview: RatingField[] } {
+function initialTemplate(attempt: AttemptView, caseView: CaseView, interview: InterviewView | null): { template: RatingTemplate; fromInterview: RatingField[]; faceFromLead: number | null } {
   const str = (key: string) => (typeof attempt.values[key]?.value === "string" ? (attempt.values[key]!.value as string) : "");
   const answers = interviewText(interview);
   const fromInterview: ("dob" | "gender" | "tobacco")[] = [];
@@ -73,7 +74,8 @@ function initialTemplate(attempt: AttemptView, caseView: CaseView, interview: In
     if (said) fromInterview.push(field);
     return said;
   };
-  const faceValue = attempt.values["cov.face_amount"]?.value;
+  // The application's face first; with none yet, the coverage the lead asked for (both in cents).
+  const face = initialFaceCents(attempt.values["cov.face_amount"]?.value, caseView.requestedFaceCents);
   const tierValue = str("cov.product_tier") || attempt.tier || "level";
   const gender = pick("gender", "insured.gender").toLowerCase();
   const tobacco = pick("tobacco", "insured.tobacco").toLowerCase();
@@ -84,12 +86,12 @@ function initialTemplate(attempt: AttemptView, caseView: CaseView, interview: In
     gender: gender === "female" || gender === "male" ? gender : "",
     state: (str("addr.state") || caseView.clientState || "").toUpperCase(),
     tobacco: tobacco === "yes" || tobacco === "no" ? tobacco : "",
-    faceText: typeof faceValue === "number" ? dollarsText(faceValue) : "",
+    faceText: face.cents !== null ? dollarsText(face.cents) : "",
     tier: (FE_TIERS as readonly string[]).includes(tierValue) ? tierValue : "level",
     riders: selected?.riders.map((r) => r.name) ?? [],
     extra: {},
   };
-  return { template, fromInterview: fromInterview.filter((f) => template[f] !== "") };
+  return { template, fromInterview: fromInterview.filter((f) => template[f] !== ""), faceFromLead: face.fromLead ? face.cents : null };
 }
 
 type CatalogueState = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; catalogue: QuoteCatalogue };
@@ -138,6 +140,7 @@ function QuoteStepFor() {
     const fv = attempt.values[RATING_SOURCE_KEY[field]];
     if (isPrefilled(fv)) return { fv, confirmable: true };
     if ((field === "dob" || field === "gender" || field === "tobacco") && initial.fromInterview.includes(field)) return { fv: { value: template[field], source: "interview", reviewed: false }, confirmable: false };
+    if (field === "face" && initial.faceFromLead !== null) return { fv: { value: initial.faceFromLead, source: "lead", reviewed: false }, confirmable: false };
     return undefined;
   };
   // A template field the form has no special input for takes the interview's answer to the same key.

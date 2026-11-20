@@ -2,11 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { ChevronDown, Upload } from "lucide-react";
 
 import { Field, control } from "@/components/app/settings/primitives";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { WORKSPACE_TIMEZONES } from "@/lib/agencyProfile/types";
@@ -22,8 +21,8 @@ import { CheckBox } from "@/components/ui/check-box";
  * shows it here as a change, and Save uploads it.
  *
  * Email is shown, not edited: it is the sign-in, changed under Sign-in & security with its own
- * confirmation. Licensed states are shown, not edited: one home for licences (the producer record /
- * Team & access); the person fills in the numbers.
+ * confirmation. Licensed states are shown, not edited: the owner sets them in Settings › Team & Access;
+ * the person fills in the numbers.
  *
  * useOwnProfileDraft holds the draft; OwnProfileFields draws it; My profile owns the save bar.
  */
@@ -296,7 +295,13 @@ function ProfilePicture({ form, disabled }: { form: OwnProfileDraft; disabled: b
 }
 
 /** The Profile section's fields, drawn from the page's draft. */
-export function OwnProfileFields({ form, saving, recordHref }: { form: OwnProfileDraft; saving: boolean; recordHref: string | null }) {
+/**
+ * Licensed states are set by the owner (or an admin) in Settings › Team & Access, with each licence's end date; a
+ * producer cannot change them anywhere, his producer record included, so this names who does (bug walk 2026-11-20).
+ */
+export const OWN_LICENCES_NOTE = "Read-only here: your owner sets them, with each licence's end date, in Settings › Team & Access.";
+
+export function OwnProfileFields({ form, saving }: { form: OwnProfileDraft; saving: boolean }) {
   const { profile, languages, picked, timezone, states } = form;
   const languagesOpen = languages !== null && "saved" in languages && languages.available;
   const languagesReady = languages !== null && "saved" in languages;
@@ -347,12 +352,9 @@ export function OwnProfileFields({ form, saving, recordHref }: { form: OwnProfil
             {states.length
               ? states.map((state) => <span key={state} className="inline-flex h-[22px] items-center rounded-badge border border-[var(--border)] bg-[var(--surface)] px-2 text-xs font-medium text-[var(--body)]">{state}</span>)
               : <span className="text-sm text-[var(--muted)]">{profile.licensedStates === null ? "Cannot be read yet" : "None yet"}</span>}
-            {recordHref
-              ? <Link href={recordHref} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Change on Your Producer Record</Link>
-              : null}
           </div>
           <span className="mt-1.5 block text-xs leading-[1.5] text-[var(--muted)]">
-            {recordHref ? "Read-only here: one home for licences, on your producer record." : "Read-only here: your owner records them on Team & access."}
+            {OWN_LICENCES_NOTE}
           </span>
         </div>
       </div>

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { Callout } from "@/components/app/settings/primitives";
@@ -130,7 +131,7 @@ export function AppointmentCloseOutStrip({ onCount }: { onCount?: (count: number
           : shown.length === 0 ? <EmptyState title={`Nothing to close out on ${closeOutDayLabel(day)}`} hint="Every appointment that day has an outcome." action={<Button variant="outline" asChild><Link href={allHref}>Show every day</Link></Button>} />
           : (
             <table className="portal-activity-table w-full min-w-[640px] text-left text-sm">
-              <thead><tr><th>Client</th><th>Appointment</th><th>Setter note</th><th>Status</th><th>Next step</th></tr></thead>
+              <thead><tr><th>Client</th><th>Appointment</th><th>Setter note</th><th>Status</th><th className="text-right">Next step</th></tr></thead>
               <tbody className="m-seq">
                 {shown.map((appointment) => (
                   <tr key={appointment.appointmentId} className="m-row cursor-pointer" onClick={() => openRow(appointment)}>
@@ -138,7 +139,7 @@ export function AppointmentCloseOutStrip({ onCount }: { onCount?: (count: number
                     <td className="whitespace-nowrap tabular-nums" title={appointment.customerTimezone || undefined}>{appointment.startsAtLocal}</td>
                     <td className="max-w-[280px] truncate" title={appointment.note ?? undefined}>{appointment.note ?? <span className="text-muted-foreground">—</span>}</td>
                     <td className="whitespace-nowrap"><StatusChip tone="warning">Needs an outcome</StatusChip></td>
-                    <td className="whitespace-nowrap"><Button type="button" variant="ghost" size="sm" className="-ml-2" onClick={(event) => { event.stopPropagation(); openRow(appointment); }}>Close out ›</Button></td>
+                    <RowActionCell><RowAction onClick={() => openRow(appointment)}>Close Out</RowAction></RowActionCell>
                   </tr>
                 ))}
               </tbody>

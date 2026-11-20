@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { fileDay } from "@/lib/ingestion/constants";
@@ -75,7 +76,7 @@ export function LettersList({ letters, tab, settled, initialCarrier = "" }: { le
               <th className="text-right">Items</th>
               <th className="text-right">Claimed</th>
               <th>{tab === "out" ? "Where it stands" : "Outcome"}</th>
-              {tab === "out" ? <th>Next step</th> : <th className="text-right">Credited</th>}
+              {tab === "out" ? <th className="text-right">Next step</th> :<th className="text-right">Credited</th>}
             </tr>
           </thead>
           <PagedBody>
@@ -91,7 +92,7 @@ export function LettersList({ letters, tab, settled, initialCarrier = "" }: { le
                     <StatusChip tone={TONE[letter.status] ?? "neutral"} title={letter.sentVia ? `Sent by ${VIA[letter.sentVia] ?? letter.sentVia}${letter.sentAt ? ` on ${fileDay(letter.sentAt.slice(0, 10))}` : ""}` : undefined}>{LETTER_STATUS_WORD[letter.status] ?? letter.status}</StatusChip>
                   </td>
                   {tab === "out"
-                    ? <td className="whitespace-nowrap" title={LETTER_NEXT[letter.status]}>{NEXT[letter.status] ?? "Open"} ›</td>
+                    ? <RowActionCell><RowAction href={href} title={LETTER_NEXT[letter.status]}>{NEXT[letter.status] ?? "Open"}</RowAction></RowActionCell>
                     : <td className="whitespace-nowrap text-right tabular-nums">{letter.outcomeCents !== null ? money(letter.outcomeCents) : <span className="text-muted-foreground">—</span>}</td>}
                 </tr>
               );

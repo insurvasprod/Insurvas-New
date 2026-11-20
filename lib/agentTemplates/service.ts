@@ -42,6 +42,7 @@ import {
   syncTemplatePipeline,
   assertUuid,
 } from "@/lib/pipelines/service";
+import { ensurePartnerTypePipelineForIntake } from "@/lib/pipelines/partnerTypePipeline";
 import { isRequiredLeadImportField, parseLeadCsv, sanitizeImportMapping, US_STATE_CODES, type ImportDateOrder, type LeadImportRow } from "./csv";
 import { commitLeadImport, ImportCommitRefusal, projectedUsableCostCents } from "./importCommit";
 import { existingLeadsByPhone } from "./existingLeadPhones";
@@ -1268,7 +1269,7 @@ export async function listAgentLeads(
   /** AG-0.5: the session's producer scope (scopeFor). Null — the default — reads the whole book as before. */
   scope: ProducerScope = null,
 ) {
-  return withSubmitterNames(await filterAgentLeads(tenantId, template, search, filterField, filterValue, sortField, direction, scope));
+  return withSubmitterNames(tenantId, await filterAgentLeads(tenantId, template, search, filterField, filterValue, sortField, direction, scope));
 }
 
 /**
@@ -1356,7 +1357,8 @@ export async function filterAgentLeadsPage(
   // stage_entered_at (20260925100000) rides here so leadWorkFacts need not read every lead again by id (speed pass
   // 2026-11-12). The generated types predate the column, so the select is typed as the list without it; the route
   // reads it untyped.
-  const columns = "id, product_line, pipeline_id, stage_id, values, created_by, screening_outcome, screening_warning, screening_checked_at, created_at, updated_at, stage_entered_at" as "id, product_line, pipeline_id, stage_id, values, created_by, screening_outcome, screening_warning, screening_checked_at, created_at, updated_at";
+  // partner_id names the partner company in the table's Partner column (withSubmitterNames).
+  const columns = "id, product_line, pipeline_id, stage_id, values, created_by, partner_id, screening_outcome, screening_warning, screening_checked_at, created_at, updated_at, stage_entered_at" as "id, product_line, pipeline_id, stage_id, values, created_by, partner_id, screening_outcome, screening_warning, screening_checked_at, created_at, updated_at";
   const base = () => {
     let query = getSupabaseServiceClient()
       .from("agent_leads")
@@ -1426,17 +1428,28 @@ export async function filterAgentLeadsPage(
   return { leads, hasMore };
 }
 
-/** Each lead with the name of the person who submitted it ("Workspace" when nobody, or unknown). */
-export async function withSubmitterNames<L extends { created_by: string | null }>(leads: L[]) {
+/**
+ * Each lead with the name of the person who submitted it ("Workspace" when nobody, or unknown) and, when a partner
+ * sent it, the partner COMPANY's name (`partner_name`): the table's Partner column names the company, and the
+ * person only when there is no company (walk 2026-11-20). The partners are read under this tenant only, so a
+ * lead's partner_id can never name another agency's partner.
+ */
+export async function withSubmitterNames<L extends { created_by: string | null; partner_id?: string | null }>(tenantId: string, leads: L[]) {
   const creatorIds = [...new Set(leads.map((lead) => lead.created_by).filter((id): id is string => Boolean(id)))];
-  const creators = creatorIds.length
-    ? await getSupabaseServiceClient().from("users").select("id, name").in("id", creatorIds)
-    : { data: [], error: null };
+  const partnerIds = [...new Set(leads.map((lead) => lead.partner_id).filter((id): id is string => Boolean(id)))];
+  const db = getSupabaseServiceClient();
+  const [creators, partners] = await Promise.all([
+    creatorIds.length ? db.from("users").select("id, name").in("id", creatorIds) : Promise.resolve({ data: [] as Array<{ id: string; name: string }>, error: null }),
+    partnerIds.length ? db.from("partners").select("id, name").eq("tenant_id", tenantId).in("id", partnerIds) : Promise.resolve({ data: [] as Array<{ id: string; name: string }>, error: null }),
+  ]);
   if (creators.error) throw new Error(`Could not load lead submitters: ${creators.error.message}`);
+  if (partners.error) throw new Error(`Could not load lead partners: ${partners.error.message}`);
   const creatorNames = new Map((creators.data ?? []).map((creator) => [creator.id, creator.name]));
+  const partnerNames = new Map((partners.data ?? []).map((partner) => [partner.id, partner.name]));
   return leads.map((lead) => ({
     ...lead,
     submitter_name: lead.created_by ? creatorNames.get(lead.created_by) ?? "Workspace" : "Workspace",
+    partner_name: lead.partner_id ? partnerNames.get(lead.partner_id) ?? null : null,
   }));
 }
 
@@ -2884,6 +2897,9 @@ export async function createPartnerLead(
     throw new Error("internal_dq_reason_required");
   }
   const partnerType = await partnerTypeForLead(tenantId, partnerId);
+  // A partner added before the per-type pipelines (owner 2026-11-19) has no board of its type yet:
+  // made here, once, so this lead is filed like a new partner's (walk 2026-11-20). Never fails the lead.
+  await ensurePartnerTypePipelineForIntake({ tenantId, partnerId, userId }, partnerType);
   // The partner-type pipeline's entry stage ("New Transfer" for a publisher), LA-1.9-4.
   const stage = await resolvePartnerEntryStage(tenantId, partnerType);
   const warningAcknowledged =

@@ -22,7 +22,7 @@ import { BUCKET_PENDING_MESSAGE } from "@/lib/ingestion/bucketStore";
 import { fileDay } from "@/lib/ingestion/constants";
 import { listFindings } from "@/lib/ingestion/dailyRunStore";
 import { listFileStages, loadMissingFiles } from "@/lib/ingestion/fileOutcomeStore";
-import { FILE_FILTERS, fileWhere, type FileFilter } from "@/lib/ingestion/fileStages";
+import { FILE_FILTERS, fileWhere, needsYouParts, type FileFilter } from "@/lib/ingestion/fileStages";
 import { CARRIER_FILES_PENDING_MESSAGE, listCarrierFiles } from "@/lib/ingestion/registry";
 import { fileCarrierChoices } from "@/lib/carriers/agency";
 import { isoDate } from "@/lib/ingestion/path";
@@ -136,9 +136,12 @@ async function Files({ first, missingRead, findingsRead, tenantId, readOnly, fil
   const failedFiles = current.filter((file) => file.status === "failed" && !file.waitingForLayout && file.carrierId);
   const replaced = list.files.length - current.length;
   const needsYou = stages ? current.reduce((sum, file) => sum + (stages[file.id]?.needs ?? 0), 0) : 0;
+  const filesNeedingYou = list.files.filter((file) => where(file) === "needs").length;
+  // The chip counts files and open problems found; the figure says which (walk 2026-11-20: "1" over "0 rows waiting").
+  const needsWords = needsYouParts({ files: filesNeedingYou, rows: needsYou, problems: openFindings });
   const counts: Record<FileFilter, number> = {
     all: list.files.length,
-    needs: list.files.filter((file) => where(file) === "needs").length + openFindings,
+    needs: filesNeedingYou + openFindings,
     failed: list.files.filter((file) => where(file) === "failed").length,
     missing: missing.missing.length,
   };
@@ -216,7 +219,7 @@ async function Files({ first, missingRead, findingsRead, tenantId, readOnly, fil
             <StatTile label="Files in use" value={n(current.length)} footnote={replaced ? `${n(replaced)} more replaced by a corrected file` : [["policies", "policy"], ["commissions", "commission"], ["new_business", "new business"]].map(([type, word]) => [current.filter((file) => file.fileType === type).length, word] as const).filter(([count], index) => index < 2 || count > 0).map(([count, word]) => `${n(count)} ${word}`).join(" · ")} />
             {/* Files, as the chip counts them; the rows they hold are the footnote (walk 2026-11-02: 861 beside 10 read as a disagreement). */}
             {/* Owner 2026-11-11: plain figures; a tile that is a problem says so in one chip in its footnote. */}
-            <StatTile label="Need you" value={n(counts.needs)} footnote={counts.needs ? <StatusChip tone="warning" title={openFindings ? `${n(openFindings)} ${openFindings === 1 ? "problem" : "problems"} found` : undefined}>{n(needsYou)} {needsYou === 1 ? "row" : "rows"} waiting</StatusChip> : "nothing waiting on a person"} href={chipHref("needs")} />
+            <StatTile label="Need you" value={n(counts.needs)} footnote={needsWords ? <StatusChip tone="warning">{needsWords}</StatusChip> : "nothing waiting on a person"} href={chipHref("needs")} />
             <StatTile label="Waiting for a layout" value={n(waiting)} footnote="read once Insurvas sets up the layout" />
             <StatTile label="Failed" value={n(counts.failed)} footnote={counts.failed ? <StatusChip tone="warning" title="Cannot be read, see the reason">Cannot be read</StatusChip> : "cannot be read, see the reason"} href={chipHref("failed")} />
             <StatTile label="Duplicates skipped" value={n(list.skips.length)} footnote="already received" />
@@ -232,6 +235,9 @@ async function Files({ first, missingRead, findingsRead, tenantId, readOnly, fil
               show={filter === "needs" || filter === "failed" ? filter : undefined}
               chips={chips}
               also={filter === "needs" && openFindings ? `and ${n(openFindings)} ${openFindings === 1 ? "problem" : "problems"} found, below` : undefined}
+              emptyShown={filter === "needs"
+                ? { title: "No file needs you", hint: openFindings ? `${n(openFindings)} ${openFindings === 1 ? "problem the agents found needs" : "problems the agents found need"} you; ${openFindings === 1 ? "it is" : "they are"} listed below.` : "Every file is read or still being read." }
+                : filter === "failed" ? { title: "No file failed", hint: "Every file could be read." } : undefined}
               emptyTitle={list.available ? "No carrier file received yet" : "Carrier files are not available yet"}
               emptyHint={list.available ? "Upload a policy or commission file, email one to the agency's address, or have a script drop it into the bucket." : "Files appear here once the update is applied."}
             />

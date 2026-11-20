@@ -8,7 +8,7 @@ import { allMenuItems } from "@/lib/menu/definition";
 import { roleReach } from "@/lib/menu/roleReach";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { resolveTenantContext } from "@/lib/tenantAuth/requireTenant";
-import { TENANT_ROLE_LABELS, type TenantRole } from "@/lib/tenantAuth/roles";
+import { MEMBER_ROLE_LABELS, TENANT_ROLE_LABELS, type TenantRole } from "@/lib/tenantAuth/roles";
 
 /**
  * Shown when a page is closed to someone because of their ROLE rather than their plan (LA-0.2),
@@ -103,7 +103,8 @@ export async function RoleGateNotice({
       </div>
     );
   }
-  const roleLabel = role ? TENANT_ROLE_LABELS[role].toLowerCase() : null;
+  // The agency title when there is one (owner 2026-11-20: a manager was told "You are signed in as a producer").
+  const roleLabel = role ? (MEMBER_ROLE_LABELS[context?.memberRole ?? role] ?? TENANT_ROLE_LABELS[role]).toLowerCase() : null;
   const otherLabel = reach ? TENANT_ROLE_LABELS[reach.otherRole as TenantRole] ?? reach.otherRole : null;
   const askHref = facts.ownerEmail
     ? `mailto:${facts.ownerEmail}?subject=${encodeURIComponent(`Access to ${featureLabel} in Insurvas`)}&body=${encodeURIComponent(`Hi,\n\nI'm signed in to Insurvas as ${roleLabel ? withArticle(roleLabel) : "a team member"}, and ${featureLabel} is ${reason === "agency" ? "kept for the agency's owner and admins" : "closed to my role"}. Could you change my role if I should have it?\n`)}`

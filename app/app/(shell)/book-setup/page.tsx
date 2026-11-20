@@ -27,7 +27,7 @@ export default async function BookSetupPage() {
   const readOnly = guard.entitlement.access === "read_only";
 
   return (
-    <DataInPage step="rate-card" chip={<InfoTip label="About the rate card" side="right">What each carrier pays you: your contract level and the commission rate per product. With a rate, Insurvas works out what every policy should pay and flags the payments that come in short. Work down the list: a carrier whose policies can&apos;t all be checked has <b>Add rates</b>; open it and add the rate for each product family.</InfoTip>}>
+    <DataInPage step="rate-card" chip={<InfoTip label="About the rate card" side="right">What each carrier pays you: your contract level and the commission rate per product. With a rate, Insurvas works out what every policy should pay and flags the payments that come in short. Work down the list: a carrier whose policies can&apos;t all be checked has <b>Add rates</b>; open it, and add the rate for each product in its Rates table.</InfoTip>}>
       <StreamSection shape="strip+table"><RateCard read={view} readOnly={readOnly} /></StreamSection>
     </DataInPage>
   );
@@ -35,7 +35,6 @@ export default async function BookSetupPage() {
 
 async function RateCard({ read, readOnly }: { read: ReturnType<typeof loadRateCard>; readOnly: boolean }) {
   const view = await read;
-  const today = new Date().toISOString().slice(0, 10);
   if (!view.available) return <Callout tone="warning" title={EXPECTED_PENDING_MESSAGE} />;
   return (
     <>
@@ -47,7 +46,7 @@ async function RateCard({ read, readOnly }: { read: ReturnType<typeof loadRateCa
           <StatTile label="Past the usual lag" value={view.expected.available ? view.expected.pastLag.toLocaleString("en-US") : "—"} footnote="due by now; any still unpaid are in Discrepancies" />
         </StatStrip>
       )}
-      <RateCardWorkspace carriers={view.carriers} products={view.products} readOnly={readOnly} today={today} />
+      <RateCardWorkspace carriers={view.carriers} readOnly={readOnly} />
     </>
   );
 }

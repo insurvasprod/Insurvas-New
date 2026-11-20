@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
+import { refreshDiscrepancies } from "@/lib/discrepancies/service";
 import { DiscrepancyError, draftDispute, previewLetter, runDetection, setStatus, updateDispute } from "@/lib/ingestion/discrepancyStore";
 import { isRecordUuid } from "@/lib/ingestion/path";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
@@ -36,7 +37,15 @@ export async function POST(request: NextRequest) {
   const b = parsed.data;
   const log = (action: "commission_discrepancy.status_set" | "commission_dispute.drafted" | "commission_dispute.updated", targetType: string, targetId: string, metadata: Record<string, unknown>) => audit({ actorType: "tenant", actorId: userId, action, targetType, targetId, metadata: { tenantId, ...metadata }, request });
   try {
-    if (b.action === "run") return NextResponse.json({ ok: true, ...(await runDetection(tenantId)) });
+    if (b.action === "run") {
+      // Owner 2026-11-19 (Ledger walk): "Check now" checks the statements too, not only the carrier files. A Ledger agent
+      // with no carrier files saw nothing found while a reviewed statement had paid short.
+      const [files, statements] = await Promise.all([runDetection(tenantId), refreshDiscrepancies(tenantId).catch((error) => {
+        console.error("[commission-discrepancies] statements", error);
+        return null;
+      })]);
+      return NextResponse.json({ ok: true, ...files, opened: Number(files.opened ?? 0) + (statements?.opened ?? 0) + (statements?.reopened ?? 0), cleared: Number(files.cleared ?? 0) + (statements?.cleared ?? 0) });
+    }
     if (b.action === "set_status") {
       await setStatus(tenantId, userId, b.id, b.status, b.note);
       await log("commission_discrepancy.status_set", "commission_discrepancy", b.id, { status: b.status, note: b.note });

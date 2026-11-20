@@ -159,7 +159,7 @@ const WRITTEN: DocPage[] = [
     facts: [{ label: "Typical time", value: "1–2 weeks" }, { label: "Steps", value: "4" }],
     steps: [
       { title: "Invite them", detail: "From Settings › Team & access, with their role.", time: "2 minutes", doneWhen: "team", action: { label: "Do it in Insurvas", step: "team" } },
-      { title: "They add their licence, appointments and W-9", detail: "On their own producer record.", time: "15 minutes" },
+      { title: "Add their licence, appointments and W-9", detail: "Licences and their end dates in Settings › Team & access; appointments, writing numbers and the W-9 on their producer record.", time: "15 minutes" },
       { title: "You approve their contracting", detail: "On their record's Onboarding tab.", time: "5 minutes" },
       { title: "They follow their own Get started", detail: "Guided like yours, on the pages they use." },
     ] }),

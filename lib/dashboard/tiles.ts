@@ -173,7 +173,7 @@ export const DASHBOARD_TILES: readonly DashboardTile[] = [
     action_label: "Open leads",
     path: "/app/leads",
     icon: "contact-round",
-    required_feature: "book_of_business",
+    required_feature: "lead_import",
     required_roles: ["owner", "producer", "assistant"],
   },
 

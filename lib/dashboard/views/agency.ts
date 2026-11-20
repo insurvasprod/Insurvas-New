@@ -132,6 +132,26 @@ export function producerGoals(rows: readonly PolicyLite[], month: string, previo
   return [...by.values()].filter((row) => row.cents || row.goalCents).sort((a, b) => share(b) - share(a) || b.cents - a.cents || a.name.localeCompare(b.name));
 }
 
+/**
+ * Producer goals in POLICIES, for a reader without the money permission (a manager: AG-0.11 "the same screen scoped to
+ * his reports", AG-0.2 no agency money; owner 2026-11-20 manager walk). This month's issued policies per producer
+ * against last month's, the same book rows producerGoals reads.
+ */
+export type CountGoalRow = { userId: string; name: string; count: number; goalCount: number };
+export function producerCountGoals(rows: readonly PolicyLite[], month: string, previous: string): CountGoalRow[] {
+  const by = new Map<string, CountGoalRow>();
+  for (const row of rows) {
+    const key = row.issueDate?.slice(0, 7);
+    if (!row.agentUserId || (key !== month && key !== previous)) continue;
+    const entry = by.get(row.agentUserId) ?? { userId: row.agentUserId, name: row.agentName ?? "Producer", count: 0, goalCount: 0 };
+    if (key === month) entry.count += 1;
+    else entry.goalCount += 1;
+    by.set(row.agentUserId, entry);
+  }
+  const share = (row: CountGoalRow) => (row.goalCount ? row.count / row.goalCount : row.count ? 1 : 0);
+  return [...by.values()].sort((a, b) => share(b) - share(a) || b.count - a.count || a.name.localeCompare(b.name));
+}
+
 export type StateRow = { key: string; label: string; policies: number; cents: number; trend: "up" | "down" | "flat" };
 
 /**

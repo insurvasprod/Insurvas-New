@@ -57,7 +57,7 @@ export async function runDetection(tenantId: string, todayGiven?: string) {
     if (isSchemaGap(probe.error)) return { available: false as const };
     throw new Error(probe.error.message);
   }
-  const [policies, expected, entries, statements, carriers, settings, flagged, unreceived, ruleFor] = await Promise.all([
+  const [policies, expected, entries, statements, carriers, settings, flagged, unreceived, ruleFor, mirrored] = await Promise.all([
     everyRow(() => db().from("policy_current").select("carrier_id, policy_number, status_normalized, in_clawback_window, lapsed_on, months_paid, product_code, as_of").eq("tenant_id", tenantId).order("carrier_id").order("policy_number")),
     everyRow(() => db().from("expected_commission").select("*").eq("tenant_id", tenantId).order("carrier_id").order("policy_number").order("policy_year")),
     everyRow(() => db().from("commission_entry").select("id, carrier_id, policy_number, entry_type, corrects_type, reverses_entry_id, amount_cents, transaction_date, statement_date, rate_bp, commissionable_premium_cents, months_advanced, file_id").eq("tenant_id", tenantId).order("created_at").order("id")),
@@ -69,14 +69,19 @@ export async function runDetection(tenantId: string, todayGiven?: string) {
     db().rpc("deposit_unreceived_statements", { p_tenant_id: tenantId, p_today: today }).then((r: Loose) => (r.error ? [] : (r.data ?? [])) as Loose[]),
     // The advance rule per carrier and product family, as the policy page resolves it (the amount a chargeback will take).
     advanceRuleResolver(tenantId),
+    // Carrier policies a statement pays (their mirrors, lib/ledger/statementMirror.ts): the statement check judges
+    // those, so this check leaves them out — one policy is never both "never paid" here and "paid short" there.
+    db().from("tenant_policies").select("carrier, policy_number").eq("tenant_id", tenantId).eq("source", "carrier_file").limit(20000).then((r: Loose) => (r.error ? [] : (r.data ?? [])) as Loose[]),
   ]);
   const names = new Map<string, string>((carriers.data ?? []).map((c: Loose) => [c.id, c.name]));
+  const idByName = new Map<string, string>((carriers.data ?? []).map((c: Loose) => [String(c.name).trim().toLowerCase(), c.id]));
+  const judgedByStatements = new Set(mirrored.map((m: Loose) => `${idByName.get(String(m.carrier).trim().toLowerCase()) ?? ""}|${m.policy_number}`));
   const tolerance = new Map<string, number>();
   for (const row of [...(settings.data ?? [])].sort((a: Loose, b: Loose) => (a.tenant_id ? 1 : 0) - (b.tenant_id ? 1 : 0))) if (row.tolerance_cents !== null) tolerance.set(row.carrier_id, Number(row.tolerance_cents));
   const findings = detect({
     today,
     policies: policies.map((p) => ({ carrierId: p.carrier_id, carrierName: names.get(p.carrier_id) ?? "", policyNumber: p.policy_number, status: p.status_normalized, inClawbackWindow: p.in_clawback_window, lapsedOn: p.lapsed_on, monthsPaid: p.months_paid, advanceRule: ruleFor(p.carrier_id, p.product_code, p.as_of) })),
-    expected: expected.map((x) => ({
+    expected: expected.filter((x) => !judgedByStatements.has(`${x.carrier_id}|${x.policy_number}`)).map((x) => ({
       carrierId: x.carrier_id, policyNumber: x.policy_number, policyYear: x.policy_year, confidence: x.confidence, trigger: x.commission_trigger, triggerOn: x.trigger_occurred_on, overdueFrom: x.overdue_from, reason: x.reason,
       expectedAmountCents: x.expected_amount_cents === null ? null : Number(x.expected_amount_cents), expectedAdvanceCents: x.expected_advance_cents === null ? null : Number(x.expected_advance_cents),
       scheduleId: x.schedule_id, scheduleVersion: x.schedule_version, rateBp: x.rate_bp_applied, premiumCents: x.commissionable_premium_cents === null ? null : Number(x.commissionable_premium_cents),

@@ -34,7 +34,7 @@ import type { AppointmentRow } from "@/lib/appointments/service-types";
 import { dayMonth } from "@/lib/format/dates";
 import { notify } from "@/lib/notify";
 import type { WorkspaceSnapshot } from "@/lib/settings/workspaceSnapshot";
-import { TENANT_ROLES } from "@/lib/tenantAuth/roles";
+import { MEMBER_ROLE_LABELS, TENANT_ROLES } from "@/lib/tenantAuth/roles";
 import { lastSeenCell } from "@/lib/tenantTeam/lastSeen";
 import type { TeamMember, TeamSnapshot } from "@/lib/tenantTeam/service";
 import { cn } from "@/lib/utils";
@@ -89,8 +89,24 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
     }).catch(() => undefined);
     return () => { live = false; };
   }, []);
+  // A link from elsewhere opens one person's sheet: /app/settings?member=<user id>#team-access (the producer
+  // record's "Set in Team & Access" for a missing licence). Read once on mount; the param is then dropped so a
+  // reload after closing the sheet does not reopen it.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const asked = url.searchParams.get("member");
+    if (!asked) return;
+    const member = initial.members.find((item) => item.id === asked);
+    if (member) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the URL is only readable after mount
+      setTab(isInvite(member) ? "invites" : isDeactivated(member) ? "deactivated" : "people");
+      setOpenId(member.id);
+    }
+    url.searchParams.delete("member");
+    window.history.replaceState(window.history.state, "", url.toString());
+  }, [initial.members]);
   const today = todayIso();
-  const carriersInState = appointments ? (code: string) => carriersIn(appointments, code, today).length : undefined;
+  const carriersInState =appointments ? (code: string) => carriersIn(appointments, code, today).length : undefined;
 
   async function refresh() {
     try {
@@ -179,7 +195,7 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
     const role = memberRole(member);
     const status = statusOf(member, now);
     const you = member.id === viewerId;
-    const sub = [role === "owner" && !member.agencyTitle ? "Owner" : null, role === "manager" ? "Team lead" : null, you ? "you" : null].filter(Boolean).join(" · ");
+    const sub = [role === "owner" && !member.agencyTitle ? "Owner" : null, role === "manager" ? MEMBER_ROLE_LABELS.manager : null, you ? "you" : null].filter(Boolean).join(" · ");
     const states = member.licensedStates ?? [];
     return (
       <tr key={member.id} {...rowOpen(() => { setNote(null); setOpenId(member.id); })} aria-label={`Open ${member.name}`}>

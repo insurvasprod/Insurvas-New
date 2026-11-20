@@ -9,8 +9,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { fillLine } from "@/components/ui/table-card-layout";
 import { MAX_ROWS } from "@/components/ui/use-fitting-page-size";
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 
 /** One row of a file as the table shows it: every word already chosen on the server. */
 export type FileRowLine = {
@@ -99,7 +98,7 @@ export function FileRowsTable({ rows: all, toolbar, empty, pageKey = "" }: { row
           <th>Outcome</th>
           {changed && <th>Changed</th>}
           {moved && <th>Card</th>}
-          <th>Next step</th>
+          <th className="text-right">Next step</th>
         </tr>
       </thead>
       <tbody>
@@ -113,13 +112,13 @@ export function FileRowsTable({ rows: all, toolbar, empty, pageKey = "" }: { row
             <td><StatusChip tone={row.tone} title={row.chipTitle}>{row.chip}</StatusChip></td>
             {changed && <td className="max-w-[360px] truncate whitespace-nowrap" title={row.detail}>{row.detail === "—" ? <span className="text-muted-foreground">—</span> : row.detail}</td>}
             {moved && <td className="whitespace-nowrap">{row.card === "—" ? <span className="text-muted-foreground">—</span> : row.card}</td>}
-            <td className="whitespace-nowrap">
+            <RowActionCell>
               {row.reviewHref ? (
-                <Link href={row.reviewHref} onClick={(event) => event.stopPropagation()} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Review</Link>
+                <RowAction href={row.reviewHref}>Review</RowAction>
               ) : (
-                <Link href={row.rowHref} aria-label={`Open row ${row.rowNumber}`} onClick={(event) => event.stopPropagation()} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")}>Open</Link>
+                <RowAction href={row.rowHref} aria-label={`Open row ${row.rowNumber}`}>Open</RowAction>
               )}
-            </td>
+            </RowActionCell>
           </tr>
         ))}
       </tbody>

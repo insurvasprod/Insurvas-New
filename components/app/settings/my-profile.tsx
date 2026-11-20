@@ -136,7 +136,6 @@ function ProfilePage({ profile, recordId, promptTwoFactor }: { profile: OwnProfi
   const words = [...form.changes.map(profileChangeWord), ...(alerts.count ? [`${alerts.count === 1 ? "an alert" : `${alerts.count} alerts`}`] : [])];
   const count = form.changes.length + alerts.count;
   const dirty = count > 0;
-  const recordHref = recordId ? `/app/producers/${recordId}` : null;
 
   async function save() {
     setSaving(true);
@@ -184,7 +183,7 @@ function ProfilePage({ profile, recordId, promptTwoFactor }: { profile: OwnProfi
         footer={<SaveFoot count={count} what={words.slice(0, 3).join(", ") + (words.length > 3 ? "…" : "")} saving={saving} onDiscard={discard} onSave={() => void save()} />}
       >
         <FormBlock id={SECTIONS.profile} title="Profile" sub="How clients and teammates see you.">
-          <OwnProfileFields form={form} saving={saving} recordHref={recordHref} />
+          <OwnProfileFields form={form} saving={saving} />
         </FormBlock>
 
         {recordId && (

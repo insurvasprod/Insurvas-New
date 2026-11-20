@@ -4,6 +4,19 @@ import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 import { load, mutate as put, peek, subscribe, type Entry } from "./resource-cache";
 
+const noSubscribe = () => () => {};
+
+/**
+ * True while React is hydrating this component from the server's HTML, false on every other render (a client
+ * navigation, a re-render after hydration). Read it before a `useState` initializer that calls `seed`: the shell
+ * marks the app hydrated in its own effect, but the page sits in a Suspense boundary (loading.tsx) that React
+ * hydrates in a later pass, after that effect has run, so `seed` alone would hand the page a kept answer the
+ * server's HTML never had (a hydration mismatch, 2026-11-20 on /app/campaigns).
+ */
+export function useHydrating(): boolean {
+  return useSyncExternalStore(noSubscribe, () => false, () => true);
+}
+
 /**
  * A `/api/app/…` read with the app's client cache (resource-cache.ts): the last answer at once, a fresh one behind it.
  *

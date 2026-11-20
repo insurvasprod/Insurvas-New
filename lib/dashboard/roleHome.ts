@@ -162,6 +162,14 @@ export function dashboardProfile(plan: { code: string | null; features: Iterable
 }
 
 /**
+ * The Ledger Home (owner 2026-11-19): the plan itself is a money plan (the $99 Ledger tier, no CRM) and this is its
+ * owner. A bookkeeper is on the money profile by role, not by plan, and keeps the role's own Home.
+ */
+export function isLedgerHome(plan: { code: string | null; features: Iterable<string> } | null | undefined, role: TenantRole): boolean {
+  return role === "owner" && dashboardProfile(plan, "owner") === "money";
+}
+
+/**
  * The one upgrade tile (Sixteen #15), the single bounded exception to "absent, not greyed": shown
  * only when the plan lacks the feature, the agent's own data makes the case (checked at render: the
  * count must be above zero), and the reader can buy. The rows behind the count open on a page the

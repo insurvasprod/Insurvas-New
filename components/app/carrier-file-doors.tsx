@@ -8,6 +8,7 @@ import { confirmAction } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import type { SenderRow } from "@/lib/ingestion/registry";
 import { notify } from "@/lib/notify";
 
@@ -119,7 +120,7 @@ export function CarrierFileDoors({
                 <th>Sender</th>
                 <th>Carrier</th>
                 <th className="w-[140px]">Added by</th>
-                <th className="w-[150px]">Next step</th>
+                <th className="w-[150px] text-right">Next step</th>
               </tr>
             </thead>
             <PagedBody>
@@ -131,9 +132,9 @@ export function CarrierFileDoors({
                   </td>
                   <td className="whitespace-nowrap">{row.carrierName ?? <span className="text-muted-foreground">—</span>}</td>
                   <td className="whitespace-nowrap">{row.platform ? "Insurvas" : "This agency"}</td>
-                  <td className="whitespace-nowrap">
-                    {row.platform ? <span className="text-muted-foreground" title="Kept by Insurvas">—</span> : busy === `remove-${row.id}` ? "Removing…" : "Open ›"}
-                  </td>
+                  <RowActionCell>
+                    {row.platform ? <span className="text-muted-foreground" title="Kept by Insurvas">—</span> : busy === `remove-${row.id}` ? "Removing…" : <RowAction onClick={() => setOpen(row)}>Open</RowAction>}
+                  </RowActionCell>
                 </tr>
               ))}
             </PagedBody>

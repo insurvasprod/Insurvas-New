@@ -13,7 +13,14 @@ import { cn } from "@/lib/utils";
 const NAMES = new Map<string, string>(US_STATES.map(([code, name]) => [code, name]));
 export const stateName = (code: string) => NAMES.get(code) ?? code;
 
-const CHIP = "inline-flex items-center gap-1.5 rounded-[8px] border border-[var(--border)] bg-[var(--color-card)] px-2.5 py-1 text-xs font-semibold text-[var(--ink)] hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
+/**
+ * Under a licence's end date. An agency producer cannot submit applications until each licence has one (AG-1.10's
+ * licence item counts only licences with an expiry), so it is never called optional; this panel cannot tell an
+ * agency from a solo workspace, so it names who needs it.
+ */
+export const licenceExpiryHelp = (state: string) => `Needed before an agency producer can submit applications. After this date they get no leads in ${state}.`;
+
+const CHIP ="inline-flex items-center gap-1.5 rounded-[8px] border border-[var(--border)] bg-[var(--color-card)] px-2.5 py-1 text-xs font-semibold text-[var(--ink)] hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
 
 /**
  * Licensed in (board screen 2): one chip a state, with how many of the agency's carriers are appointed
@@ -57,7 +64,7 @@ export function StateChips({ states, expiries, carriersIn, onChange, disabled }:
                       value={expiries[code] ?? ""}
                       onChange={(event) => onChange(states, { ...expiries, [code]: event.target.value || null })}
                     />
-                    <span className="font-normal text-[var(--muted)]">Optional. After this date they get no leads in {stateName(code)}.</span>
+                    <span className="font-normal text-[var(--muted)]">{licenceExpiryHelp(stateName(code))}</span>
                   </label>
                   <Button type="button" variant="outline" size="sm" className="self-start text-[var(--error-ink)]" onClick={() => { const next = { ...expiries }; delete next[code]; onChange(states.filter((item) => item !== code), next); }}>
                     Remove {code}

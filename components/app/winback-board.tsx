@@ -12,6 +12,7 @@ import {
 } from "@/components/app/retention/winback-stages";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
@@ -76,7 +77,7 @@ export function WinbackBoard({ data, view }: { data: Winback; view: WinbackView 
           needle ? <NoMatches noun="claims" onClear={clear} /> : <EmptyState title="No possible claims" hint="A policy that lapsed after a reported death shows here: help the family claim, or mark it handled." />
         ) : (
           <table className="portal-lead-table w-full text-left text-sm">
-            <thead><tr><th>Client</th><th>Policy</th><th>Reported</th><th>Status</th><th>Next step</th></tr></thead>
+            <thead><tr><th>Client</th><th>Policy</th><th>Reported</th><th>Status</th><th className="text-right">Next step</th></tr></thead>
             <tbody className="m-seq">
               {shownClaims.rows.map((c) => {
                 const href = winbackClaimHref(c.id);
@@ -87,7 +88,7 @@ export function WinbackBoard({ data, view }: { data: Winback; view: WinbackView 
                     <td className="whitespace-nowrap tabular-nums text-muted-foreground">{fileDay(c.createdAt.slice(0, 10))}</td>
                     {/* What the carrier reported is the chip's tooltip and the claim page's own line. */}
                     <td><StatusChip tone="danger" title={c.reason}>Possible claim</StatusChip></td>
-                    <td className="whitespace-nowrap" title="Help the family claim">Help claim ›</td>
+                    <RowActionCell><RowAction href={href} title="Help the family claim">Help Claim</RowAction></RowActionCell>
                   </LinkRow>
                 );
               })}
@@ -107,7 +108,7 @@ export function WinbackBoard({ data, view }: { data: Winback; view: WinbackView 
               <th>Why it ended</th>
               <th>When to call</th>
               <th>Chance</th>
-              <th>Next step</th>
+              <th className="text-right">Next step</th>
             </tr>
           </thead>
           <tbody className="m-seq">
@@ -136,7 +137,7 @@ function Row({ r, view, today }: { r: WinbackRow; view: WinbackView; today: stri
       <td className="whitespace-nowrap" title={why}>{CATEGORY_LABELS[r.category]}</td>
       <td><StatusChip tone={WHEN_TONE[when.tone]} title={when.sub ?? undefined}>{when.line}</StatusChip></td>
       <td className="whitespace-nowrap" title={chanceWhy(r)}>{BAND_LABELS[r.band]}</td>
-      <td className="whitespace-nowrap" title={next.why}>{next.step} ›</td>
+      <RowActionCell><RowAction href={href} title={next.why}>{next.step}</RowAction></RowActionCell>
     </LinkRow>
   );
 }

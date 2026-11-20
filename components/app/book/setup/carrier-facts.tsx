@@ -4,9 +4,10 @@ import { useState, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, control } from "@/components/ui/field";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { TableCard } from "@/components/ui/table-card";
 import { CADENCES, COMMISSION_TRIGGERS, SETTING_FIELDS, STATEMENT_FORMATS, type SettingField } from "@/lib/ingestion/carrierRules";
 import { fileDay } from "@/lib/ingestion/constants";
@@ -182,7 +183,7 @@ export function CarrierFacts({ view, carrierId, carrierName, settings, files, de
       valueTitle: "Phone: not kept yet",
       whose: desk ? `yours, from ${fileDay(desk.since)}` : null,
       usedBy: "Dispute letters",
-      action: <Link href={DISPUTE_LETTERS} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")} title="Set from a dispute letter">Open</Link>,
+      action: <RowAction href={DISPUTE_LETTERS} title="Set from a dispute letter">Open</RowAction>,
     },
   ] : [
     setting("statementFormat", files.layouts.length ? <span className="whitespace-nowrap">{files.layouts.map((layout, i) => <span key={layout.fileType}>{i > 0 && " · "}<Link href={FIELD_MAPS} className={link}>{layoutWords(layout)}</Link></span>)}</span> : <span className="text-muted-foreground" title="No layout yet">—</span>),
@@ -193,7 +194,7 @@ export function CarrierFacts({ view, carrierId, carrierName, settings, files, de
       value: files.portal.value ?? notSet,
       valueTitle: where || files.guidance?.formatHint ? `${[where, files.guidance?.formatHint].filter(Boolean).join(" · ")} · Insurvas's guidance` : undefined,
       whose: whoseValue(files.portal),
-      action: <Link href={SETTINGS_CARRIERS} className={cn(buttonVariants({ variant: "outline", size: "xs" }), "no-underline")} title="Kept in Settings › Carriers">Open</Link>,
+      action: <RowAction href={SETTINGS_CARRIERS} title="Kept in Settings › Carriers">Open</RowAction>,
     },
     {
       key: "pattern",
@@ -206,9 +207,9 @@ export function CarrierFacts({ view, carrierId, carrierName, settings, files, de
 
   const editable = (row: FactRow) => Boolean(row.field && !readOnly);
   const actionOf = (row: FactRow) => row.action ?? (editable(row) ? (
-    <button type="button" className={link} onClick={() => setEditing(row.field!)}>
-      {settingText(row.field!, settings[row.field!].value) === null ? "Set ›" : "Edit ›"}
-    </button>
+    <RowAction onClick={() => setEditing(row.field!)}>
+      {settingText(row.field!, settings[row.field!].value) === null ? "Set" : "Edit"}
+    </RowAction>
   ) : null);
 
   return (
@@ -222,7 +223,7 @@ export function CarrierFacts({ view, carrierId, carrierName, settings, files, de
                 <th>Value</th>
                 <th>Whose</th>
                 <th>{view === "money" ? "Used by" : "Goes with"}</th>
-                <th className="w-[120px]">Next step</th>
+                <th className="w-[120px] text-right">Next step</th>
               </tr>
             </thead>
             <tbody>
@@ -232,7 +233,7 @@ export function CarrierFacts({ view, carrierId, carrierName, settings, files, de
                   <td className="whitespace-nowrap" title={row.valueTitle}>{row.value}</td>
                   <td className="whitespace-nowrap">{row.whose ?? <span className="text-muted-foreground">—</span>}</td>
                   <td className="whitespace-nowrap">{row.usedBy ?? <span className="text-muted-foreground">—</span>}</td>
-                  <td className="whitespace-nowrap">{actionOf(row) ?? <span className="text-muted-foreground">—</span>}</td>
+                  <RowActionCell>{actionOf(row) ?? <span className="text-muted-foreground">—</span>}</RowActionCell>
                 </tr>
               ))}
             </tbody>

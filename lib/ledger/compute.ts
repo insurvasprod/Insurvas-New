@@ -140,16 +140,23 @@ function resolveProduct(library: LedgerLibrary, text: string) {
   return library.products.find((product) => normalise(product.code) === key || normalise(product.name) === key) ?? null;
 }
 
+/**
+ * The row in force on `asOf`: the latest dated on or before it. When every row is dated after it, the earliest row
+ * (owner 2026-11-19): the first level or rule an agent records is set on the day they set up, after the book they bring
+ * already exists, and without this not one of those policies could be checked. A later row still starts on its date.
+ */
+export function inForceOn<T extends { effective_from: string }>(rows: readonly T[], asOf: string): T | null {
+  if (rows.length === 0) return null;
+  const byDate = [...rows].sort((a, b) => b.effective_from.localeCompare(a.effective_from));
+  return byDate.find((row) => row.effective_from <= asOf) ?? byDate[byDate.length - 1];
+}
+
 function levelOn(library: LedgerLibrary, carrierId: string, asOf: string) {
-  return library.tenantCarriers
-    .filter((row) => row.carrier_id === carrierId && row.effective_from <= asOf)
-    .sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0] ?? null;
+  return inForceOn(library.tenantCarriers.filter((row) => row.carrier_id === carrierId), asOf);
 }
 
 function ruleOn(library: LedgerLibrary, carrierId: string, productCode: string, asOf: string) {
-  return library.advanceRules
-    .filter((rule) => rule.carrier_id === carrierId && rule.product_code === productCode && rule.effective_from <= asOf)
-    .sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0] ?? null;
+  return inForceOn(library.advanceRules.filter((rule) => rule.carrier_id === carrierId && rule.product_code === productCode), asOf);
 }
 
 export function computeLedger(policies: LedgerPolicy[], library: LedgerLibrary, today: string): LedgerResult {

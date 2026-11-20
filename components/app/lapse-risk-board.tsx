@@ -7,6 +7,7 @@ import { notify } from "@/lib/notify";
 import { useFittingPageSize } from "@/components/app/book-views";
 import { RecordLapseSignal, refreshLapseSignalAccess } from "@/components/app/record-lapse-signal";
 import { Button } from "@/components/ui/button";
+import { RowActionLabel, rowActionClass } from "@/components/ui/row-action";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
@@ -120,9 +121,9 @@ function ResolveAction({ policy, onDone }: { policy: AtRiskPolicy; onDone: () =>
   return (
     <>
       <DropdownMenu modal={false}>
-        {/* The row's next step, a short verb and › (owner 2026-11-11); the choices open under it. */}
+        {/* The row's next step, a RowAction button (owner 2026-11-19); the choices open under it. */}
         <DropdownMenuTrigger asChild>
-          <button type="button" className="whitespace-nowrap text-sm text-foreground hover:underline">Resolve ›</button>
+          <button type="button" className={rowActionClass()} onClick={(event) => event.stopPropagation()}><RowActionLabel>Resolve</RowActionLabel></button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onSelect={() => choose("payment_received")}>{LAPSE_RESOLUTION_LABELS.payment_received}</DropdownMenuItem>
@@ -258,7 +259,7 @@ export function LapseRiskBoard({
               <TableHead>Signal</TableHead>
               <TableHead>Oldest signal</TableHead>
               <TableHead className="text-right">Commission exposed</TableHead>
-              {!readOnly && <TableHead>Next step</TableHead>}
+              {!readOnly && <TableHead className="text-right">Next step</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -284,7 +285,7 @@ export function LapseRiskBoard({
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-right" title={exposureDetail(policy)}><Exposure exposure={policy.exposure} /></TableCell>
                   {!readOnly && (
-                    <TableCell>
+                    <TableCell className="w-px whitespace-nowrap text-right">
                       <span className="inline-flex items-center gap-4">
                         <ResolveAction policy={policy} onDone={refresh} />
                         <RecordLapseSignal policy={{ id: policy.policyId, status: policy.status }} label="Add signal" showAtRisk={false} />

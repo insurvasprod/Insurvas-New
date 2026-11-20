@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ENTRY_LABELS, type EntryType } from "@/lib/ingestion/commissionLedger";
@@ -118,7 +119,7 @@ export function PolicyCommissionsTab({ ledger, expected, findings, carrierName, 
                 <span><span aria-hidden="true" className="mr-1.5 inline-block size-2 rounded-full bg-[var(--success)]" />{money(figures.earnedCents)} earned</span>
                 <span><span aria-hidden="true" className="mr-1.5 inline-block size-2 rounded-full bg-[var(--warning)]" />{money(atRisk)} at risk</span>
                 {figures.shortCents > 0 && <span><span aria-hidden="true" className="mr-1.5 inline-block size-2 rounded-full bg-[var(--error)]" />{money(figures.shortCents)} short</span>}
-                <span><span aria-hidden="true" className="mr-1.5 inline-block size-2 rounded-full bg-[var(--surface-alt)]" />{figures.restCents !== null ? `${money(figures.restCents)} still to come` : "still to come: needs a rate"}</span>
+                <span><span aria-hidden="true" className="mr-1.5 inline-block size-2 rounded-full bg-[var(--surface-alt)]" />{figures.restCents !== null ? `${money(figures.restCents)} still to come` : figures.expectedCents !== null ? "still to come: needs the months paid" : "still to come: needs a rate"}</span>
               </p>
             </div>
           ) : (
@@ -192,14 +193,14 @@ export function PolicyCommissionsTab({ ledger, expected, findings, carrierName, 
             <thead><tr><th className="w-[110px]">Date</th><th>Line</th><th className="w-[130px] text-right">Amount</th><th>From</th><th className="w-[110px]"><span className="sr-only">Next step</span></th></tr></thead>
             <PagedBody>
               {rows.map((row) => row.kind === "line" ? (
-                <ClickRow key={row.key} href={rowHref(row.entry.fileId, row.entry.rowNumber)} label={`Open line ${row.entry.rowNumber}`} chevron={false}>
+                <ClickRow key={row.key} href={row.entry.href ?? rowHref(row.entry.fileId, row.entry.rowNumber)} label={`Open line ${row.entry.rowNumber}`} chevron={false}>
                   {/* Owner 2026-11-11: one line, one colour. "Upline" is the line's tooltip; a held line says so in the
                       From column's one chip (its file and row are that chip's tooltip). */}
                   <td className="whitespace-nowrap tabular-nums text-muted-foreground">{shortDay(row.date)}</td>
                   <td className="whitespace-nowrap font-medium text-foreground" title={row.entry.payeeLevel === "upline" ? "Paid to the upline" : undefined}>{row.entry.type === "reversal" && row.entry.correctsType ? `Reversal of ${(ENTRY_LABELS[row.entry.correctsType as EntryType]?.label ?? row.entry.correctsType).toLowerCase()}` : ENTRY_LABELS[row.entry.type as EntryType]?.label ?? row.entry.type.replaceAll("_", " ")}</td>
                   <td className="whitespace-nowrap text-right tabular-nums">{money(row.entry.amountCents)}</td>
-                  <td className="whitespace-nowrap" title={[row.entry.heldByStatement ? `${row.entry.fileName ?? "The file"} · row ${row.entry.rowNumber}` : null, row.entry.reversalReason].filter(Boolean).join(" · ") || undefined}>{row.entry.heldByStatement ? <StatusChip tone="warning">Held: its statement doesn&rsquo;t add up</StatusChip> : `${row.entry.fileName ?? "The file"} · row ${row.entry.rowNumber}`}</td>
-                  <td className="whitespace-nowrap text-right"><Link href={rowHref(row.entry.fileId, row.entry.rowNumber)} aria-label={`Open line ${row.entry.rowNumber}`} className="text-foreground hover:underline">Open ›</Link></td>
+                  <td className="whitespace-nowrap" title={[row.entry.heldByStatement ? `${row.entry.fileName ?? "The file"} · row ${row.entry.rowNumber}` : null, row.entry.reversalReason].filter(Boolean).join(" · ") || undefined}>{row.entry.heldByStatement ? <StatusChip tone="warning">Held: its statement doesn&rsquo;t add up</StatusChip> : `${row.entry.fileName ?? "The file"} · ${row.entry.href ? "line" : "row"} ${row.entry.rowNumber}`}</td>
+                  <RowActionCell><RowAction href={row.entry.href ?? rowHref(row.entry.fileId, row.entry.rowNumber)} aria-label={`Open line ${row.entry.rowNumber}`}>Open</RowAction></RowActionCell>
                 </ClickRow>
               ) : (
                 <tr key={row.key}>
@@ -207,7 +208,7 @@ export function PolicyCommissionsTab({ ledger, expected, findings, carrierName, 
                   <td className="whitespace-nowrap"><StatusChip tone={row.finding.severity === "action" ? "danger" : "warning"}>{FINDING_WORDS[row.finding.type] ?? row.finding.type.replaceAll("_", " ")}</StatusChip></td>
                   <td className="whitespace-nowrap text-right tabular-nums">{row.finding.differenceCents ? money(Math.abs(row.finding.differenceCents)) : <span className="text-muted-foreground">—</span>}</td>
                   <td className="max-w-[320px] truncate" title={row.finding.explanation ?? undefined}>{row.finding.explanation ?? "Against your rate card"}</td>
-                  <td className="whitespace-nowrap text-right"><Link href={`/app/needs-you/review?kind=money&id=${encodeURIComponent(row.finding.id)}`} className="text-foreground hover:underline">Review ›</Link></td>
+                  <RowActionCell><RowAction href={row.finding.href ?? `/app/needs-you/review?kind=money&id=${encodeURIComponent(row.finding.id)}`}>Review</RowAction></RowActionCell>
                 </tr>
               ))}
             </PagedBody>

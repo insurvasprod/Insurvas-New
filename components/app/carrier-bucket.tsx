@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { ActiveFilters, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction } from "@/components/ui/row-action";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
@@ -40,7 +41,7 @@ type Line = { kind: "missing"; item: MissingFile } | { kind: "file"; row: Bucket
  * (LA-4.19), judged from each carrier's cadence in Carrier terms.
  *
  * r7 4·2 (owner 2026-11-10): Files in's Bucket tab. The day is the toolbar's lead; the missing files are red rows at
- * the top of the same table (not a second table above), each with "Upload it ›" — the one upload dialog, preset to
+ * the top of the same table (not a second table above), each with an "Upload It" RowAction — the one upload dialog, preset to
  * its carrier. The four selects moved into the inline Filters panel (§6a). Check now and Copy the folder are on the
  * title line (files-in-bucket-actions.tsx); this table reads its day again once Check now is done.
  */
@@ -199,7 +200,7 @@ export function CarrierBucket({ initial, tenantId, carriers, readOnly }: { initi
                 <li key={`missing-${line.item.id}`} className="grid gap-1 rounded-lg border border-border bg-card p-3">
                   <div className="flex items-start justify-between gap-2"><span className="text-sm font-medium text-foreground">{line.item.carrierName}</span><StatusChip tone="danger">Missing</StatusChip></div>
                   <span className="text-xs text-muted-foreground">{missingFacts(line.item)}</span>
-                  {!readOnly && <button type="button" className="justify-self-start text-sm hover:underline" onClick={() => setUploadFor(line.item.carrierId)}>Upload it ›</button>}
+                  {!readOnly && <RowAction className="justify-self-start" onClick={() => setUploadFor(line.item.carrierId)}>Upload It</RowAction>}
                 </li>
               ) : (
                 <li key={line.row.key} className="grid gap-1 rounded-lg border border-border bg-card p-3">
@@ -223,7 +224,7 @@ const missingFacts = (item: MissingFile) =>
 
 /**
  * A file the file monitor expected and never saw: at the top of the day, one line, its Missing chip the only colour.
- * When it was due and why it was expected are on hover; the way to send it is the File cell's "Upload it ›".
+ * When it was due and why it was expected are on hover; the way to send it is the File cell's "Upload It" RowAction.
  */
 function MissingTableRow({ item, onUpload }: { item: MissingFile; onUpload: (() => void) | null }) {
   const facts = [missingFacts(item), item.reasoning].filter(Boolean).join(" · ");
@@ -235,7 +236,7 @@ function MissingTableRow({ item, onUpload }: { item: MissingFile; onUpload: (() 
       <td><StatusChip tone="danger" title={facts}>Missing</StatusChip></td>
       <td className="whitespace-nowrap tabular-nums text-muted-foreground" title={facts}>{item.due ? `due ${fileDay(item.due)}` : "—"}</td>
       <td className="whitespace-nowrap" title={facts}>
-        {onUpload ? <button type="button" className="hover:underline" onClick={onUpload}>Upload it ›</button> : <span className="text-muted-foreground">—</span>}
+        {onUpload ? <RowAction onClick={onUpload}>Upload It</RowAction> : <span className="text-muted-foreground">—</span>}
       </td>
     </tr>
   );

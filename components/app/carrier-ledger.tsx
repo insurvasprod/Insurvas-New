@@ -8,6 +8,7 @@ import { ClearFiltersButton, DataToolbar, FilterButton, FilterField, FilterPanel
 import { MoreMenu } from "@/components/ui/more-menu";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { RowAction, RowActionCell } from "@/components/ui/row-action";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
@@ -86,7 +87,7 @@ export function CarrierLedger({ entries, scoped, initialSource = "", initialType
   function exportCsv() {
     const csv = toCsv(
       ["Statement date", "Transaction date", "Carrier", "Policy number", "Client", "Entry", "Amount", "Payee", "Agent", "Agent code", "Rate (bp)", "Months advanced", "File", "Row", "Reversal reason", "Source"],
-      visible.map((row) => [row.statementDate, row.transactionDate, row.carrierName, row.account ? "Account-level" : row.policyNumber, row.clientName ?? null, typeWord(row), centsText(row.amountCents), payeeWord(row), row.agentName ?? null, row.agentIdentifier, row.rateBp, row.monthsAdvanced, row.fileName, row.rowNumber, row.reversalReason, row.source === "hand" ? "Statement imported by hand" : "Carrier file"]),
+      visible.map((row) => [row.statementDate, row.transactionDate, row.carrierName, row.account ? "Account-level" : row.policyNumber, row.clientName ?? null, typeWord(row), centsText(row.amountCents), payeeWord(row), row.agentName ?? null, row.agentIdentifier, row.rateBp, row.monthsAdvanced, row.fileName, row.rowNumber, row.reversalReason, row.source === "hand" ? "Statement you imported" : "Carrier file"]),
     );
     const url = URL.createObjectURL(new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
@@ -103,7 +104,7 @@ export function CarrierLedger({ entries, scoped, initialSource = "", initialType
       </StepSlot>
 
       {/* No lines yet means unknown, not $0: the totals appear with the first line. */}
-      {entries.length > 0 && <StatStrip label={source === "hand" ? "Commission from statements imported by hand" : source === "carrier" ? "Commission from carrier files" : "Commission, every source"}>
+      {entries.length > 0 && <StatStrip label={source === "hand" ? "Commission from statements you imported" : source === "carrier" ? "Commission from carrier files" : "Commission, every source"}>
         <StatTile label="Advanced" value={whole(sum.advancedCents)} footnote="paid ahead of earning" href={tileHref("advance")} />
         <StatTile label="Earned" value={whole(sum.earnedCents)} footnote={sum.overrideCents ? `plus ${whole(sum.overrideCents)} overrides` : "from premiums paid"} href={tileHref("earned")} />
         <StatTile label="Charged back" value={whole(sum.chargedBackCents)} footnote={sum.chargedBackCents ? <span title="Unearned advance taken back"><StatusChip tone="danger">Taken back</StatusChip></span> : "unearned advance taken back"} href={tileHref("chargeback")} />
@@ -141,7 +142,7 @@ export function CarrierLedger({ entries, scoped, initialSource = "", initialType
               <FilterField label="Source" htmlFor="ledger-source"><select id="ledger-source" className={toolbarControl} value={source} onChange={(event) => { setSource(event.target.value); setPage(1); }}>
                 <option value="">Every source</option>
                 <option value="carrier">From carrier files</option>
-                <option value="hand">Statements imported by hand</option>
+                <option value="hand">Statements you imported</option>
               </select></FilterField>
             )}
           </FilterPanel>
@@ -166,6 +167,8 @@ export function CarrierLedger({ entries, scoped, initialSource = "", initialType
                 {anyPayee && <th className="w-[90px]">Payee</th>}
                 {/* Owner 2026-11-10: the statement's file is its own column at the end, not a line under the date. */}
                 <th className="w-[230px]">File</th>
+                {/* Owner 2026-11-19: a row's way in is a button too, where the row's click goes. */}
+                <th className="w-px"><span className="sr-only">Open</span></th>
               </tr>
             </thead>
             <tbody>
@@ -189,6 +192,7 @@ export function CarrierLedger({ entries, scoped, initialSource = "", initialType
                       </Link>
                     )}
                   </td>
+                  <RowActionCell><RowAction href={lineHref(row)}>Open</RowAction></RowActionCell>
                 </tr>
               ))}
             </tbody>

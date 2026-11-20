@@ -70,7 +70,9 @@ export function stepDone(key: WorkspaceStep, ws: Pick<WorkspaceState, "attempt" 
   const blocking = (step: WorkspaceStep) => qa.blocking.some((i) => i.step === step);
   const submitted = attempt.status !== "draft" && attempt.status !== "ready";
   switch (key) {
-    case "verify": return Boolean(caseView.verification?.complete) || submitted || verifyItems(attempt, caseView).every((item) => verifyConfirmed(item, attempt, caseView));
+    // A finished call verification covers everything but an address it did not confirm
+    // (lib/applications/verifyConfirm.ts); a value not on the application yet is added on Application.
+    case "verify": return submitted || verifyItems(attempt, caseView).every((item) => verifyConfirmed(item, attempt, caseView) || (Boolean(caseView.verification?.complete) && !item.shown));
     case "interview": return Boolean(interview?.completedAt);
     case "quote": return Boolean(attempt.selectedQuoteId) && !blocking("quote");
     case "application": return Boolean(attempt.selectedQuoteId) && !blocking("application");

@@ -80,32 +80,6 @@ function rowStatus(callback: CallbackView, now: number, callWindow: CallbackWind
   return { label: "Scheduled", tone: "neutral" };
 }
 
-const SHOW_CALLBACK_DEMO = process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_DEMO_CALLBACKS === "true";
-
-function createDemoCallbacks(): CallbackView[] {
-  const entries = [
-    { id: "demo-callback-1", name: "Michael Torres", product: "Whole Life Inquiry", offset: 1, timezone: "America/Los_Angeles", state: "CA", note: "Discuss options and next steps", status: "scheduled" as const, phone: "(555) 289-1034", email: "michael.torres@example.com" },
-    { id: "demo-callback-2", name: "Emily Carter", product: "Final Application", offset: 3, timezone: "America/Chicago", state: "IL", note: "Check in on application status", status: "scheduled" as const, phone: "(555) 418-2077", email: "emily.carter@example.com" },
-    { id: "demo-callback-3", name: "Sarah Reynolds", product: "Term Life Quote", offset: -4, timezone: "America/Los_Angeles", state: "CA", note: "Follow up on quote and answer questions", status: "missed" as const, phone: "(555) 627-1108", email: "sarah.reynolds@example.com" },
-    { id: "demo-callback-4", name: "Robert Wilson", product: "Beneficiary Update", offset: 27, timezone: "America/Denver", state: "CO", note: "Confirm beneficiary details", status: "scheduled" as const, phone: "(555) 301-8842", email: "robert.wilson@example.com" },
-  ];
-  const agentZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  return entries.map((entry) => {
-    const scheduledAtUtc = new Date(Date.now() + entry.offset * 3_600_000).toISOString();
-    return {
-      id: entry.id, leadId: `demo-lead-${entry.id.slice(-1)}`, workItemId: `demo-work-item-${entry.id.slice(-1)}`, customerName: entry.name, scheduledAtUtc,
-      customerTimezone: entry.timezone, customerTime: longTime(scheduledAtUtc, entry.timezone), agentTime: longTime(scheduledAtUtc, agentZone), assignedTo: "demo-agent",
-      assigneeName: "Jordan Davis", assigneeRole: "agent", note: entry.note, status: entry.status, productName: entry.product, phone: entry.phone, email: entry.email,
-      state: entry.state, attemptNumber: 2, sourceName: "Demo source",
-      isOverdue: entry.status === "missed", isDueToday: entry.status !== "missed" && entry.offset < 12,
-      history: [{ id: `${entry.id}-history`, action: "scheduled", createdAt: scheduledAtUtc, actorName: "Demo Agent", oldScheduledAtUtc: null, newScheduledAtUtc: scheduledAtUtc, oldStatus: null, newStatus: "scheduled", note: entry.note, via: null }],
-      completedVia: null, missedAt: entry.status === "missed" ? scheduledAtUtc : null, reopenedAt: null, releasedAt: null, inbound: false,
-      isDemo: true,
-    };
-  });
-}
-
-
 /**
  * One callback, read once for the table row and the phone card alike (2026-10-09 mobile): its status,
  * when it is due in the customer's own time, who holds it, and what can be done to it.
@@ -311,7 +285,6 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
   const [assignees, setAssignees] = useState<Assignee[]>(() => (Array.isArray(seeded?.assignees) ? seeded.assignees as Assignee[] : []));
   const [giveIds, setGiveIds] = useState<string[] | null>(null);
   const [handingOver, setHandingOver] = useState(false);
-  const [demoPreview, setDemoPreview] = useState(false);
   // Add callback (2026-10-28): the dialog, and the person it was opened from (null = pick one).
   const [adding, setAdding] = useState<{ lead: LeadPick | null } | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -327,8 +300,8 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
   const apply = useCallback((body: CallbacksBody) => {
     {
       const live = (body.callbacks ?? []) as CallbackView[];
-      const next = live.length === 0 && SHOW_CALLBACK_DEMO ? createDemoCallbacks() : live;
-      setDemoPreview(next.some((item) => item.isDemo === true));
+      // Owner 2026-11-19: an empty account shows no callbacks — never sample people, not even in development.
+      const next = live;
       setCallbacks(next);
       setWindows((body.windows ?? {}) as Record<string, CallbackWindowFacts>);
       setRefusals(Array.isArray(body.refusals) ? body.refusals as CallbackRefusalNotice[] : []);
@@ -779,7 +752,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
   const groupOverdue = rows.filter((item) => item.isOverdue);
   const groupComing = rows.filter((item) => !item.isOverdue && !item.isDueToday);
   const spreadable = (items: CallbackView[]) => items.filter((item) => !item.isDemo && OPEN_STATUSES.has(item.status)).map((item) => item.id);
-  const canSpread = !readOnly && !demoPreview;
+  const canSpread = !readOnly;
   const tableColumns = compact ? 5 : 6;
   const rowProps = (callback: CallbackView) => ({
     callback, now, yourZone, callWindow: callback.state ? windows[callback.state] : undefined, selected: panelOpen && callback.id === selectedId,
@@ -841,7 +814,6 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
         now={now}
         onBooked={() => void load(true)}
       />
-      {demoPreview && <div role="status" className="portal-callbacks-notice">Demo preview — sample callbacks, read-only and not stored.</div>}
       {readOnly && <div role="status" className="portal-callbacks-notice">Account suspended — callbacks are read-only.</div>}
       {error && <div role="alert" className="portal-callbacks-error"><CircleAlert className="size-4" aria-hidden="true" />{error}</div>}
 

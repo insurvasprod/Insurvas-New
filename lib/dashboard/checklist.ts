@@ -311,12 +311,34 @@ export function setupStepGroup(key: string): SetupGroupKey {
  * the work, so Get paid right follows carriers and states (owner, 2026-10-28, open question 1).
  */
 const WORK_STEPS = new Set(["lead-sources", "campaign", "import", "calling-windows", "assign", "outcomes", "disclosures"]);
+
+/**
+ * Statement first (ledger-r1 board 3·A, owner pick 2026-11-19): on a money plan the statement step leads, and it is
+ * the guided one upload and one confirm (/app/setup/statement), which reads the carrier, the policies, the rate and
+ * the advance off the statement itself. Carriers and states move to Fine-tune later: nothing blocks seeing money.
+ */
+export const FIRST_STATEMENT_PATH = "/app/setup/statement";
+const FIRST_STATEMENT_STEP = {
+  key: "statement", module: "book", label: "Drop in a commission statement", path: FIRST_STATEMENT_PATH, action: "Drop a statement", target: "first-statement-drop",
+  instruction: "Drop one commission statement as the carrier sent it, check what Insurvas found, then click Looks Right.",
+  why: STATEMENT_EXPLAINER,
+} as const satisfies StepDefinition;
+
+/** A money plan: it can import statements and has no leads, calls or applications to work (the Ledger plan). */
+export function isMoneyPlanSteps(steps: readonly Pick<StepDefinition, "key">[]): boolean {
+  return steps.some((step) => step.key === "statement") && !steps.some((step) => WORK_STEPS.has(step.key));
+}
+
+/** The steps a money plan moves to Fine-tune later, so its statement comes first. */
+const LATER_ON_A_MONEY_PLAN: ReadonlySet<string> = new Set(["carriers", "states"]);
+
 function moneyFirstWhenNothingToWork(steps: StepDefinition[]): StepDefinition[] {
   if (steps.some((step) => WORK_STEPS.has(step.key))) return steps;
-  const carriers = steps.filter((step) => step.key === "carriers");
-  const states = steps.filter((step) => step.key === "states");
-  const money = steps.filter((step) => setupStepGroup(step.key) === "money");
-  return [...carriers, ...states, ...money, ...steps.filter((step) => step.key !== "carriers" && step.key !== "states" && setupStepGroup(step.key) !== "money")];
+  const swapped = steps.map((step) => (step.key === "statement" ? FIRST_STATEMENT_STEP : step));
+  const money = swapped.filter((step) => setupStepGroup(step.key) === "money");
+  // The statement before the book: Statement first adds the policies a statement names on its own.
+  money.sort((a, b) => Number(b.key === "statement") - Number(a.key === "statement"));
+  return [...money, ...swapped.filter((step) => setupStepGroup(step.key) !== "money")];
 }
 
 /**
@@ -529,14 +551,16 @@ export function setupChecklistForState(onboardingState: string, progress: SetupP
   const finished = progress.finished === true;
   const skippedKeys = new Set(context.marks?.skipped ?? []);
   const doneKeys = new Set(context.marks?.done ?? []);
-  const steps = applicableSetupSteps(context).map((step) => {
+  const applicable = applicableSetupSteps(context);
+  const moneyPlan = context.audience !== "member" && isMoneyPlanSteps(applicable);
+  const steps = applicable.map((step) => {
     const field = PROGRESS_FIELD[step.key];
     const proven = (field !== undefined && progress[field] === true) || (isManualStep(step.key) && doneKeys.has(step.key));
     // Finished holds every step done ("does not come back") — except one the reader skipped, which
     // stays shown as skipped rather than claiming work that was never done (live walkthrough, 2026-10-22).
     const complete = proven || (finished && !skippedKeys.has(step.key));
     const minutes = step.minutes ?? STEP_MINUTES[step.key];
-    const group = setupStepGroup(step.key);
+    const group = moneyPlan && LATER_ON_A_MONEY_PLAN.has(step.key) ? "later" : setupStepGroup(step.key);
     return { ...step, ...(minutes ? { minutes } : {}), complete, skipped: !complete && skippedKeys.has(step.key), group, ...(group === "later" ? { optional: true } : {}) };
   });
   // Fine-tune later steps are listed but never counted: done means Start working and Get paid right.

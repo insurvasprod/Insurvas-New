@@ -212,6 +212,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/statements/preview/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/statements/[id]/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/statements/[id]/lines/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
+  // Statement first (ledger-r1 3·A, 2026-11-19): Get set up's one upload and one confirm.
+  { sourceFile: "app/api/app/statements/first/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   // LA-4.1 · the stored original file (a 60-second link); LA-4.3 · the unmatched queue and re-match.
   { sourceFile: "app/api/app/statements/[id]/file/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/statements/unmatched/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
