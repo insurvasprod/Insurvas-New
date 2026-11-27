@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
   // pdf.js loads its worker module at run time; bundled, that lookup breaks. Carrier PDF statements are
   // read on the server only (lib/ingestion/pdfText.ts), so it stays an external package there.
   serverExternalPackages: ["pdfjs-dist"],
+  // Vercel's 8 GB build machine ran out of memory in `next build`'s own type-check pass (PR #68, 2026-11-27).
+  // The same check is CI's required `npm run typecheck` step (.github/workflows/ci.yml), so on Vercel only the
+  // build skips repeating it; locally and in CI `next build` still type-checks.
+  typescript: { ignoreBuildErrors: process.env.VERCEL === "1" },
   // Speed pass 2026-11-09 ("show the last data at once, then refresh"): the router keeps a page it drew for 30s, so
   // going back to it is instant; components/app/background-refresh.tsx then asks the server again behind it. Every
   // change already calls router.refresh(), which drops these copies. Prefetched pages and loading states: 3 min.
