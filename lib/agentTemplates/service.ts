@@ -1324,6 +1324,21 @@ export async function countAgentLeadsByPipeline(tenantId: string, template: Agen
 }
 
 /**
+ * Each stage's exact count in one pipeline (the phone's stage chips, board D1), under the same search
+ * as the page. One head count per stage, read beside the page like the pipeline totals above.
+ */
+export async function countAgentLeadsByStage(tenantId: string, template: AgentTemplate, pipelineId: string, stageIds: string[], search: string): Promise<Record<string, number | null>> {
+  const filter = leadSearchFilter(template, search);
+  const counts = await Promise.all(stageIds.map(async (stageId) => {
+    let query = getSupabaseServiceClient().from("agent_leads").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("tenant_template_id", template.tenant_template_id).eq("pipeline_id", pipelineId).eq("stage_id", stageId);
+    if (filter) query = query.or(filter);
+    const { count, error } = await query;
+    return [stageId, error ? null : (count ?? 0)] as const;
+  }));
+  return Object.fromEntries(counts);
+}
+
+/**
  * filterAgentLeads, one page at a time (`page` from 0), newest first; `page: null` reads every lead, three pages at a
  * time. Before 2026-11-12 the read was one request, which PostgREST stops at 1,000 rows without saying so, so a
  * bigger book lost its older leads from the board. `hasMore`: a later page may hold more. The search

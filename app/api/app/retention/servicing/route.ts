@@ -2,10 +2,13 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
+import { hasFeature } from "@/lib/entitlements/types";
 import { isRecordUuid } from "@/lib/ingestion/path";
+import { loadReinstatement } from "@/lib/retention/reinstatementStore";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { CONTACT_OUTCOMES, PAYMENT_METHODS } from "@/lib/retention/constants";
-import { CARRIER_METHODS, ORIGINS } from "@/lib/retention/servicing";
-import { addRequestNote, createRequest, loadPrefill, ServicingError, stepRequest } from "@/lib/retention/servicingStore";
+import { CARRIER_METHODS, OPEN_STATUSES, ORIGINS } from "@/lib/retention/servicing";
+import { addRequestNote, createRequest, loadPrefill, loadServicing, SERVICING_PENDING_MESSAGE, ServicingError, stepRequest } from "@/lib/retention/servicingStore";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { scopeFor } from "@/lib/agency/visibility";
 
@@ -60,6 +63,7 @@ const body = z.discriminatedUnion("action", [
 export async function GET(request: NextRequest) {
   const auth = await requireFeatureRole("payment_repair", ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
+  if (request.nextUrl.searchParams.get("list") === "waiting") return waitingList(auth.context, hasFeature(auth.entitlement, "winback"));
   const carrierId = request.nextUrl.searchParams.get("carrier_id") ?? "";
   const policyNumber = request.nextUrl.searchParams.get("policy_number") ?? "";
   if (!isRecordUuid(carrierId) || !policyNumber || policyNumber.length > 120) return NextResponse.json({ error: "Choose the policy." }, { status: 400 });
@@ -72,6 +76,70 @@ export async function GET(request: NextRequest) {
     console.error("[servicing] prefill:", error);
     return NextResponse.json({ error: "The policy could not be read" }, { status: 500 });
   }
+}
+
+/**
+ * `?list=waiting` · the phone's Waiting on the carrier (mobile release 2, boards B7 and F3b): the requests still
+ * open (not sent, sent, the carrier on it, the carrier says done) and those a carrier file proved in the last seven
+ * days. Read through loadServicing, so who sees what is the page's rule, and, like the page, the open requests are
+ * checked against the latest files first. No amounts: a request carries none.
+ */
+async function waitingList(context: { tenantId: string; userId: string; role: string }, winback: boolean) {
+  const headers = { "Cache-Control": "no-store" };
+  const { tenantId, userId, role } = context;
+  try {
+    const scope = await scopeFor(context);
+    const reinstatementsRead = winback ? sentReinstatements({ tenantId, userId, role, scope }).catch(() => []) : Promise.resolve([]);
+    const list = await loadServicing({ tenantId, userId, role, scope });
+    if (!list.available) return NextResponse.json({ available: false, message: SERVICING_PENDING_MESSAGE }, { headers });
+    const weekAgo = Date.now() - 7 * 86_400_000;
+    const kept = list.rows.filter((r) => OPEN_STATUSES.includes(r.status) || (r.status === "verified_in_file" && r.verifiedAt !== null && Date.parse(r.verifiedAt) >= weekAgo));
+    return NextResponse.json({
+      available: true,
+      requests: [
+        ...kept.map((r) => ({
+          id: r.id, caseId: r.caseId, clientName: r.clientName, carrierName: r.carrierName, policyNumber: r.policyNumber, type: r.type, status: r.status,
+          createdAt: r.createdAt, submittedAt: r.submittedAt, expectedEffectiveDate: r.expectedEffectiveDate, verifiedAt: r.verifiedAt,
+          verifiedSnapshotDate: r.verifiedSnapshotDate, checkedSnapshotDate: r.checkedSnapshotDate, unprovable: r.unprovable.length > 0,
+        })),
+        // Board F3b's "Reinstatement paid" (2026-11-27, additive): a reinstatement sent to the carrier waits here too,
+        // until the files show the policy back in force, then shows a week as proved. `winback` plan only.
+        ...(await reinstatementsRead).filter((r) => r.status === "submitted" || (r.status === "verified_in_file" && r.verifiedAt !== null && Date.parse(r.verifiedAt) >= weekAgo)),
+      ],
+    }, { headers });
+  } catch (error) {
+    console.error("[servicing] waiting list:", error);
+    return NextResponse.json({ error: "The requests could not be read" }, { status: 500 });
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Loose = any;
+
+/**
+ * Reinstatements sent to a carrier, in the waiting list's shape: read through loadReinstatement, so who sees which is
+ * the Win-back page's rule; the sent day and the ladder case it is worked on are looked up for those rows only
+ * (service role, tenant filter on each read).
+ */
+async function sentReinstatements(viewer: { tenantId: string; userId: string; role: string; scope: Awaited<ReturnType<typeof scopeFor>> }) {
+  const read = await loadReinstatement(viewer);
+  if (!read.available) return [];
+  const rows = [...read.open.filter((r) => r.status === "submitted"), ...read.closed.filter((r) => r.status === "reinstated")];
+  if (!rows.length) return [];
+  const ids = rows.map((r) => r.id);
+  const db = getSupabaseServiceClient() as Loose;
+  const [sent, cases] = await Promise.all([
+    db.from("reinstatement_case").select("id, submitted_at, created_at").eq("tenant_id", viewer.tenantId).in("id", ids),
+    db.from("retention_case").select("id, reinstatement_case_id").eq("tenant_id", viewer.tenantId).in("reinstatement_case_id", ids),
+  ]);
+  const sentOf = new Map<string, Loose>(((sent.error ? [] : sent.data) ?? []).map((r: Loose) => [r.id, r]));
+  const caseOf = new Map<string, string>(((cases.error ? [] : cases.data) ?? []).map((r: Loose) => [r.reinstatement_case_id, r.id]));
+  return rows.map((r) => ({
+    id: r.id, caseId: caseOf.get(r.id) ?? null, clientName: r.clientName, carrierName: r.carrierName, policyNumber: r.policyNumber,
+    type: "reinstatement" as const, status: r.status === "reinstated" ? ("verified_in_file" as const) : ("submitted" as const),
+    createdAt: (sentOf.get(r.id)?.created_at as string | undefined) ?? r.lapsedOn, submittedAt: (sentOf.get(r.id)?.submitted_at as string | null | undefined) ?? null,
+    expectedEffectiveDate: null, verifiedAt: r.status === "reinstated" ? r.resolvedAt : null, verifiedSnapshotDate: null, checkedSnapshotDate: null, unprovable: false,
+  }));
 }
 
 export async function POST(request: NextRequest) {

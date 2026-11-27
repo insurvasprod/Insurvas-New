@@ -3,7 +3,8 @@ import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 import nextTypescript from "eslint-config-next/typescript";
 
 const eslintConfig = [
-  globalIgnores(["insurvas-demo-video/**"]),
+  // mobile/ is the Expo app: its own package, lint (npx expo lint) and typecheck.
+  globalIgnores(["insurvas-demo-video/**", "mobile/**"]),
   ...nextCoreWebVitals,
   ...nextTypescript,
 ];

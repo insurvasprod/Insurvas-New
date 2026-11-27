@@ -1,0 +1,27 @@
+# Release 1, signed in, on the emulator — READ ONLY: it opens screens, never claims a transfer, serves
+# a lead, places a call, saves a note or ends a session.
+#
+# Sign-in comes from a development-only link with tokens minted for a TEST account (no password):
+#   powershell -File mobile/scripts/e2e-android.ps1 -SignedIn -Email <test account>
+# (it mints the link with `mint-session.mjs … --app --link --host 10.0.2.2` and passes it as MAESTRO_LINK)
+appId: host.exp.exponent
+---
+- launchApp:
+    clearState: true
+- openLink: "exp://10.0.2.2:8081?__expo_disable_onboarding=1&__expo_disable_fab=1"
+- runFlow:
+    file: subflows/dismiss-expo-intro.yaml
+- extendedWaitUntil:
+    visible:
+      id: "sign-in-submit"
+    timeout: 120000
+- openLink: ${MAESTRO_LINK}
+- extendedWaitUntil:
+    visible: "Transfers waiting"
+    timeout: 90000
+- extendedWaitUntil:          # the callbacks list has loaded (not the loading rows)
+    visible: "Callbacks due|No callbacks due today"
+    timeout: 60000
+- takeScreenshot: e2e/screenshots/10-home
+- runFlow:
+    file: subflows/walk-tabs.yaml

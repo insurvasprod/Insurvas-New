@@ -33,6 +33,7 @@ export async function GET() {
       items: waiting.slice(0, SHOWN).map((item) => ({
         id: item.id,
         customer: item.customer,
+        age: item.age,
         productLine: item.productLine,
         partnerName: item.partnerName,
         state: item.state,
@@ -40,7 +41,7 @@ export async function GET() {
         screening: screeningSignal({ screeningOutcome: item.screeningOutcome, preflightStatus: item.preflightStatus, duplicateWarning: item.duplicateWarning }).label,
       })),
       // A buffer agent's handoff waits for one named licensed agent: only theirs are listed.
-      handoffs: auth.context.role === "assistant" ? [] : data.handoffs.map((handoff) => ({ id: handoff.id, workItemId: handoff.workItemId, bufferName: handoff.bufferName, customer: handoff.customer, productLine: handoff.productLine, progressPercentage: handoff.progressPercentage, expiresAt: handoff.expiresAt })),
+      handoffs: auth.context.role === "assistant" ? [] : data.handoffs.map((handoff) => ({ id: handoff.id, workItemId: handoff.workItemId, bufferName: handoff.bufferName, customer: handoff.customer, productLine: handoff.productLine, progressPercentage: handoff.progressPercentage, offeredAt: handoff.offeredAt, expiresAt: handoff.expiresAt })),
       sla,
       realtimeTopic: `agent-floor:${auth.context.tenantId}`,
       readOnly: auth.entitlement.status === "suspended" || auth.entitlement.status === "paused",

@@ -2,7 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
+import { hasFeature } from "@/lib/entitlements/types";
 import { isRecordUuid } from "@/lib/ingestion/path";
+import { phonePolicy } from "@/lib/ingestion/policyPhone";
+import { isMoreChip, phoneBookPageMore, policyMore } from "@/lib/ingestion/policyPhoneMore";
 import { deleteFilter, PolicyBookError, saveAnnotation, saveFilter } from "@/lib/ingestion/policyBookStore";
 import { scopeFor } from "@/lib/agency/visibility";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
@@ -34,6 +37,44 @@ function failure(error: unknown, fallback: string) {
   if (error instanceof PolicyBookError) return NextResponse.json({ error: error.message }, { status: error.status });
   console.error(`[policy-book] ${fallback}:`, error);
   return NextResponse.json({ error: fallback }, { status: 500 });
+}
+
+/**
+ * The phone's Book (mobile board F1, F2, F2b): the same list and policy page the web reads, as JSON. Without a
+ * policy: one page of the list (?q= name, policy number or phone; ?chip= inforce|pending|lapsed|chargedback|behind; ?offset=).
+ * With ?carrierId=&policyNumber=: that policy, its figures, where each came from, and its commission lines.
+ * The same people as the web's Policies; a producer reaches only the policies credited to them (in the store).
+ */
+export async function GET(request: NextRequest) {
+  const auth = await requireFeatureRole("book_of_business", roles, { prefetchScope: true });
+  if (auth instanceof NextResponse) return auth;
+  const { tenantId, userId, role } = auth.context;
+  const viewer = { tenantId, userId, role, scope: await scopeFor(auth.context) };
+  const params = request.nextUrl.searchParams;
+  const carrierId = params.get("carrierId");
+  const policyNumber = params.get("policyNumber");
+  try {
+    if (carrierId || policyNumber) {
+      if (!carrierId || !isRecordUuid(carrierId) || !policyNumber || policyNumber.length > 100) return NextResponse.json({ error: "Choose a policy from the list." }, { status: 400 });
+      // "Open the case" follows the web: Retention cases are the owner's, producers' and retention's, on chargeback_radar.
+      const held = auth.context.roles?.length ? auth.context.roles : [role];
+      const canSeeCase = held.some((r) => r === "owner" || r === "producer" || r === "retention") && hasFeature(auth.entitlement, "chargeback_radar");
+      const policy = await phonePolicy(viewer, carrierId, policyNumber, { canSeeCase });
+      if (!policy) return NextResponse.json({ error: role === "producer" ? "This policy is not in your book. It may be credited to another agent, or its carrier file hasn't arrived yet." : "This policy is not in your book. Its carrier file may not have arrived yet." }, { status: 404 });
+      // Board F2 / F2b (2026-11-27, additive): the beneficiary, "drafts cleared", the expected lines and the split
+      // (lib/ingestion/policyPhoneMore.ts), and whether this viewer may open a Retention case on it at all.
+      const more = policy.kind === "policy"
+        ? await policyMore(viewer, carrierId, policyNumber, { behind: policy.behind, monthsPaid: policy.monthsPaid, lines: policy.money.lines, agentName: policy.agentName }).catch(() => null)
+        : null;
+      return NextResponse.json({ ok: true, policy: more ? { ...policy, ...more } : policy, role, readOnly: auth.entitlement.access === "read_only", canOpenCase: canSeeCase }, { headers: { "Cache-Control": "no-store" } });
+    }
+    // Board F1's chips: In force, Pending, Lapsed, Charged back (Behind still answers for an older app).
+    const chip = params.get("chip");
+    const page = await phoneBookPageMore(viewer, { q: params.get("q") ?? "", chip: isMoreChip(chip) ? chip : null, offset: Number(params.get("offset")) || 0 });
+    return NextResponse.json({ ok: true, ...page, scoped: role === "producer" }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    return failure(error, "The book could not be loaded");
+  }
 }
 
 export async function POST(request: NextRequest) {

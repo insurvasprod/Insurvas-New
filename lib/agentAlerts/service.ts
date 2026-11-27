@@ -5,6 +5,7 @@ import { AGENT_ALERT_EVENTS, DEFAULT_AGENT_ALERT_SETTINGS, WORKSPACE_ALERT_EVENT
 import { AUDIBLE } from "@/lib/notify/treatments";
 import { ALERT_CENTRE_WINDOW_MS, WORKSPACE_ALERT_KINDS, buildAlertCentre, type CentreNotificationRow, type CentreQueueRow } from "./centre";
 import { deliveryByKind } from "@/lib/notifications/preferences";
+import { pushSoon } from "@/lib/push/outbox";
 import { rowVisible, type ProducerScope } from "../agency/visibilityCore";
 
 // The generated database types are refreshed from the live project separately; this service keeps
@@ -286,10 +287,12 @@ export async function notifyTenantAgents(input: { tenantId: string; kind: string
   if (!rows.length) return { notified: 0 };
   const result = await db().from("agent_notifications").upsert(rows, { onConflict: "tenant_id,recipient_user_id,source_key", ignoreDuplicates: true });
   if (result.error) throw new Error(`Could not create agent alerts: ${result.error.message}`);
+  pushSoon(input.tenantId); // the phone app: ring the recipients' phones now (lib/push/outbox.ts)
   return { notified: rows.length };
 }
 
 export async function notifyAgentUser(input: { tenantId: string; userId: string; kind: string; title: string; body: string; link: string; sourceKey: string }) {
   const result = await db().from("agent_notifications").upsert({ tenant_id: input.tenantId, recipient_user_id: input.userId, kind: input.kind, title: input.title.slice(0, 160), body: input.body.slice(0, 1000), link: input.link.slice(0, 500), source_key: input.sourceKey }, { onConflict: "tenant_id,recipient_user_id,source_key", ignoreDuplicates: true });
   if (result.error) throw new Error(`Could not create agent alert: ${result.error.message}`);
+  pushSoon(input.tenantId);
 }

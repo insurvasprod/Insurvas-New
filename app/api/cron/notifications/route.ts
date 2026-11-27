@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { emitCredentialExpiry, processOutbox, sendDigests } from "@/lib/notifications/outbox";
+import { processPushOutbox } from "@/lib/push/outbox";
 
 /**
  * LA-8.4 (Notion sprint) · the notifications job: every few minutes, email what the outbox holds by
@@ -21,7 +22,12 @@ export async function GET(request: Request) {
     const credentials = tenant ? null : await emitCredentialExpiry();
     const outbox = await processOutbox(new Date(), tenant ?? undefined);
     const digests = await sendDigests(new Date(), tenant ?? undefined);
-    return NextResponse.json({ tenant, credentials, outbox, digests });
+    // The phone app (2026-11-24): bell rows written by SQL jobs get their push here.
+    const push = await processPushOutbox(new Date(), tenant ?? undefined).catch((error) => {
+      console.error("[cron/notifications] push", error instanceof Error ? error.message : error);
+      return null;
+    });
+    return NextResponse.json({ tenant, credentials, outbox, digests, push });
   } catch (error) {
     console.error("[cron/notifications]", error instanceof Error ? error.message : error);
     return NextResponse.json({ error: "The notifications job failed" }, { status: 500 });

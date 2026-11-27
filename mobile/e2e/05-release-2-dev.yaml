@@ -1,0 +1,69 @@
+# Release 2's screens, opened by their links after a development sign-in — READ ONLY: it opens
+# screens, waits for each one's own title and takes screenshots; it taps nothing that saves.
+# Run with: powershell -File mobile/scripts/e2e-android.ps1 -SignedIn -Email <owner or producer test account>
+appId: host.exp.exponent
+---
+- launchApp:
+    clearState: true
+- openLink: "exp://10.0.2.2:8081?__expo_disable_onboarding=1&__expo_disable_fab=1"
+- runFlow:
+    file: subflows/dismiss-expo-intro.yaml
+- extendedWaitUntil:
+    visible:
+      id: "sign-in-submit"
+    timeout: 120000
+- openLink: ${MAESTRO_LINK}
+- extendedWaitUntil:
+    visible: "Transfers waiting|Submitted premium"
+    timeout: 90000
+# E0 · Applications
+- openLink: "exp://10.0.2.2:8081/--/application"
+- extendedWaitUntil:
+    visible: "Applications"
+    timeout: 60000
+- takeScreenshot: e2e/screenshots/30-applications
+# E5 · Pending cases (also the Home tile's target)
+- openLink: "exp://10.0.2.2:8081/--/cases"
+- extendedWaitUntil:
+    visible: "Pending cases"
+    timeout: 60000
+- extendedWaitUntil:
+    visible: "Needs you.*"
+    timeout: 60000
+- takeScreenshot: e2e/screenshots/31-pending-cases
+# E7 · Deal flow
+- openLink: "exp://10.0.2.2:8081/--/deal-flow"
+- extendedWaitUntil:
+    visible: "Deal flow"
+    timeout: 60000
+- takeScreenshot: e2e/screenshots/32-deal-flow
+# F1 · Book
+- openLink: "exp://10.0.2.2:8081/--/book"
+- extendedWaitUntil:
+    visible: "Name, policy number or phone"
+    timeout: 60000
+- takeScreenshot: e2e/screenshots/33-book
+# F6 · Needs you (the first, cold read can be slow)
+- openLink: "exp://10.0.2.2:8081/--/book/sync"
+- extendedWaitUntil:
+    visible: ".*decisions from carrier files"
+    timeout: 120000
+- takeScreenshot: e2e/screenshots/34-needs-you
+# F3 · Retention cases
+- openLink: "exp://10.0.2.2:8081/--/retention"
+- extendedWaitUntil:
+    visible: "From carrier files.*"
+    timeout: 90000
+- takeScreenshot: e2e/screenshots/35-retention
+# F3b · Waiting on the carrier
+- openLink: "exp://10.0.2.2:8081/--/retention/waiting"
+- extendedWaitUntil:
+    visible: "Waiting on the carrier"
+    timeout: 60000
+- takeScreenshot: e2e/screenshots/36-waiting
+# F3c · Win-back
+- openLink: "exp://10.0.2.2:8081/--/retention/win-back"
+- extendedWaitUntil:
+    visible: "Win-back"
+    timeout: 60000
+- takeScreenshot: e2e/screenshots/37-win-back

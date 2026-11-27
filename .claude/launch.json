@@ -33,6 +33,40 @@
       "port": 3002
     },
     {
+      "name": "mobile-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "mobile",
+        "run",
+        "web",
+        "--",
+        "--port",
+        "8081"
+      ],
+      "port": 8081
+    },
+    {
+      "name": "mobile-android",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": [
+        "-NoProfile",
+        "-Command",
+        "$env:ANDROID_HOME = \"$env:LOCALAPPDATA\\Android\\Sdk\"; $env:JAVA_HOME = \"$env:LOCALAPPDATA\\Programs\\jdk17\"; $env:Path = \"$env:ANDROID_HOME\\platform-tools;$env:ANDROID_HOME\\emulator;$env:JAVA_HOME\\bin;$env:SystemRoot\\System32;$env:Path\"; npm --prefix mobile run android -- --port 8081"
+      ],
+      "port": 8081
+    },
+    {
+      "name": "mobile-devclient",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": [
+        "-NoProfile",
+        "-Command",
+        "$env:ANDROID_HOME = \"$env:LOCALAPPDATA\\Android\\Sdk\"; $env:JAVA_HOME = \"$env:LOCALAPPDATA\\Programs\\jdk17\"; $env:Path = \"$env:ANDROID_HOME\\platform-tools;$env:ANDROID_HOME\\emulator;$env:JAVA_HOME\\bin;$env:SystemRoot\\System32;$env:Path\"; npm --prefix mobile run dev -- --port 8081"
+      ],
+      "port": 8081
+    },
+    {
       "name": "dev-attach",
       "url": "http://localhost:3000",
       "port": 3000

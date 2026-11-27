@@ -7,14 +7,36 @@ import { applyKillSwitches } from "@/lib/features/killSwitchRules";
 import { currentSetupStepKey, guideHref, isManualStep, isSetupStepKey, nextSetupStep } from "@/lib/dashboard/checklist";
 import { loadSetupGuideState, loadSetupPause, saveSetupGuideState, saveSetupPause } from "@/lib/dashboard/setupProgress";
 import { loadViewerSetup, startViewerSetupReads } from "@/lib/dashboard/setupViewer";
-import { getTenantSession, requireTenant } from "@/lib/tenantAuth/requireTenant";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { fetchTenantSeatsHeld } from "@/lib/subscriptions/tenantBilling";
+import { contextRoles, getTenantSession, requireTenant } from "@/lib/tenantAuth/requireTenant";
+
+/**
+ * The phone's two extra facts for Get set up (mobile board B9), read only when the phone asks (`?phone=1`, so the web
+ * guide bar's polls cost nothing more), owner only, null on any failure:
+ *   · seatsLeft  how many more people the plan has room for ("Invite your team · 3 people"); null = no limit;
+ *   · licences   how many state licences the agency has saved (the phone's "Add your licences" step, done at one);
+ *                null when the Licences and appointments feature is not in the plan.
+ */
+async function phoneSetupFacts(tenantId: string, owner: boolean, available: readonly string[], maxSeats: number | null | undefined) {
+  if (!owner) return { seatsLeft: null, licences: null };
+  type Head = PromiseLike<{ error: unknown; count?: number | null }> & { eq(c: string, v: unknown): Head };
+  const db = getSupabaseServiceClient() as unknown as { from(t: string): { select(c: string, o: { count: "exact"; head: true }): Head } };
+  const [seatsLeft, licences] = await Promise.all([
+    typeof maxSeats === "number" ? fetchTenantSeatsHeld(tenantId).then((held) => Math.max(0, maxSeats - held), () => null) : Promise.resolve(null),
+    available.includes("appointment_vault")
+      ? Promise.resolve(db.from("licenses").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId)).then((r) => (r.error ? null : { count: r.count ?? 0 }), () => null)
+      : Promise.resolve(null),
+  ]);
+  return { seatsLeft, licences };
+}
 
 /**
  * The caller's own setup walkthrough (2026-10-21). No feature gate: the steps are already filtered
  * by the plan, the role and hidden pages, and each step's screen enforces its own gate. The guide bar
  * polls this after a save on the step's screen to learn the step is done.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   // One round trip (speed pass 2026-11-18; it was four in a row, 0.8 s): every read is keyed by the signed
   // session's ids and starts beside the membership read. Nothing is answered until the membership holds.
   const session = await getTenantSession();
@@ -36,7 +58,10 @@ export async function GET() {
   const available = applyKillSwitches(entitlement.features, switchesRead.value, context.tenantId);
   const paused = pausedRead.value;
   // The session's ids are the membership's: requireTenant read this very (tenant, user) pair.
-  const viewer = await loadViewerSetup(context, available, entitlement.limits.max_seats, reads);
+  const [viewer, phone] = await Promise.all([
+    loadViewerSetup(context, available, entitlement.limits.max_seats, reads),
+    request.nextUrl.searchParams.get("phone") === "1" ? phoneSetupFacts(context.tenantId, contextRoles(context).includes("owner"), available, entitlement.limits.max_seats) : null,
+  ]);
   if (viewer.needsStamp) afterResponse(viewer.stamp);
   const next = nextSetupStep(viewer.checklist);
   return NextResponse.json({
@@ -46,6 +71,7 @@ export async function GET() {
     checklist: viewer.checklist,
     paused,
     next: next ? { key: next.key, label: next.label, href: guideHref(next) } : null,
+    ...(phone ? { phone } : {}),
   });
 }
 

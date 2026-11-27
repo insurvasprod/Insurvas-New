@@ -30,6 +30,17 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   // LA-8.2: the second sign-in step. Signed out (a five-minute pending cookie, never a session).
   { sourceFile: "app/api/app/auth/verify-2fa/route.ts", featureKey: null },
   { sourceFile: "app/api/app/auth/workspaces/route.ts", featureKey: null },
+  // The phone app (2026-11-24): the web's sign-in routes, answered with tokens instead of cookies.
+  // login / verify-2fa / refresh / logout are signed out (as their web twins); sessions and
+  // switch-workspace require a session (requireTenant(), every role, own account only).
+  { sourceFile: "app/api/app/auth/mobile/login/route.ts", featureKey: null },
+  { sourceFile: "app/api/app/auth/mobile/verify-2fa/route.ts", featureKey: null },
+  { sourceFile: "app/api/app/auth/mobile/refresh/route.ts", featureKey: null },
+  { sourceFile: "app/api/app/auth/mobile/logout/route.ts", featureKey: null },
+  { sourceFile: "app/api/app/auth/mobile/sessions/route.ts", featureKey: null },
+  { sourceFile: "app/api/app/auth/mobile/switch-workspace/route.ts", featureKey: null },
+  // The phone's push registration: account plumbing for the bell, every role, own devices only.
+  { sourceFile: "app/api/app/push-devices/route.ts", featureKey: null },
   { sourceFile: "app/api/app/checkout/coupon/route.ts", featureKey: null },
   { sourceFile: "app/api/app/checkout/start/route.ts", featureKey: null },
   { sourceFile: "app/api/app/checkout/verify/route.ts", featureKey: null },
@@ -242,6 +253,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/exceptions/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/book-import/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/policy-book/route.ts", featureKey: "book_of_business", allowedRoles: ["owner", "producer", "bookkeeper"] },
+  { sourceFile: "app/api/app/home/producer/route.ts", featureKey: "book_of_business", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/rate-card/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   // Book of business round 2 (2026-11-02) · Setup › Carrier rules: the agency's own dated rules beside Insurvas's (owner decision 4).
   { sourceFile: "app/api/app/carrier-rules/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
@@ -370,6 +382,9 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/pending/requirements/chase-overdue/route.ts", featureKey: "applications", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/pending/route.ts", featureKey: "applications", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/pending/summary/route.ts", featureKey: "applications", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/quoting/catalog/route.ts", featureKey: "quoting", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/widget/call/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer", "setter"] },
+  { sourceFile: "app/api/app/applications/attempts/[id]/requirements/[requirementId]/documents/route.ts", featureKey: "applications", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/quotes/route.ts", featureKey: "quoting", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/reports/sales/route.ts", featureKey: "sales_report", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/settings/sales/carriers/[id]/route.ts", featureKey: "applications", allowedRoles: ["owner"] },

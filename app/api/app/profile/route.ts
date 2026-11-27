@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { audit } from "@/lib/audit/log";
 import { requireTenant } from "@/lib/tenantAuth/requireTenant";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 import { ownProfileInputSchema } from "@/lib/users/ownProfile";
 import { OwnProfileError, readOwnProfile, saveOwnProfile } from "@/lib/users/ownProfileService";
 
@@ -16,13 +17,15 @@ export async function GET() {
   try {
     // AG-1.1 · a producer's own record (Home › Agency › Producers since the Team group went, 2026-11-03): My profile
     // links to it. Only a producer's own row, by the session's ids; the owner and staff reach it from Agency.
-    const [profile, record] = await Promise.all([
+    // agencyTimezone (the phone's Edit profile, board J3b): what "the agency's time zone" is, so the field can name it.
+    const [profile, record, agencyTimezone] = await Promise.all([
       readOwnProfile(auth.context),
       auth.context.role === "producer"
         ? getSupabaseServiceClient().from("producer" as never).select("id").eq("tenant_id", auth.context.tenantId).eq("user_id", auth.context.userId).maybeSingle<{ id: string }>().then(({ data }) => data, () => null)
         : Promise.resolve(null),
+      getWorkspaceTimezone(auth.context.tenantId).catch(() => null),
     ]);
-    return NextResponse.json({ profile, producerRecordId: record?.id ?? null }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ profile, producerRecordId: record?.id ?? null, agencyTimezone }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const status = error instanceof OwnProfileError ? error.status : 503;
     return NextResponse.json({ error: error instanceof OwnProfileError ? error.message : "Your profile could not be loaded." }, { status });

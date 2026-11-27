@@ -4,6 +4,8 @@ import { z } from "zod";
 import { auditMany } from "@/lib/audit/log";
 import { DISCREPANCY_SCHEMA_PENDING_MESSAGE, DiscrepancyError, SETTABLE_DISCREPANCY_STATUSES, listDiscrepancies, owedToYou, setDiscrepancyStatus } from "@/lib/discrepancies/service";
 import { isRecordId } from "@/lib/ledger/statementConstants";
+import { loadPayIssues } from "@/lib/discrepancies/payIssues";
+import { payIssueCarrierKey } from "@/lib/commissions/payIssueGroups";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 /**
@@ -21,9 +23,10 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
  */
 const roles = ["owner", "bookkeeper"] as const;
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const auth = await requireFeatureRole("discrepancy_report", roles);
   if (auth instanceof NextResponse) return auth;
+  if (request.nextUrl.searchParams.get("view") === "carriers") return byCarrier(auth.context.tenantId);
   try {
     const [list, owed] = await Promise.all([listDiscrepancies(auth.context.tenantId), owedToYou(auth.context.tenantId)]);
     return NextResponse.json(
@@ -32,6 +35,38 @@ export async function GET() {
     );
   } catch (error) {
     console.error("[discrepancies] list", error);
+    return NextResponse.json({ error: "Could not load the pay issues" }, { status: 500 });
+  }
+}
+
+/**
+ * `?view=carriers` (the phone's Pay issues, release 3 board G8): Commissions › Pay issues' Open list (both sources,
+ * loadPayIssues, the page's own reader) as what each carrier owes, to the cent, with how many issues of each kind.
+ * No client names (names: false) and no policy numbers: the phone shows carriers and totals; the issues open on
+ * the computer. Reading only, like the list above.
+ */
+async function byCarrier(tenantId: string) {
+  try {
+    const read = await loadPayIssues(tenantId, { names: false });
+    const open = read.issues.filter((i) => i.status !== "closed");
+    const carriers = new Map<string, { carrierKey: string; carrierName: string; owedToYouCents: number; owedToCarrierCents: number; count: number; kinds: Record<string, number> }>();
+    for (const issue of open) {
+      const key = payIssueCarrierKey(issue);
+      const row = carriers.get(key) ?? { carrierKey: key, carrierName: issue.carrierName, owedToYouCents: 0, owedToCarrierCents: 0, count: 0, kinds: {} };
+      row.owedToYouCents += issue.owedToYouCents;
+      row.owedToCarrierCents += issue.owedToCarrierCents;
+      row.count += 1;
+      row.kinds[issue.type] = (row.kinds[issue.type] ?? 0) + 1;
+      carriers.set(key, row);
+    }
+    const kinds: Record<string, number> = {};
+    for (const issue of open) kinds[issue.type] = (kinds[issue.type] ?? 0) + 1;
+    return NextResponse.json({
+      ok: true, available: read.available, owedCents: read.summary.owedCents, count: open.length, kinds,
+      carriers: [...carriers.values()].sort((a, b) => b.owedToYouCents - a.owedToYouCents || b.count - a.count || a.carrierName.localeCompare(b.carrierName)),
+    }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    console.error("[discrepancies] by carrier", error);
     return NextResponse.json({ error: "Could not load the pay issues" }, { status: 500 });
   }
 }

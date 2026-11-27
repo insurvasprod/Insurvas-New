@@ -8,8 +8,9 @@ import { buildExistingPartnerInviteUrl, buildPartnerInviteUrl, generateInviteTok
 import { sendPartnerInvitationEmail } from "@/lib/email/sendInvitationEmail";
 import { configuredAppOrigin } from "@/lib/urls/origin";
 import { countAgencyPartnerSeats, invitePartnerUser, listPartnerUsers } from "@/lib/partnerUsers/service";
+import { sentThisMonth } from "@/lib/partnerLeads/phoneFacts";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const auth = await requirePartner(["partner_admin"]);
   if (auth instanceof NextResponse) return auth;
   // Partner type (lib/partnerAuth/portalAccess.ts): refused on the server, not only hidden from the menu.
@@ -19,6 +20,11 @@ export async function GET() {
   // footnote shows the real ceiling, not this partner's share of it.
   try {
     const [users, entitlement, seatsUsed] = await Promise.all([listPartnerUsers(auth.context.tenantId, auth.context.partnerId), getEntitlement(auth.context.tenantId), countAgencyPartnerSeats(auth.context.tenantId, auth.context.partnerId)]);
+    // The phone app (board K6) asks with phone=1 for each member's leads sent this month (partner timezone).
+    if (request.nextUrl.searchParams.get("phone") === "1") {
+      const sent = await sentThisMonth(auth.context.tenantId, auth.context.partnerId, users.map((u) => u.user_id), auth.context.partnerTimezone).catch(() => ({}));
+      return NextResponse.json({ users, seatLimit: entitlement.limits.max_partner_users ?? null, seatsUsed, sentThisMonth: sent });
+    }
     return NextResponse.json({ users, seatLimit: entitlement.limits.max_partner_users ?? null, seatsUsed });
   }
   catch { return NextResponse.json({ error: "Could not load partner users" }, { status: 500 }); }

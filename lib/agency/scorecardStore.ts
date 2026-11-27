@@ -29,6 +29,10 @@ export type ProducerScore = {
   m4: { alive: number; eligible: number; building: boolean; readyOn: string | null; text: string };
   m13: { alive: number; eligible: number; building: boolean; readyOn: string | null; text: string };
   chargebackCents: number;
+  /** Policies in his book the carrier charged back (a count, never money): the phone's Team list chip (board I1). */
+  chargebacks: number;
+  /** Annual premium of the policies issued in the period, from the carriers' files: what the phone's Team ranks by (board I1). */
+  issuedAnnualCents: number;
   advanceAtRiskCents: number;
   leadSpendCents: number;
   costPerIssued: PerPolicy;
@@ -120,6 +124,8 @@ export async function producerScores(context: { tenantId: string; userId: string
       m4: { alive: m4.alive, eligible: m4.eligible, building: m4.building, readyOn: m4.readyOn ?? null, text: m4.building ? "Building" : countOrPercent(m4.alive, m4.eligible, minSample) },
       m13: { alive: m13.alive, eligible: m13.eligible, building: m13.building, readyOn: m13.readyOn ?? null, text: m13.building ? "Building" : countOrPercent(m13.alive, m13.eligible, minSample) },
       chargebackCents: chargeback,
+      chargebacks: mine.filter((x) => (x.chargedBackCents ?? 0) !== 0).length,
+      issuedAnnualCents: inPeriod.filter(isIssued).reduce((s, x) => s + (x.annualCents ?? 0), 0),
       advanceAtRiskCents: atRisk.get(p.user_id) ?? 0,
       leadSpendCents: spendCents,
       costPerIssued: costIssued,

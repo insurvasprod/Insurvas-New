@@ -10,8 +10,49 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { parsePartnerLimitError, partnerLimitBody, type PartnerLimitAction } from "@/lib/partnerLimits/copy";
 import { PARTNER_TYPE_CAP_KEY, atLimitUserRefusalRetry, atPartnerCap, draftCompensatedLimit } from "@/lib/partnerLimits/rules";
 import { countActivePartners } from "@/lib/partnerLimits/usage";
+import { listLedger } from "@/lib/accounting/payoutStore";
 
 const PARTNER_ROLES = ["owner", "bookkeeper"] as const;
+
+/**
+ * The phone's partner page (mobile board I8), the agency's side of one partner, read only:
+ *   `owedCents` / `dueOn` · what the partner ledger holds unpaid or on an unpaid invoice, and the soonest day an
+ *     unpaid entry is expected to be invoiced (the Partner payouts ledger's own rule). Read without filling the
+ *     ledger first, so it is as current as the ledger's last fill; null while the ledger is not set up.
+ *   `term` · the deal in force today (payout model, rate, since); `threadId` · this partner's chat channel.
+ * Same feature and roles as the rest of the partner record.
+ */
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireFeatureRole("publisher_records", PARTNER_ROLES);
+  if (auth instanceof NextResponse) return auth;
+  const { id } = await params;
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: "That partner isn't here." }, { status: 404 });
+  const tenantId = auth.context.tenantId;
+  const db = getSupabaseServiceClient();
+  try {
+    const { data: partner, error } = await db.from("partners").select("id").eq("tenant_id", tenantId).eq("id", id).maybeSingle<{ id: string }>();
+    if (error) throw new Error(error.message);
+    if (!partner) return NextResponse.json({ error: "That partner isn't here." }, { status: 404 });
+    const today = new Date().toISOString().slice(0, 10);
+    const [terms, channel, ledger] = await Promise.all([
+      db.from("partner_terms").select("payout_model, rate_cents, rate_pct_bp, effective_from").eq("partner_id", id).lte("effective_from", today).order("effective_from", { ascending: false }).limit(1),
+      db.from("partner_channels").select("id, status").eq("tenant_id", tenantId).eq("partner_id", id).eq("channel_type", "partner").maybeSingle<{ id: string; status: string }>(),
+      listLedger(tenantId, { partnerId: id, sync: false }).catch(() => null),
+    ]);
+    const term = ((terms.data ?? []) as Array<{ payout_model: string; rate_cents: number | null; rate_pct_bp: number | null; effective_from: string }>)[0] ?? null;
+    const open = ledger ? ledger.rows.filter((r) => r.state !== "paid") : [];
+    const due = open.map((r) => r.expectedOn).filter((d): d is string => Boolean(d)).sort();
+    return NextResponse.json({
+      owedCents: ledger ? open.reduce((sum, r) => sum + r.amountCents, 0) : null,
+      dueOn: due[0] ?? null,
+      term,
+      threadId: channel.data && channel.data.status === "active" ? channel.data.id : null,
+    }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    console.error("[partner]", error instanceof Error ? error.message : error);
+    return NextResponse.json({ error: "Could not load this partner" }, { status: 500 });
+  }
+}
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("publisher_records", PARTNER_ROLES, { write: true });

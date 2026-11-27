@@ -41,6 +41,7 @@
   ],
   "exclude": [
     "node_modules",
-    "insurvas-demo-video"
+    "insurvas-demo-video",
+    "mobile"
   ]
 }

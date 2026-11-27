@@ -94,6 +94,8 @@
 .blurb { max-width: 32ch; margin: 18px auto 0; color: var(--body); font-size: 14.5px; line-height: 1.55; }
 
 .rows { display: grid; flex: 1; align-content: start; gap: 14px; margin: 0 32px; border-top: 2px dotted var(--border); padding: 26px 0 28px; list-style: none; }
+/* A card with no rows (the landing page, where "Compare features" lists them): a short rule, then the button. */
+.rowsEmpty { flex: 1; margin: 0 32px 24px; border-top: 2px dotted var(--border); }
 .rows li { display: flex; align-items: center; gap: 12px; color: var(--ink); font-size: 14.5px; line-height: 1.35; }
 .rows li[data-lead="true"] { font-weight: 600; }
 .rows li[data-included="false"] { color: var(--muted); opacity: .7; }

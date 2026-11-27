@@ -9,6 +9,7 @@ import { requireTenant, type TenantContext } from "@/lib/tenantAuth/requireTenan
  * Goals and targets on the compact Home (roles r1, owner 2026-11-18): the "Set goal" / "Set target" sheet's writes.
  *
  *   GET    ?kind=premium&for=me|agency   the stored goal, or { state: "missing" } before the table exists
+ *   GET    ?kind=premium&for=user&user=  one producer's own premium goal (owner and admins only; read only)
  *   POST   { kind, for, target }        sets it (premium in dollars, the rest a whole count)
  *   DELETE { kind, for }                clears it (the ring falls back to last month)
  *
@@ -26,6 +27,16 @@ export async function GET(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   const { context } = auth;
   const kind = request.nextUrl.searchParams.get("kind");
+  // The phone's producer page (mobile board I2): the owner or an admin reads one producer's own premium goal, to draw
+  // the month against it. Read only, premium only, and only someone in this tenant (the read filters on the tenant).
+  // Never a manager: a premium goal is money, and managers run people, not money.
+  if (request.nextUrl.searchParams.get("for") === "user") {
+    const user = request.nextUrl.searchParams.get("user") ?? "";
+    const held = heldRole(context);
+    if (kind !== "premium" || !/^[0-9a-f-]{36}$/i.test(user)) return NextResponse.json({ error: "Unknown goal" }, { status: 400 });
+    if (held !== "owner" && held !== "admin") return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+    return NextResponse.json({ goal: await readGoal(context.tenantId, user, kind), period: GOAL_PERIOD[kind], money: GOAL_MONEY[kind] });
+  }
   const whose = whoseOf(request.nextUrl.searchParams.get("for") ?? "me");
   if (!isGoalKind(kind) || !whose) return NextResponse.json({ error: "Unknown goal" }, { status: 400 });
   // Reading the agency's goal is the agency's business: only who may set it.

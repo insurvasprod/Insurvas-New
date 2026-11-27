@@ -4,6 +4,7 @@ import { listPartnerLeads } from "@/lib/partnerLeads/service";
 import type { PartnerLeadFilters } from "@/lib/partnerLeads/types";
 import { partnerTeamMembers, requirePartner } from "@/lib/partnerAuth/requirePartner";
 import { visibleSubmitters } from "@/lib/partnerAuth/team";
+import { pipelineLiveFacts } from "@/lib/partnerLeads/phoneFacts";
 
 function filters(request: NextRequest): PartnerLeadFilters {
   const params = request.nextUrl.searchParams;
@@ -24,7 +25,14 @@ export async function GET(request: NextRequest) {
   try {
     const members = await partnerTeamMembers(auth.context.tenantId, auth.context.partnerId);
     const visibleSubmitterIds = visibleSubmitters({ userId: auth.context.userId, role: auth.context.role }, members);
-    return NextResponse.json(await listPartnerLeads(auth.context.tenantId, auth.context.partnerId, filters(request), auth.context.partnerTimezone, { limit, offset }, { userId: auth.context.userId, role: auth.context.role, visibleSubmitterIds }), { headers: { "Cache-Control": "no-store" } });
+    const page = await listPartnerLeads(auth.context.tenantId, auth.context.partnerId, filters(request), auth.context.partnerTimezone, { limit, offset }, { userId: auth.context.userId, role: auth.context.role, visibleSubmitterIds });
+    // The phone app (board K1, K3) asks with live=1 for each row's live line: the claimer's first name,
+    // when it was claimed and the next callback, read only for the work items this scoped page returned.
+    if (request.nextUrl.searchParams.get("live") === "1") {
+      const live = await pipelineLiveFacts(auth.context.tenantId, auth.context.partnerId, page.rows.map((row) => row.workItemId));
+      return NextResponse.json({ ...page, rows: page.rows.map((row) => (live[row.workItemId] ? { ...row, live: live[row.workItemId] } : row)) }, { headers: { "Cache-Control": "no-store" } });
+    }
+    return NextResponse.json(page, { headers: { "Cache-Control": "no-store" } });
   }
   catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load partner pipeline" }, { status: 400 }); }
 }

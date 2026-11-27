@@ -1,0 +1,35 @@
+# The release 1 tabs for an owner / producer (Home · Calls · Leads · Inbox · Menu). Read only.
+# Tabs are tapped by position: every tab keeps its screen mounted, so text like "Calls" also matches
+# screens behind the one on show.
+appId: host.exp.exponent
+---
+- tapOn:
+    point: "30%,96%"   # Calls
+- extendedWaitUntil:
+    visible: "Incoming"
+    timeout: 30000
+- takeScreenshot: e2e/screenshots/11-calls-incoming
+- tapOn:
+    id: "seg-callbacks"   # the Calls switch (Segments gives each part a test ID)
+- extendedWaitUntil:
+    visible: "Overdue.*|Today.*|No callbacks today"
+    timeout: 30000
+- takeScreenshot: e2e/screenshots/12-calls-callbacks
+- tapOn:
+    point: "50%,96%"   # Leads
+- extendedWaitUntil:
+    visible: ".*sorted by.*"
+    timeout: 60000
+- takeScreenshot: e2e/screenshots/13-leads
+- tapOn:
+    point: "70%,96%"   # Inbox
+- extendedWaitUntil:
+    visible: "Inbox"
+    timeout: 20000
+- takeScreenshot: e2e/screenshots/14-inbox
+- tapOn:
+    point: "90%,96%"   # Menu
+- extendedWaitUntil:
+    visible: "Calendar"
+    timeout: 20000
+- takeScreenshot: e2e/screenshots/15-menu

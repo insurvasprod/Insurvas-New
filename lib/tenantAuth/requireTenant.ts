@@ -1,11 +1,12 @@
 import "server-only";
 import { cache } from "react";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { isAgencyTitle, isTenantRole, memberRoleOf, type AgencyTitle, type MemberRole, type TenantRole } from "./roles";
 import { titleWithholds } from "./permissions";
-import { TENANT_SESSION_COOKIE, verifyTenantSessionToken, type TenantSessionPayload } from "./session";
+import { APP_CLIENT, TENANT_SESSION_COOKIE, verifyTenantSessionToken, type TenantSessionPayload } from "./session";
+import { bearerFrom } from "./appClient";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { holdsPartnerMembership } from "@/lib/auth/planeSeparation";
 import { isTenantSuspended, TENANT_SUSPENDED_CODE, TENANT_SUSPENDED_MESSAGE } from "@/lib/tenants/suspension";
@@ -26,8 +27,17 @@ export async function getTenantSession(): Promise<TenantSessionPayload | null> {
 const readTenantSession = cache(async (): Promise<TenantSessionPayload | null> => {
   const store = await cookies();
   const token = store.get(TENANT_SESSION_COOKIE)?.value;
-  if (!token) return null;
-  return verifyTenantSessionToken(token);
+  if (token) {
+    const session = await verifyTenantSessionToken(token);
+    // An app token never rides in a cookie: it was handed only to the app, which sends it as a header.
+    return session && session.cli !== APP_CLIENT ? session : null;
+  }
+  // The phone app (2026-11-24): the same session token, carried as a Bearer header. Only a token issued
+  // to the app is accepted this way, so a web cookie copied into a header is refused.
+  const bearer = bearerFrom((await headers()).get("authorization"));
+  if (!bearer) return null;
+  const session = await verifyTenantSessionToken(bearer);
+  return session && session.cli === APP_CLIENT ? session : null;
 });
 
 export type TenantContext = {

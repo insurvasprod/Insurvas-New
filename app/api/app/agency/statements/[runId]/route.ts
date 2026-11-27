@@ -6,6 +6,8 @@ import { readStatement } from "@/lib/agency/ledgerStore";
 import { buildStatement } from "@/lib/agency/statementCore";
 import { buildStatementPdf } from "@/lib/agency/statementPdf";
 import { NO_STORE, refuseManagerMoney } from "@/lib/agency/http";
+import { readPayFacts } from "@/lib/agency/payFacts";
+import { rowVisible, scopeFor } from "@/lib/agency/visibility";
 
 /**
  * AG-1.8 · one producer statement, generated from the ledger at request time (it always reconciles). The producer
@@ -31,5 +33,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="statement-${data.run.periodStart}-${data.run.periodEnd}.pdf"`, ...NO_STORE },
     });
   }
-  return NextResponse.json({ run: data.run, producer: data.producer, agency: data.agency, statement }, { headers: NO_STORE });
+  // The phone's statement (board G2) names each line's advance length and, for a chargeback, the month of the policy's
+  // life it came back in: read from this statement's own entries, and only when the session's scope sees its producer.
+  const scope = await scopeFor(auth.context);
+  const facts = rowVisible(scope, data.run.producerUserId) ? await readPayFacts(auth.context.tenantId, data.during).catch(() => null) : null;
+  const lineFacts: Record<string, { advanceMonths: number | null; policyMonth: number | null }> = {};
+  if (facts) for (const e of data.during) lineFacts[e.id] = { advanceMonths: (e.carrierId && facts.advanceMonthsByCarrier[e.carrierId]) || null, policyMonth: facts.policyMonthByEntry[e.id] ?? null };
+  return NextResponse.json({ run: data.run, producer: data.producer, agency: data.agency, statement, lineFacts }, { headers: NO_STORE });
 }

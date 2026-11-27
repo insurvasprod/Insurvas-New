@@ -9,6 +9,7 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { guardLead } from "@/lib/agency/guards";
 import { scopeFor } from "@/lib/agency/visibility";
 import { calendarVisible, guardAppointment } from "@/lib/appointments/scope";
+import { leadStateOf, licensedStatesFor } from "../inbound/people";
 
 /** AG-0.5: a calendar outside the session's scope answers as an agent who cannot be booked. */
 const AGENT_NOT_IN_SCOPE = () => NextResponse.json({ error: "Choose an agent whose calendar you can book.", code: "agent_not_found" }, { status: 404 });
@@ -106,17 +107,29 @@ function refusal(error: unknown) {
   return NextResponse.json({ error: text, code: code.toLowerCase() }, { status });
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const auth = await requireFeatureRole("outbound_dialing", BOOKING_ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
     // AG-0.5: in an agency only the calendars of the session and the producers in its scope (and its own
     // bookings). From the session, never the request; null = the whole agency, as before.
     const context = await bookableContext(auth.context.tenantId, await scopeFor(auth.context), auth.context.userId);
+    // Phone board C8b (2026-11-26), additive: each bookable person's licensed states ("Ava Kim · licensed
+    // in GA"), and with ?lead_id= the lead's own state, so the picker can offer the producers licensed
+    // where the customer lives. The lead is guarded like the booking itself; a hidden one adds nothing.
+    const [licensedStates, leadState] = await Promise.all([
+      licensedStatesFor(auth.context.tenantId, context.agents.map((agent) => agent.userId)).catch(() => null),
+      (async () => {
+        const leadId = z.string().uuid().safeParse(request.nextUrl.searchParams.get("lead_id"));
+        if (!leadId.success || (await guardLead(auth.context, leadId.data))) return undefined;
+        return leadStateOf(auth.context.tenantId, leadId.data).catch(() => null);
+      })(),
+    ]);
     // Decided 2026-09-25: a setter sees blocked time as "Unavailable", never its reason. The time
     // itself stays in the payload, because the picker has to know it is not bookable. LA-2.12-2: and
     // another setter's booking is a taken slot, without its lead or notes.
-    return NextResponse.json(auth.context.role === "setter" ? redactBlocksForSetter(context, auth.context.userId) : context, {
+    const answer = auth.context.role === "setter" ? redactBlocksForSetter(context, auth.context.userId) : context;
+    return NextResponse.json({ ...answer, licensedStates, ...(leadState !== undefined ? { leadState } : {}) }, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {

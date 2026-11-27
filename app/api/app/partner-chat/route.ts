@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 import { audit } from "@/lib/audit/log";
 import { getPartnerChannelFacts } from "@/lib/partnerChat/partnerFacts";
+import { leadIdsForWorkItems } from "@/lib/partnerChat/leadLinks";
 import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENT_BYTES, addChannelMembers, createAgentChannel, getAgentChannelHistory, getAgentChatChannels, getAgentChatDirectory, markChannelRead, searchAgentChat, markPartnerChatRead, postChannelText, postPartnerText, removeChannelMember, renameChannel, setAgentChannelArchived, setChannelMember, setConversationState, type ChatAttachmentInput } from "@/lib/partnerChat/service";
 import { GroupsNotLiveError } from "@/lib/partnerChat/groups";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
@@ -82,8 +83,13 @@ export async function GET(request: NextRequest) {
     // The per-partner facts line is extra: if it cannot be read, the chat still loads without it.
     const facts = scope !== null ? Promise.resolve([]) : getWorkspaceTimezone(auth.context.tenantId).catch(() => null).then((zone) => getPartnerChannelFacts(auth.context.tenantId, zone)).catch((error) => { console.error("[partner-chat] partner facts failed", error); return []; });
     const [channels, directory, partnerFacts] = await Promise.all([getAgentChatChannels(auth.context.tenantId, auth.context.userId, scope), getAgentChatDirectory(auth.context.tenantId), facts]);
+    // ?with=leads (the phone's thread, board H3): the lead behind each card's transfer, so the card opens
+    // the lead. Only the cards already in this person's scoped answer are looked up; the web never asks.
+    const leadIds = params.get("with") === "leads"
+      ? await leadIdsForWorkItems(auth.context.tenantId, channels.flatMap((entry) => (entry?.messages ?? []).map((m) => m.workItemId).filter((id): id is string => Boolean(id))))
+      : undefined;
     // viewerId: the signed-in person's own id, so the thread can set their messages on the right.
-    return NextResponse.json({ channels, directory, partnerFacts, viewerId: auth.context.userId }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ channels, directory, partnerFacts, viewerId: auth.context.userId, ...(leadIds ? { leadIds } : {}) }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("[partner-chat] channel or directory load failed", error);
     return NextResponse.json({ error: "Could not load partner channels" }, { status: 503 });

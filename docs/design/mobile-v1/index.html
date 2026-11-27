@@ -1,0 +1,255 @@
+<title>Insurvas Mobile</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Inter+Tight:wght@500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="kit.css">
+
+<div class="wrap">
+  <header class="hero">
+    <h1><img src="isotype.svg" alt="" width="44" height="44">Insurvas Mobile</h1>
+    <p>Round 2 of the iOS and Android app, built in React Native. Every screen below is drawn once and shown in both
+      skins: iOS on the left, Android on the right. The phones scroll. Before the screens: what the phone is for, which
+      of the web app’s pages come along, the settled decisions and the three releases.</p>
+    <div class="meta">Drawn 23 Nov 2026, decisions settled 24 Nov 2026, from the live menu (<code>lib/menu/definition.ts</code>), the module specs and the owner rules in
+      UI-CONSISTENCY and BRAND. Sample people and agencies are made up.</div>
+  </header>
+
+  <nav class="tb" aria-label="Board controls">
+    <div class="grp"><span class="lbl">Show</span>
+      <button type="button" id="pf-both" data-pf="both" aria-pressed="true">Both</button>
+      <button type="button" id="pf-ios" data-pf="ios" aria-pressed="false">iOS</button>
+      <button type="button" id="pf-and" data-pf="and" aria-pressed="false">Android</button>
+    </div>
+    <div class="grp"><span class="lbl">App theme</span>
+      <button type="button" id="th-dark" data-th="dark" aria-pressed="true">Dark</button>
+      <button type="button" id="th-light" data-th="light" aria-pressed="false">Light</button>
+    </div>
+    <div class="grp"><span class="lbl">Size</span>
+      <button type="button" id="z-s" data-z=".6" aria-pressed="false">S</button>
+      <button type="button" id="z-m" data-z=".78" aria-pressed="true">M</button>
+      <button type="button" id="z-l" data-z="1" aria-pressed="false">L</button>
+    </div>
+    <div class="grp"><span class="lbl">Release</span>
+      <button type="button" data-rl="all" aria-pressed="true">All</button>
+      <button type="button" data-rl="1" aria-pressed="false">1</button>
+      <button type="button" data-rl="2" aria-pressed="false">2</button>
+      <button type="button" data-rl="3" aria-pressed="false">3</button>
+    </div>
+    <div class="grp"><label class="lbl" for="jump">Jump to</label>
+      <select id="jump"></select>
+    </div>
+  </nav>
+
+  <!-- ── Strategy ─────────────────────────────────────────────────── -->
+  <section class="sec" id="why">
+    <header><span class="n">00</span><h2>What the phone is for</h2>
+      <p>The web app has about 290 pages because it runs an agency end to end. The phone should not try to. It should
+        do the work people do away from a desk, and tell them the moment something needs them. Everything else stays on
+        the computer and the phone knows how to send you there.</p></header>
+    <div class="grid3">
+      <div class="panel"><h3>1 · Work the phone</h3>
+        <p>Take a transfer, serve the next lead, keep every callback in the customer’s time. The phone is a phone: dialing
+          hands off to the native dialer after the server’s compliance checks pass, and transfers ring like calls.</p>
+        <p><span class="k">Who:</span> producers, setters, assistants.</p></div>
+      <div class="panel"><h3>2 · Close and follow the sale</h3>
+        <p>Quote at the kitchen table, fill the application with the client, sign on the glass, then watch the case
+          through underwriting. Save the policy when the carrier file says a payment was missed.</p>
+        <p><span class="k">Who:</span> producers, retention.</p></div>
+      <div class="panel"><h3>3 · Know where the money is</h3>
+        <p>Owners: the month, the team, and the approvals waiting on them. Producers: what they earned and what came back.
+          Partners: what they sent and what it became. Read and approve on the phone; reconcile on the computer.</p>
+        <p><span class="k">Who:</span> owners, managers, bookkeepers, partners.</p></div>
+    </div>
+    <div class="grid2">
+      <div class="panel"><h3>Rules that carry over from the web</h3>
+        <ul>
+          <li><span class="k">Nothing printed on the page as a notice.</span> On the phone the bell becomes the Inbox tab and push. It fits the owner’s rule better than the web does.</li>
+          <li><span class="k">Calls never use a raw tel: link.</span> They go through the dialer: server checks, disclosure record, then the native call.</li>
+          <li><span class="k">Customer’s time and yours, together,</span> on every callback and appointment.</li>
+          <li><span class="k">Roles are fixed.</span> Each role gets its own five tabs, and the money boundary holds: setters and assistants never see lead cost.</li>
+          <li><span class="k">One gold button a screen,</span> gold for people and new counts. Green acts, olive frames. Status is a dot plus words.</li>
+          <li><span class="k">No client avatars, no emoji, no glow, no gradients, no endless motion.</span> Sentence case everywhere.</li>
+        </ul></div>
+      <div class="panel"><h3>What the phone adds that the web can’t do</h3>
+        <ul>
+          <li><span class="k">Push alerts</span> for transfers, callbacks, case changes, at-risk policies and chat, with actions on the notification.</li>
+          <li><span class="k">A transfer that rings</span>: iOS Live Activity and Dynamic Island, Android full-screen call notification.</li>
+          <li><span class="k">Face ID / fingerprint</span> sign-in on top of the 30-day trusted device.</li>
+          <li><span class="k">Camera</span>: a receipt straight into Expenses, a document straight into a pending case.</li>
+          <li><span class="k">Sign on the glass</span> for applications taken in person.</li>
+          <li><span class="k">Home-screen widgets and long-press shortcuts</span>: today’s callbacks, Serve next lead, Add a lead.</li>
+          <li><span class="k">Works with a weak signal</span>: notes, dispositions and application steps save on the phone and send when it reconnects.</li>
+        </ul></div>
+    </div>
+
+    <h3 style="margin-top:28px;font-size:18px">Five tabs, by role</h3>
+    <div class="tscroll"><table class="scope">
+      <thead><tr><th>Role</th><th>Tab 1</th><th>Tab 2</th><th>Tab 3</th><th>Tab 4</th><th>Tab 5</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Producer</td><td>Home</td><td>Calls</td><td>Leads</td><td>Inbox</td><td>Menu</td><td class="why">Calls holds Incoming, Dialer and Callbacks behind one switch, as Today does on the web.</td></tr>
+        <tr><td>Owner / manager</td><td>Home</td><td>Team</td><td>Money</td><td>Inbox</td><td>Menu</td><td class="why">An owner who also sells opens Calls from Home’s Start calling or Menu. Manager gets Team without money figures.</td></tr>
+        <tr><td>Setter</td><td>Home</td><td>Dialer</td><td>Callbacks</td><td>Inbox</td><td>Menu</td><td class="why">The whole job is dialing and setting appointments. No cost anywhere.</td></tr>
+        <tr><td>Assistant</td><td>Home</td><td>Calls</td><td>Leads</td><td>Inbox</td><td>Menu</td><td class="why">Same as producer, but Calls stops at Verification and offers a handoff; no Finish the call.</td></tr>
+        <tr><td>Bookkeeper</td><td>Home</td><td>Money</td><td>Book</td><td>Inbox</td><td>Menu</td><td class="why">Approvals and deposits; no call operations.</td></tr>
+        <tr><td>Retention</td><td>Home</td><td>Cases</td><td>Book</td><td>Inbox</td><td>Menu</td><td class="why">The ladder of cases, worked by phone, with the policy one tap away.</td></tr>
+        <tr><td>Partner</td><td>Home</td><td>Send a lead</td><td>Pipeline</td><td>Messages</td><td>Account</td><td class="why">Same app, partner sign-in opens the partner portal; what it shows follows the partner type.</td></tr>
+      </tbody></table></div>
+
+    <h3 style="margin-top:28px;font-size:18px">How each page was placed: phone or computer</h3>
+    <p style="margin:6px 0 0;max-width:900px">Every page was scored on six questions. Two or more “phone” answers and it is built for the phone; mostly “computer” and it stays on the web, reachable from Menu.</p>
+    <div class="tscroll"><table class="scope">
+      <thead><tr><th>Question</th><th>Points to the phone</th><th>Points to the computer</th><th>Examples</th></tr></thead>
+      <tbody>
+        <tr><td>Where does it happen?</td><td>Away from a desk: in the car, at the client’s kitchen table, between calls</td><td>At a desk, in a planned block of work</td><td class="why">Appointments with directions vs. month-end reconciliation</td></tr>
+        <tr><td>How urgent is it?</td><td>Minutes matter: a transfer waiting, a callback due, a policy lapsing Thursday</td><td>Can wait until tomorrow morning</td><td class="why">Transfer rings, payment-missed push vs. rate card edits</td></tr>
+        <tr><td>How long is one sitting?</td><td>Under two minutes, or one step at a time</td><td>Twenty minutes of focus</td><td class="why">Log an attempt vs. building a pipeline</td></tr>
+        <tr><td>How much do you need to see at once?</td><td>One record, one list, one number</td><td>Two documents side by side, wide tables, thousands of rows</td><td class="why">A policy vs. matching a statement to the book</td></tr>
+        <tr><td>Does the phone itself help?</td><td>Calling, camera, signature, location, biometrics, push</td><td>Keyboard and mouse, file uploads, spreadsheets</td><td class="why">Receipt photo, sign on the glass vs. CSV import</td></tr>
+        <tr><td>What does a mistake cost?</td><td>Small and reversible, or a single approval you read in full</td><td>Bulk or hard to undo: settings for everyone, mass moves, deletions</td><td class="why">Approve one payout vs. change commission rules for the agency</td></tr>
+      </tbody></table></div>
+    <div class="grid2">
+      <div class="panel"><h3>Engineering choices behind it</h3>
+        <ul>
+          <li><span class="k">The server stays the judge.</span> Compliance, roles, plans and money rules run on the same API as the web; the app never decides who may call or see cost.</li>
+          <li><span class="k">Offline only where it is safe:</span> notes, outcomes and application answers queue on the phone. Claiming, dialing and approving always need the server.</li>
+          <li><span class="k">Sensitive data stays off the phone:</span> bank and SSN masked after entry, Face ID to show, nothing cached in plain text, app-switcher cover, lock after a pause, remote sign-out.</li>
+          <li><span class="k">Every push opens one exact screen</span> through deep links that match the web routes, so an email link and a push land in the same place.</li>
+        </ul></div>
+      <div class="panel"><h3>What I left off the phone, on purpose</h3>
+        <ul>
+          <li><span class="k">Bulk work:</span> imports, mass reassignments, bulk stage moves, merging lead histories.</li>
+          <li><span class="k">Setup that changes things for everyone:</span> pipelines, products, carriers, field maps, routing, roles, disclosures.</li>
+          <li><span class="k">Side-by-side money work:</span> statement matching, credit attribution, splits, tax.</li>
+          <li><span class="k">Plan and billing:</span> Apple and Google require their own payments for anything bought inside the app.</li>
+          <li><span class="k">Texting clients from a personal phone:</span> it bypasses consent and recording, so the app doesn’t offer it.</li>
+        </ul></div>
+    </div>
+
+    <h3 style="margin-top:28px;font-size:18px">Every web page, and what it becomes on the phone</h3>
+    <p style="margin:6px 0 0;max-width:900px"><span class="tag full">Full</span> works on the phone as on the web ·
+      <span class="tag lite">Lite</span> read it, act on one thing, the rest on the computer ·
+      <span class="tag desk">Computer</span> listed in Menu with a laptop mark; tapping it offers to send the link to your computer ·
+      <span class="tag new">New</span> only the phone has it.</p>
+    <div class="tscroll"><table class="scope" id="scope"><thead><tr><th>Web page</th><th>On the phone</th><th>What you do there</th></tr></thead><tbody></tbody></table></div>
+
+    <h3 style="margin-top:28px;font-size:18px">Decisions, settled 24 Nov 2026</h3>
+    <ol class="dec">
+      <li><b>One app for agents and partners.</b> One store listing, one codebase; the sign-in decides which side opens.<span class="rec">Settled: one app. Partners see only their portal; nothing of the agency side ships to them.</span></li>
+      <li><b>Text sizes on the phone.</b> Larger than the web’s 12 / 14 / 16, as Apple and Google recommend.<span class="rec">Settled: 13 / 15 / 16 body, 20 section titles, 28–32 screen titles and big figures. Follows the phone’s text-size setting.</span></li>
+      <li><b>Rows: two lines on the phone.</b> On a 390px screen, one line hides the state or the time.<span class="rec">Settled: a name line plus one muted fact line, colour only in one chip. The web keeps its one-line rule.</span></li>
+      <li><b>Buttons.</b> Android’s own buttons are fully round, which the web forbids.<span class="rec">Settled: 10–12px corners on both platforms. No pills.</span></li>
+      <li><b>Type face.</b><span class="rec">Settled: Inter and Inter Tight everywhere, Geist Mono for figures, so the product looks like one product.</span></li>
+      <li><b>Applications on a phone.</b><span class="rec">Settled: the full application, with signature, for final expense, whole life and term. Products on the generic template show a laptop mark and send the link to the computer (screen E1b).</span></li>
+      <li><b>Tabs for an owner who also sells.</b><span class="rec">Settled: owner tabs by default, with Menu › Settings › “Use the producer tabs” (screen J3). Until release 3 brings Team and Money, owners get the producer tabs.</span></li>
+      <li><b>What ships when.</b><span class="rec">Settled: three releases, below. Every screen on this board carries its release mark, and the toolbar can show one release at a time.</span></li>
+    </ol>
+
+    <h3 style="margin-top:28px;font-size:18px">Three releases</h3>
+    <div class="tscroll"><table class="scope" id="rels">
+      <thead><tr><th>Release</th><th>What ships</th><th>Screens</th><th>What the server needs first</th></tr></thead>
+      <tbody>
+        <tr><td><span class="rel r1">Release 1</span></td><td>Sign-in, Face ID, homes for producer, setter and assistant, search, Calls (incoming transfers, dialer, callbacks, the inbound call), Leads, Inbox and push, Menu and settings, a call in progress, working offline, every state</td><td class="n" data-r="1"></td><td class="why">Token sign-in for the app (Keychain / Keystore) on the existing session rules; device tokens and a push sender (APNs + FCM) for the bell’s categories; deep links that match the web routes; the shared <code>lib/</code> rules as a package</td></tr>
+        <tr><td><span class="rel r2">Release 2</span></td><td>Quote, applications with signature, cases at the carrier, scanned documents, Book of business, retention cases and the ladder, the retention home</td><td class="n" data-r="2"></td><td class="why">Offline queue for application answers; masked bank and SSN with Face ID to show; camera upload into a case</td></tr>
+        <tr><td><span class="rel r3">Release 3</span></td><td>Owner, manager and bookkeeper homes, Money, Team, reports and compliance, the partner app and partner chat, widgets, app-icon shortcuts, Siri and Google, tablet</td><td class="n" data-r="3"></td><td class="why">Approvals from the phone (payouts, expenses, bills) with a fresh Face ID; partner sign-in on the same app; widget data endpoints</td></tr>
+      </tbody></table></div>
+
+    <div class="grid2" style="margin-top:18px">
+      <div class="panel"><h3>What building it needs</h3>
+        <ul>
+          <li><span class="k">Expo (React Native)</span> with expo-router, so the phone’s routes mirror <code>/app/*</code>; EAS builds for both stores.</li>
+          <li><span class="k">Sign-in for an app:</span> the web uses cookies. The phone needs token sign-in on the same session rules (remember, trusted device, session_version), kept in the Keychain / Keystore.</li>
+          <li><span class="k">Push:</span> device tokens per user and a sender for the bell’s existing categories (APNs + FCM). This is the “SMS / push” gap already on the premium list.</li>
+          <li><span class="k">Shared rules:</span> the pure modules in <code>lib/</code> (call phases, outcomes, ladder rules, money formatting) move into a package both apps import, so the phone can’t drift from the web.</li>
+          <li><span class="k">Same API, same gates:</span> every screen calls the existing <code>/api/app</code> routes, so menu, page and API keep agreeing.</li>
+        </ul></div>
+      <div class="panel"><h3>Motion on the phone</h3>
+        <ul>
+          <li>The calm-premium tokens carry over (120–360ms, rises and fades, nothing endless).</li>
+          <li>Native pushes and sheets use each platform’s own spring, so iOS feels like iOS and Android like Android.</li>
+          <li>One haptic tap on Claim, Call and Save outcome; a warning buzz when dialing is blocked.</li>
+          <li>Reduced motion on the phone turns every transition into a fade.</li>
+        </ul></div>
+    </div>
+  </section>
+
+  <div id="screens"></div>
+</div>
+
+<script src="kit.js"></script>
+<script src="screens-a.js"></script>
+<script src="screens-b.js"></script>
+<script src="screens-c.js"></script>
+<script src="screens-d.js"></script>
+<script src="screens-e.js"></script>
+<script src="screens-f.js"></script>
+<script>
+(function () {
+  "use strict";
+  const SECTIONS = [
+    ["in", "01", "Getting in", "Sign-in, the code, alerts and Face ID. Same rules as the web sign-in; the biometric and push are new."],
+    ["home", "02", "Home, by role", "Each role opens on its own compact home: what needs them, today, and the numbers that matter to that role. Search is one tap from every home."],
+    ["calls", "03", "Calls", "Today on the web becomes one Calls tab: Incoming transfers, the Dialer and Callbacks. The inbound call keeps the web’s four steps."],
+    ["leads", "04", "Leads", "Every pipeline as a list or a board, the lead page with its stage path, and every edit it opens."],
+    ["sales", "05", "Sales", "Quote, apply, sign, then follow the case at the carrier. Built for the kitchen table."],
+    ["book", "06", "Book & retention", "Find any policy fast, work the retention ladder, and settle the carrier sync decisions a person has to make."],
+    ["money", "07", "Money", "My pay for producers; the month, approvals and expenses for owners and bookkeepers. Reconciling stays on the computer."],
+    ["inbox", "08", "Inbox & chat", "The bell, partner chat and the notification settings. Page notices land here, never on the screen."],
+    ["team", "09", "Team, reports & compliance", "For owners and managers on the move: the team, the reports that read well on a phone, and the compliance clocks."],
+    ["menu", "10", "Menu, settings & the computer hand-off", "The whole web menu in one list, honest about what opens on the computer."],
+    ["partner", "11", "Partner app", "The partner portal in the same app: send a lead, follow it, get paid, talk to the agency."],
+    ["native", "12", "Phone-only extras", "Widgets, Live Activities, shortcuts and the camera."],
+    ["states", "13", "States", "Loading, empty, offline and error, drawn once so every screen behaves the same."],
+  ];
+  // Release per screen (decision 8). Section default, then the exceptions.
+  const REL_SEC = { in: 1, home: 1, calls: 1, leads: 1, inbox: 1, menu: 1, states: 1, sales: 2, book: 2, money: 3, team: 3, partner: 3, native: 3 };
+  const REL_ID = { B2: 3, B6: 3, B7: 2, B8: 3, B9: 3, D10: 3, H3: 3, L2: 1, L4: 1 };
+  const relOf = (s) => REL_ID[s.id] || REL_SEC[s.sec] || 1;
+  const relCount = { 1: 0, 2: 0, 3: 0 };
+  window.SCREENS.forEach((s) => { relCount[relOf(s)]++; });
+  document.querySelectorAll("#rels td[data-r]").forEach((td) => { td.textContent = relCount[td.dataset.r]; });
+  const host = document.getElementById("screens");
+  const jump = document.getElementById("jump");
+  jump.innerHTML = '<option value="why">00 · What the phone is for</option>';
+  SECTIONS.forEach(([id, n, t, p]) => {
+    const list = window.SCREENS.filter((s) => s.sec === id);
+    jump.insertAdjacentHTML("beforeend", '<option value="s-' + id + '">' + n + " · " + t + " (" + list.length + ")</option>");
+    let html = '<section class="sec" id="s-' + id + '"><header><span class="n">' + n + "</span><h2>" + t + "</h2><p>" + p + '</p></header><div class="screens">';
+    list.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+    list.forEach((s) => {
+      let pair = "";
+      try { pair = window.MK.phone(s, "ios") + window.MK.phone(s, "and"); }
+      catch (e) { pair = '<pre style="color:var(--b-bad)">' + s.id + ": " + e.message + "</pre>"; }
+      const r = relOf(s);
+      html += '<article class="shot" id="' + s.id + '" data-rel="' + r + '"><div class="cap"><h3><code>' + s.id + "</code>" + s.name + '<span class="rel r' + r + '">Release ' + r + "</span></h3><p>" + s.note + '</p></div><div class="pair">' + pair + "</div></article>";
+    });
+    host.insertAdjacentHTML("beforeend", html + "</div></section>");
+  });
+  jump.addEventListener("change", () => { const el = document.getElementById(jump.value); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); });
+
+  // Scope map, every web page.
+  const SCOPE = window.SCOPE || [];
+  const tb = document.querySelector("#scope tbody");
+  SCOPE.forEach((r) => {
+    if (r.g) { tb.insertAdjacentHTML("beforeend", '<tr class="g"><td colspan="3">' + r.g + "</td></tr>"); return; }
+    tb.insertAdjacentHTML("beforeend", "<tr><td>" + r[0] + '</td><td><span class="tag ' + r[1] + '">' + { full: "Full", lite: "Lite", desk: "Computer", new: "New" }[r[1]] + '</span></td><td class="why">' + r[2] + "</td></tr>");
+  });
+
+  // Controls. Remembered per viewer when storage allows.
+  const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+  function setPf(v) { document.body.classList.toggle("only-ios", v === "ios"); document.body.classList.toggle("only-and", v === "and"); document.querySelectorAll("[data-pf]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.pf === v))); store.set("m1-pf", v); }
+  function setTh(v) { document.body.classList.toggle("t-light", v === "light"); document.body.classList.toggle("t-dark", v !== "light"); document.querySelectorAll("[data-th]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.th === v))); store.set("m1-th", v); }
+  function setZ(v) { document.documentElement.style.setProperty("--z", v); document.documentElement.style.setProperty("--pw-both", "830px"); document.querySelectorAll("[data-z]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.z === v))); store.set("m1-z", v); }
+  document.querySelectorAll("[data-pf]").forEach((b) => b.addEventListener("click", () => setPf(b.dataset.pf)));
+  document.querySelectorAll("[data-th]").forEach((b) => b.addEventListener("click", () => setTh(b.dataset.th)));
+  document.querySelectorAll("[data-z]").forEach((b) => b.addEventListener("click", () => setZ(b.dataset.z)));
+  function setRl(v) {
+    document.querySelectorAll(".shot[data-rel]").forEach((a) => { a.hidden = v !== "all" && a.dataset.rel !== v; });
+    document.querySelectorAll("#screens .sec").forEach((sec) => { sec.hidden = !sec.querySelector(".shot:not([hidden])"); });
+    document.querySelectorAll("[data-rl]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.rl === v)));
+    store.set("m1-rl", v);
+  }
+  document.querySelectorAll("[data-rl]").forEach((b) => b.addEventListener("click", () => setRl(b.dataset.rl)));
+  setRl(store.get("m1-rl") || "all");
+  setPf(store.get("m1-pf") || "both"); setTh(store.get("m1-th") || "dark"); setZ(store.get("m1-z") || ".78");
+})();
+</script>

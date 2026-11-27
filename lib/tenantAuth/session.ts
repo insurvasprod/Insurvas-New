@@ -38,19 +38,32 @@ export type TenantSessionPayload = {
    * Absent on older cookies, which were always persistent: they are treated as remembered.
    */
   remember?: boolean;
+  /**
+   * "app" on a token issued to the iOS / Android app (2026-11-24). The app sends it as a Bearer header
+   * instead of a cookie; requireTenant accepts a header token only when it carries this mark, so a web
+   * cookie copied into a header is never a session.
+   */
+  cli?: typeof APP_CLIENT;
   exp?: number;
 };
+
+/** The `cli` mark on a session issued to the phone app. */
+export const APP_CLIENT = "app" as const;
 
 export type TenantSessionTokenOptions = {
   /** The "Keep me signed in" choice this session was started with. Default: remembered. */
   remember?: boolean;
   /** Epoch seconds. A re-issued token keeps its session's original expiry rather than restarting it. */
   expiresAt?: number;
+  /** Issue the token for the phone app (sent as a Bearer header, never a cookie). */
+  client?: typeof APP_CLIENT;
 };
 
 export async function signTenantSessionToken(userId: string, tenantId: string, sessionVersion = 0, sid?: string, options: TenantSessionTokenOptions = {}): Promise<string> {
   const remember = options.remember !== false;
-  return new SignJWT(sid ? { tenantId, sessionVersion, sid, remember } : { tenantId, sessionVersion, remember })
+  const claims: Record<string, unknown> = sid ? { tenantId, sessionVersion, sid, remember } : { tenantId, sessionVersion, remember };
+  if (options.client === APP_CLIENT) claims.cli = APP_CLIENT;
+  return new SignJWT(claims)
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(userId)
     .setIssuedAt()
@@ -90,6 +103,7 @@ export async function verifyTenantSessionToken(token: string): Promise<TenantSes
     // A token with an audience is something else signed with this secret — the 5-minute "password
     // passed, code still owed" token (LA-8.2) — and is never a session.
     if (payload.aud !== undefined) return null;
+    if (payload.cli !== undefined && payload.cli !== APP_CLIENT) return null;
     return payload as unknown as TenantSessionPayload;
   } catch {
     return null;
@@ -176,6 +190,45 @@ export async function verifyTenantTrustedDeviceToken(token: string): Promise<Ten
 }
 
 export const tenantTrustedDeviceCookieOptions = { ...tenantSessionCookieOptions, path: "/api/app/auth", maxAge: TRUSTED_TTL_SECONDS };
+
+/**
+ * The phone app's refresh token (2026-11-24). The app's session token lives twelve hours like the web's;
+ * this one, kept in the Keychain / Keystore behind Face ID or the fingerprint, gets a new session token
+ * for the SAME session row without the password again. It is bound to:
+ *   · the session row (sid), so ending the session from Signed-in devices ends it on the next refresh;
+ *   · the person's session version, so "sign out everywhere" and a password change end it too;
+ *   · a fixed 30 days from sign-in (the trusted-device span). It is never extended: after 30 days the
+ *     password (and the code) are asked again.
+ * Its own audience means it can never stand in for a session.
+ */
+const APP_REFRESH_AUDIENCE = "insurvas:tenant-app-refresh";
+export const APP_REFRESH_DAYS = TRUSTED_DEVICE_DAYS;
+
+export type TenantAppRefresh = { sub: string; tenantId: string; sessionVersion: number; sid: string | null; exp?: number };
+
+export async function signTenantAppRefreshToken(input: TenantAppRefresh): Promise<string> {
+  return new SignJWT({ tenantId: input.tenantId, sessionVersion: input.sessionVersion, sid: input.sid })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(input.sub)
+    .setAudience(APP_REFRESH_AUDIENCE)
+    .setIssuedAt()
+    .setExpirationTime(input.exp ?? `${APP_REFRESH_DAYS * 24 * 60 * 60}s`)
+    .sign(getSecret());
+}
+
+export async function verifyTenantAppRefreshToken(token: string): Promise<TenantAppRefresh | null> {
+  try {
+    const { payload } = await jwtVerify(token, getSecret(), { audience: APP_REFRESH_AUDIENCE });
+    if (typeof payload.sub !== "string" || typeof payload.tenantId !== "string" || typeof payload.sessionVersion !== "number") return null;
+    if (payload.sid !== null && typeof payload.sid !== "string") return null;
+    return { sub: payload.sub, tenantId: payload.tenantId, sessionVersion: payload.sessionVersion, sid: (payload.sid as string | null) ?? null, exp: payload.exp };
+  } catch {
+    return null;
+  }
+}
+
+/** Twelve hours: the app's session token lives exactly as long as the web's cookie. */
+export const APP_SESSION_SECONDS = SESSION_TTL_SECONDS;
 
 /**
  * "Email me a sign-in link" (2026-10-24). A link that signs in once, within fifteen minutes. It is
