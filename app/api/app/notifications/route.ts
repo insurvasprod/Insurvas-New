@@ -3,11 +3,14 @@ import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
 import { getTenantSession, requireTenant } from "@/lib/tenantAuth/requireTenant";
-import { AGENT_ALERT_EVENTS } from "@/lib/agentAlerts/presentation";
+import { AGENT_ALERT_EVENTS, eventTypeForKind, leadIdFromAlertLink } from "@/lib/agentAlerts/presentation";
 import { AUDIBLE } from "@/lib/notify/treatments";
 import { listAgentAlerts, markAgentAlertsRead, saveAgentAlertSettings, soundTreatmentsArePersisted } from "@/lib/agentAlerts/service";
 import { touchMemberPresence } from "@/lib/tenantTeam/presence";
 import { scopeFor } from "@/lib/agency/visibility";
+import { rowVisible, type ProducerScope } from "@/lib/agency/visibilityCore";
+import { deliveryByKind } from "@/lib/notifications/preferences";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 const events = z.object(Object.fromEntries(AGENT_ALERT_EVENTS.map((event) => [event, z.boolean()])) as Record<(typeof AGENT_ALERT_EVENTS)[number], z.ZodBoolean>).strict();
 // Only the four audible treatments, each optional: a missing key means "no opinion, use the
@@ -32,12 +35,49 @@ const settingsSchema = z
 
 const ALERT_SCOPE_MAX_AGE_MS = 30_000;
 
-export async function GET() {
+/**
+ * ?recent=1 (the phone's Inbox, board H1: read alerts stay listed, only unread ones get the dot): the feed as
+ * below, plus this person's alerts already read in the last week. The same rules as the feed: their own rows
+ * only, kinds the bell knows, the ones Settings › Notifications lets into the app, and (AG-0.5) nothing about
+ * a lead now with a producer outside the session's scope; a queue that cannot be read hides every lead row.
+ */
+const READ_WINDOW_MS = 7 * 24 * 60 * 60_000;
+type ReadRow = { id: string; kind: string; title: string; body: string | null; link: string; created_at: string; read_at: string };
+
+async function readAlerts(tenantId: string, userId: string, scope: ProducerScope) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = getSupabaseServiceClient() as any;
+  const since = new Date(Date.now() - READ_WINDOW_MS).toISOString();
+  const [delivery, result] = await Promise.all([
+    deliveryByKind(userId, tenantId),
+    db.from("agent_notifications").select("id, kind, title, body, link, created_at, read_at").eq("tenant_id", tenantId).eq("recipient_user_id", userId).not("read_at", "is", null).gte("created_at", since).order("created_at", { ascending: false }).limit(100),
+  ]);
+  if (result.error) throw new Error(`Could not load read alerts: ${result.error.message}`);
+  const rows = ((result.data ?? []) as ReadRow[]).flatMap((row) => {
+    const eventType = eventTypeForKind(row.kind);
+    return eventType && (delivery.get(row.kind)?.in_app ?? true) ? [{ ...row, event_type: eventType }] : [];
+  });
+  if (scope === null) return rows;
+  const leadIds = [...new Set(rows.map((row) => leadIdFromAlertLink(row.link)).filter((id): id is string => Boolean(id)))];
+  if (!leadIds.length) return rows;
+  const queue = await db.from("lead_queue").select("lead_id, owner_user_id, queued_at").eq("tenant_id", tenantId).in("lead_id", leadIds).order("queued_at", { ascending: false });
+  if (queue.error) return rows.filter((row) => !leadIdFromAlertLink(row.link));
+  const owner = new Map<string, string | null>();
+  for (const q of (queue.data ?? []) as { lead_id: string; owner_user_id: string | null }[]) if (!owner.has(q.lead_id)) owner.set(q.lead_id, q.owner_user_id);
+  return rows.filter((row) => {
+    const lead = leadIdFromAlertLink(row.link);
+    const who = lead ? owner.get(lead) ?? null : null;
+    return !who || who === userId || rowVisible(scope, who);
+  });
+}
+
+export async function GET(request?: NextRequest) {
   // Polled every 2.5s per tab. The alert read is keyed by the verified session JWT (the same
   // tenant/user requireTenant resolves), so it can start alongside the membership check instead of
   // after it. Settled so a failed read cannot pre-empt a 401/403; nothing is returned until auth
   // passes. Same pattern as requireFeature.
   const session = await getTenantSession();
+  const recent = request?.nextUrl?.searchParams.get("recent") === "1";
   // No session: the same 401 requireTenant would give, with no speculative work at all.
   if (!session) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const [auth, feedSettled] = await Promise.all([
@@ -45,7 +85,10 @@ export async function GET() {
     // AG-0.5: the scope is the verified session's (the same tenant and user requireTenant resolves), so
     // in an agency an alert about another producer's lead is left out. Null scope: the feed as before. The
     // scope is re-read at most every 30s per person, not on every 2.5s poll (see scopeFor).
-    scopeFor({ tenantId: session.tenantId, userId: session.sub }, { maxAgeMs: ALERT_SCOPE_MAX_AGE_MS }).then((scope) => listAgentAlerts(session.tenantId, session.sub, scope)).then(
+    scopeFor({ tenantId: session.tenantId, userId: session.sub }, { maxAgeMs: ALERT_SCOPE_MAX_AGE_MS }).then(async (scope) => {
+      const feed = await listAgentAlerts(session.tenantId, session.sub, scope);
+      return recent ? { ...feed, read: await readAlerts(session.tenantId, session.sub, scope) } : feed;
+    }).then(
       (value) => ({ ok: true as const, value }),
       (error: unknown) => ({ ok: false as const, error }),
     ),

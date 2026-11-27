@@ -8,6 +8,7 @@ import { DO_NOT_CALL_DISPOSITION_KEY, type DispositionWizard } from "@/lib/dispo
 import { ensureDefaultPublisherDispositionMappings } from "@/lib/pipelines/service";
 import { leadPipelineId } from "@/lib/pipelines/outcomeStages";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { callbackReminderLeadMinutes } from "@/lib/settings/queries";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { rowVisible, scopeFor, type ProducerScope } from "@/lib/agency/visibility";
 import { guardWorkItem } from "@/lib/transferInbox/scope";
@@ -44,10 +45,11 @@ async function withOutcomeContext(tenantId: string, userId: string, wizard: Disp
   if (publisher.data?.id) await ensureDefaultPublisherDispositionMappings(tenantId, publisher.data.id).catch((error) => console.error("[disposition] default outcomes could not be seeded", error));
   // Each outcome is described by where it takes THIS lead: its pipeline's own stage first (20261022200000).
   const pipelineId = await leadPipelineId(tenantId, wizard.lead.id).catch(() => null);
-  const [outcomes, verification, flowStage] = await Promise.all([
+  const [outcomes, verification, flowStage, reminderMinutes] = await Promise.all([
     listMappedOutcomes(tenantId, pipelineId).catch(() => null),
     verificationStatus(tenantId, wizard.workItem.id).catch(() => null),
     supabase.from("tenant_pipeline_stages").select("id, pipeline_id").eq("id", wizard.flow.stage_id).maybeSingle(),
+    callbackReminderMinutes(tenantId),
   ]);
   const current = { stageId: wizard.flow.stage_id ?? null, pipelineId: flowStage.data?.pipeline_id ?? null };
   return {
@@ -56,6 +58,9 @@ async function withOutcomeContext(tenantId: string, userId: string, wizard: Disp
     assignees: scope === null ? wizard.assignees : wizard.assignees.filter((assignee) => assignee.id === userId || rowVisible(scope, assignee.id)),
     currentUserId: userId,
     verification,
+    // Phone board C6 (2026-11-26), additive: how long before a callback its reminder goes out — the
+    // agency's own setting (Settings › Calendar), else the platform default; null when unreadable.
+    callbackReminderMinutes: reminderMinutes,
     outcomeOptions: outcomes?.map((outcome) => {
       const application = isApplicationOutcome(outcome, outcome.mapped_stage);
       return {
@@ -70,6 +75,19 @@ async function withOutcomeContext(tenantId: string, userId: string, wizard: Disp
       };
     }) ?? null,
   };
+}
+
+/** The callback reminder's lead time: claim_callback_reminders uses coalesce(the agency's minutes, the platform's). */
+async function callbackReminderMinutes(tenantId: string): Promise<number | null> {
+  try {
+    const own = await getSupabaseServiceClient().from("tenant_booking_settings" as never).select("callback_reminder_minutes").eq("tenant_id", tenantId).maybeSingle();
+    const minutes = (own.data as { callback_reminder_minutes?: number | null } | null)?.callback_reminder_minutes;
+    if (!own.error && minutes != null && Number.isFinite(Number(minutes))) return Number(minutes);
+    const platform = await callbackReminderLeadMinutes();
+    return Number.isFinite(Number(platform)) ? Number(platform) : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

@@ -6,6 +6,7 @@ import { acceptsFilesFrom } from "@/lib/carriers/agency";
 import { FILE_TYPES, MAX_UPLOAD_BYTES, carrierFileBytesMatch, carrierFileKind } from "@/lib/ingestion/constants";
 import { isRecordUuid, isoDate } from "@/lib/ingestion/path";
 import { runArrival } from "@/lib/ingestion/dailyRunStore";
+import { loadMissingFiles } from "@/lib/ingestion/fileOutcomeStore";
 import { processFileQuietly } from "@/lib/ingestion/parser";
 import { extractRawRows } from "@/lib/ingestion/rawLayer";
 import { CARRIER_FILES_PENDING_MESSAGE, CarrierFileError, fileItWouldReplace, listCarrierFiles, uploadCarrierFile } from "@/lib/ingestion/registry";
@@ -37,10 +38,16 @@ function failure(error: unknown, fallback: string) {
   return NextResponse.json({ error: fallback }, { status: 500 });
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const auth = await requireFeatureRole("statement_ingestion", roles);
   if (auth instanceof NextResponse) return auth;
   try {
+    // `?missing=1` (the phone's bookkeeper home, mobile board B6 "Statements late"): only the file monitor's open
+    // missing-file findings, the same read the Carrier files page's "Missing" list makes. Reads only.
+    if (request.nextUrl.searchParams.get("missing") === "1") {
+      const missing = await loadMissingFiles(auth.context.tenantId);
+      return NextResponse.json({ ok: true, ...missing }, { headers: { "Cache-Control": "no-store" } });
+    }
     const list = await listCarrierFiles(auth.context.tenantId);
     return NextResponse.json({ ok: true, ...list, message: list.available ? null : CARRIER_FILES_PENDING_MESSAGE }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

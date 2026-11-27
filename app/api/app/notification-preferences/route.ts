@@ -7,6 +7,8 @@ import { resolveDelivery, visibleEvents } from "@/lib/notifications/events";
 import { forgetDelivery, loadNotificationSettings, loadPreferences, NotificationPreferenceError, savePreference, saveQuietHours } from "@/lib/notifications/preferences";
 import { requireTenant } from "@/lib/tenantAuth/requireTenant";
 import { getViewerTimezone } from "@/lib/users/viewerTimezone";
+import { callbackReminderLeadMinutes } from "@/lib/settings/queries";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 /**
  * LA-8.4 (Notion sprint) · my notification preferences: per event, per channel, the digest for
@@ -20,18 +22,37 @@ const bodySchema = z.union([
   z.object({ quiet: z.object({ enabled: z.boolean(), start: hhmm, end: hhmm }).strict() }).strict(),
 ]);
 
+/**
+ * How long before a callback its reminder comes (the phone's Notification settings, board H4: "Callback in 5
+ * minutes"): the agency's own minutes, else the platform's, as claim_callback_reminders reads them. Null when
+ * neither can be read; the setting itself is unaffected.
+ */
+async function callbackReminderMinutes(tenantId: string): Promise<number | null> {
+  try {
+    const own = await getSupabaseServiceClient().from("tenant_booking_settings" as never).select("callback_reminder_minutes").eq("tenant_id", tenantId).maybeSingle();
+    const minutes = (own.data as { callback_reminder_minutes?: number | null } | null)?.callback_reminder_minutes;
+    if (!own.error && minutes != null && Number.isFinite(Number(minutes))) return Number(minutes);
+    const platform = await callbackReminderLeadMinutes();
+    return Number.isFinite(Number(platform)) ? Number(platform) : null;
+  } catch {
+    return null;
+  }
+}
+
 async function view(context: { userId: string; tenantId: string; role: Parameters<typeof visibleEvents>[1] }) {
   const entitlement = await getEntitlement(context.tenantId);
-  const [granted, prefs, settings, timeZone] = await Promise.all([
+  const [granted, prefs, settings, timeZone, reminderMinutes] = await Promise.all([
     effectiveFeatures(entitlement.features, context.tenantId),
     loadPreferences(context.userId),
     loadNotificationSettings(context.userId),
     getViewerTimezone(context.tenantId, context.userId),
+    callbackReminderMinutes(context.tenantId),
   ]);
   return {
     available: settings.available,
     timeZone,
     quiet: settings.quiet,
+    callbackReminderMinutes: reminderMinutes,
     events: visibleEvents(granted, context.role).map((e) => ({
       key: e.key, label: e.label, description: e.description, group: e.group,
       supportsDigest: e.supports_digest, protected: e.is_protected, protectedReason: e.protected_reason ?? null,

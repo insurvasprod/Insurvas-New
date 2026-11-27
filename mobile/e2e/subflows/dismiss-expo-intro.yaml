@@ -1,0 +1,22 @@
+# After its data is cleared, Expo Go opens its own developer menu (or a one-time "This is the developer
+# menu" intro) over the app on first launch. Close whichever shows; the app's own screen is underneath.
+appId: host.exp.exponent
+---
+- extendedWaitUntil:
+    visible: "This is the developer menu.*|Toggle performance monitor|Your calls, leads and book, wherever you are.|Signing in for testing.*"
+    timeout: 120000
+- runFlow:
+    when:
+      visible: "This is the developer menu.*"
+    commands:
+      - tapOn: "Continue"
+- runFlow:
+    when:
+      visible: "Toggle performance monitor"
+    commands:
+      - pressKey: back
+- runFlow:
+    when:
+      visible: "Toggle performance monitor"
+    commands:
+      - pressKey: back

@@ -1,0 +1,32 @@
+# Signs in with a TEST account's password and walks the release 1 tabs. Read only.
+#
+#   maestro test e2e/02-signed-in-tabs.yaml -e EMAIL=<test account> -e PASSWORD=<its password>
+#
+# The account must not have two-factor on (or must trust this emulator already). Never put a real
+# person's password in this file or in the repo. Without a password, use 03 (minted test tokens).
+appId: host.exp.exponent
+---
+- launchApp:
+    clearState: true
+- openLink: "exp://10.0.2.2:8081?__expo_disable_onboarding=1&__expo_disable_fab=1"
+- runFlow:
+    file: subflows/dismiss-expo-intro.yaml
+- extendedWaitUntil:
+    visible:
+      id: "sign-in-submit"
+    timeout: 120000
+- tapOn:
+    id: "sign-in-email"
+- inputText: ${EMAIL}
+- tapOn:
+    id: "sign-in-password"
+- inputText: ${PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: "sign-in-submit"
+- extendedWaitUntil:
+    visible: "Transfers waiting|Coming to the phone"
+    timeout: 60000
+- takeScreenshot: e2e/screenshots/02-home
+- runFlow:
+    file: subflows/walk-tabs.yaml

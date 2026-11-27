@@ -20,6 +20,8 @@
  *   node --env-file=.env.local scripts/mint-session.mjs partner                    # any active partner user
  *   node --env-file=.env.local scripts/mint-session.mjs partner --role partner_admin
  *   node --env-file=.env.local scripts/mint-session.mjs admin --js    # a document.cookie one-liner
+ *   node --env-file=.env.local scripts/mint-session.mjs tenant --email <addr> --app --js   # the phone app's web preview
+ *   node --env-file=.env.local scripts/mint-session.mjs tenant --email <addr> --app --link # an exp:// link for the emulator
  */
 import { createClient } from "@supabase/supabase-js";
 import { SignJWT } from "jose";
@@ -128,6 +130,9 @@ if (plane === "admin") {
     .limit(1);
   if (role) query = query.eq("role", role);
   if (email) query = query.eq("users.email", email);
+  // --tenant <uuid>: a member of that agency (with --role, e.g. a producer of the demo agency).
+  const tenant = arg("tenant", null);
+  if (tenant) query = query.eq("tenant_id", tenant);
   const { data, error } = await query.maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) {
@@ -146,6 +151,48 @@ if (plane === "admin") {
     sessionVersion: data.users?.session_version ?? 0,
   });
   who = `${data.users?.email ?? data.user_id} in ${data.tenants?.name ?? data.tenant_id}`;
+}
+
+// --app (tenant plane): the phone app's tokens instead of a cookie (2026-11-24). The session token
+// carries cli:"app" (requireTenant accepts a Bearer header only with it); the refresh token has its own
+// audience. With --js it prints a localStorage one-liner for the app's web preview (mobile/, expo web).
+if (plane === "tenant" && process.argv.includes("--app")) {
+  const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8"));
+  const secret = new TextEncoder().encode(process.env.TENANT_SESSION_SECRET);
+  const access = await new SignJWT({ tenantId: payload.tenantId, sessionVersion: payload.sessionVersion, remember: true, cli: "app" })
+    .setProtectedHeader({ alg: "HS256" }).setSubject(payload.sub).setIssuedAt().setExpirationTime(ttl).sign(secret);
+  const refresh = await new SignJWT({ tenantId: payload.tenantId, sessionVersion: payload.sessionVersion, sid: null })
+    .setProtectedHeader({ alg: "HS256" }).setSubject(payload.sub).setAudience("insurvas:tenant-app-refresh").setIssuedAt().setExpirationTime(ttl).sign(secret);
+  const expiresAt = Math.floor(Date.now() / 1000) + Number(arg("ttl", "60")) * 60;
+  if (process.argv.includes("--link")) {
+    // The emulator / simulator: mobile/src/app/dev-sign-in.tsx (development builds only).
+    const q = new URLSearchParams({ access, refresh, expiresAt: String(expiresAt) });
+    // --host 10.0.2.2 for the Android emulator (its name for this computer); default 127.0.0.1.
+    process.stdout.write(`exp://${arg("host", "127.0.0.1")}:8081/--/dev-sign-in?${q}`);
+  } else if (asJs) {
+    process.stdout.write(`localStorage.setItem("insurvas.access",${JSON.stringify(access)});localStorage.setItem("insurvas.refresh",${JSON.stringify(refresh)});localStorage.setItem("insurvas.expiresAt","${expiresAt}");location.reload()`);
+  } else {
+    console.log(`# ${who} · phone app tokens · expire in ${ttl}`);
+    console.log(`access=${access}`);
+    console.log(`refresh=${refresh}`);
+  }
+  process.exit(0);
+}
+
+// --app (partner plane, 2026-11-25): the partner app's tokens, as lib/partnerAuth/appSession.ts issues them
+// (session token with cli:"app", refresh token with its own audience), for mobile/src/app/partner/dev-sign-in.tsx.
+if (plane === "partner" && process.argv.includes("--app")) {
+  const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8"));
+  const secret = new TextEncoder().encode(process.env.PARTNER_SESSION_SECRET || `insurvas-partner:${process.env.TENANT_SESSION_SECRET}`);
+  const base = { tenantId: payload.tenantId, partnerId: payload.partnerId, sessionVersion: payload.sessionVersion };
+  const access = await new SignJWT({ ...base, remember: true, cli: "app" })
+    .setProtectedHeader({ alg: "HS256" }).setSubject(payload.sub).setIssuedAt().setExpirationTime(ttl).sign(secret);
+  const refresh = await new SignJWT(base)
+    .setProtectedHeader({ alg: "HS256" }).setSubject(payload.sub).setAudience("insurvas:partner-app-refresh").setIssuedAt().setExpirationTime(ttl).sign(secret);
+  const expiresAt = Math.floor(Date.now() / 1000) + Number(arg("ttl", "60")) * 60;
+  const q = new URLSearchParams({ access, refresh, expiresAt: String(expiresAt) });
+  process.stdout.write(`exp://${arg("host", "127.0.0.1")}:8081/--/partner/dev-sign-in?${q}`);
+  process.exit(0);
 }
 
 if (asJs) {

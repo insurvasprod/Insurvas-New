@@ -6,10 +6,12 @@ import { commitPayout, payoutPreview, readPayoutRules, readRuns } from "@/lib/ag
 import { refusalResponse } from "@/lib/agency/rpc";
 import { NO_STORE, periodOf } from "@/lib/agency/http";
 import { audit } from "@/lib/audit/log";
+import { readTeamFacts } from "@/lib/agency/payFacts";
 
 /**
  * AG-1.7 · the producer payout run. GET is the PREVIEW for a period (nothing is written) plus the runs already
- * made; POST commits the owner's decision per producer — once per producer and period.
+ * made; POST commits the owner's decision per producer — once per producer and period. `facts` (the phone's Approve
+ * team payouts, board G4) names per person the period's share of the advance, policies, chargebacks and applications.
  */
 export async function GET(request: NextRequest) {
   const auth = await requireFeatureRole("producer_payouts", ["owner", "bookkeeper"]);
@@ -18,7 +20,9 @@ export async function GET(request: NextRequest) {
   if (period instanceof NextResponse) return period;
   try {
     const [preview, runs, rules] = await Promise.all([payoutPreview(auth.context.tenantId, period.from, period.to), readRuns(auth.context.tenantId), readPayoutRules(auth.context.tenantId)]);
-    return NextResponse.json({ period, preview, runs, rules }, { headers: NO_STORE });
+    // After the preview: it syncs the ledger first, so the facts read the same lines it does.
+    const facts = await readTeamFacts(auth.context.tenantId, period.from, period.to).catch(() => ({}));
+    return NextResponse.json({ period, preview, runs, rules, facts }, { headers: NO_STORE });
   } catch (error) {
     return refusalResponse(error);
   }

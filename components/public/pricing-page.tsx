@@ -8,7 +8,7 @@ import { ErrorState } from "@/components/ui/page-states";
 import { Reveal, usePrefersReducedMotion } from "@/components/marketing/motion";
 import heroStyles from "@/components/marketing/landing-hero.module.css";
 import { MarketingCta } from "@/components/marketing/cta";
-import { PriceCard, PriceLadder, ladderRows, monthlyNumber, rowsFor, tierName, wholeDollars, type PriceCardPrice } from "@/components/marketing/price-card";
+import { PriceCard, PriceLadder, cyclePrice, ladderRows, monthlyNumber, rowsFor, tierName } from "@/components/marketing/price-card";
 import { PricingCompare } from "@/components/public/pricing-compare";
 import { Collapse, PRICING_CSS, SegmentedControl } from "@/components/public/pricing-motion";
 import { PricingPicker } from "@/components/public/pricing-picker";
@@ -82,23 +82,6 @@ function savingLabel(percent: number, cycle: BillingCycle): string {
   const whole = Math.round(months);
   if (cycle === "yearly" && whole >= 1 && Math.abs(months - whole) < 0.15) return `${whole} month${whole === 1 ? "" : "s"} free`;
   return `save up to ${percent}%`;
-}
-
-/**
- * A card's price on the cycle: the yearly price shown per month with the yearly total beneath it.
- * A plan the cycle does not price (the agency bands are monthly only today) keeps its monthly price
- * and says so, rather than inventing a yearly one.
- */
-function cardPrice(plan: PublicPlan, cycle: BillingCycle): PriceCardPrice | null {
-  const raw = publicPriceForCycle(plan, cycle);
-  const cents = raw ? parseDollarsToCents(raw) : null;
-  if (cents != null && cycle !== "monthly") {
-    const perMonth = Math.round(cents / CYCLE_MONTHS[cycle]);
-    return { kind: "amount", whole: wholeDollars(perMonth, "cents"), rank: perMonth, lines: ["/ month (USD)", `${wholeDollars(cents, "cents")} billed yearly`] };
-  }
-  if (!plan.price_monthly) return null;
-  const monthly = parseDollarsToCents(plan.price_monthly) ?? 0;
-  return { kind: "amount", whole: wholeDollars(plan.price_monthly), rank: monthly, lines: ["/ month (USD)", "Billed monthly"] };
 }
 
 /** The tab in each card's corner, as on the landing page. */
@@ -303,7 +286,7 @@ export function PricingPage({ plans: catalog, addons, loadError, initialAudience
                     featured={index === recommended}
                     selected={index === selected}
                     onSelect={() => setPicked(index)}
-                    price={cardPrice(plan, cycle)}
+                    price={cyclePrice(plan, cycle)}
                     blurb={plan.blurb}
                     rows={rowsFor(plan, rows)}
                     cta={{ href: `/signup?plan=${encodeURIComponent(plan.code)}&cycle=${cycle}`, label: plan.trial_days > 0 ? `Start ${plan.trial_days}-day free trial` : "Get started" }}
@@ -351,10 +334,10 @@ export function PricingPage({ plans: catalog, addons, loadError, initialAudience
           <Reveal className="mx-auto max-w-[680px] text-center">
             <div className={EYEBROW}>Compare</div>
             <h2 className={H2}>What you get on each plan</h2>
-            <p className="mt-3.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">Only what differs. Everything else is on every plan.</p>
+            <p className="mt-3.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">What changes between plans comes first. Open the table to see every feature.</p>
           </Reveal>
           <Reveal className="mt-8">
-            <PricingCompare plans={catalog} cycle={cycle} onShowAgency={showAgency} />
+            <PricingCompare plans={catalog} cycle={cycle} onCycleChange={setCycle} onShowAgency={showAgency} variant="collapsed" />
           </Reveal>
         </section>
       )}

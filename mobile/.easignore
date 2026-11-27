@@ -1,0 +1,11 @@
+# What EAS Build uploads from mobile/ (builds run with EAS_NO_VCS=1 so only this folder leaves the PC,
+# never the rest of the Insurvas repository).
+node_modules/
+.expo/
+dist/
+web-build/
+e2e/screenshots/
+.env*
+*.log
+ios/
+android/

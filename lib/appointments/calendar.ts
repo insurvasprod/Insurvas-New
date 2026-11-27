@@ -32,6 +32,12 @@ export type CalendarAppointment = {
   /** LA-2 §11 concept: what the appointment is for, from the lead — never a figure the lead lacks. */
   product: string | null;
   faceAmountCents: number | null;
+  /**
+   * The customer's own address from the lead (street, city, state, zip as the lead holds them), for
+   * an in-person visit's Directions. Null when the lead has none. An appointment has no place of its
+   * own, so this is where the customer lives, never a guess at where they will meet.
+   */
+  customerAddress: { street: string | null; city: string | null; state: string | null; zip: string | null } | null;
   /** When the agent's reminder went out (claim_appointment_reminders), or null. */
   reminderSentAt: string | null;
   /** 20260925704200: the no-show this appointment rebooks, and — for a no-show — its live rebooking. */
@@ -62,6 +68,7 @@ export function redactCalendarForSetter(rows: CalendarAppointment[], viewerId: s
           bookedByName: null,
           product: null,
           faceAmountCents: null,
+          customerAddress: null,
           rebookedFrom: null,
           rebookedAs: null,
           redacted: true,
@@ -82,6 +89,18 @@ type Query<T> = PromiseLike<Result<T>> & {
 type Db = { from(table: string): Query<Row[]> };
 
 const text = (value: unknown) => (typeof value === "string" ? value : "");
+
+/** The lead's address under the keys imports use (the inbound caller card reads the same ones). */
+function customerAddress(values: Record<string, unknown>) {
+  const pick = (...keys: string[]) => keys.map((key) => text(values[key]).trim()).find(Boolean) || null;
+  const address = {
+    street: pick("address", "street_address", "address_line1"),
+    city: pick("city", "address_city"),
+    state: pick("state", "address_state"),
+    zip: pick("zip", "zip_code", "postal_code"),
+  };
+  return address.street || address.city ? address : null;
+}
 const BASE_COLUMNS = "id, lead_id, agent_user_id, booked_by, starts_at_utc, duration_minutes, customer_timezone, status, notes, reminder_sent_at";
 /** A rebooking that still stands; a cancelled or moved one frees the no-show again. */
 const LIVE_REBOOKING = ["booked", "confirmed", "pending", "showed"];
@@ -166,6 +185,7 @@ export async function appointmentsInRange(
       bookedByName: text(row.booked_by) ? nameOfUser.get(text(row.booked_by)) ?? "Member" : null,
       product: productLabel(text(lead?.product_line) || text(values.product_line)),
       faceAmountCents: faceAmountCents(values),
+      customerAddress: customerAddress(values),
       // Whichever reminder went first: the agent's in-app alert (pg_cron) or the app's email job.
       reminderSentAt: text(row.in_app_reminded_at) || text(row.reminder_sent_at) || null,
       rebookedFrom: text(row.rebooked_from) || null,

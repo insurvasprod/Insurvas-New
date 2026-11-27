@@ -7,6 +7,9 @@ import { audit } from "@/lib/audit/log";
 import { EVIDENCE_LABEL, type EvidenceFilter } from "@/lib/consent/evidence";
 import { evidenceCsv, getConsentEvidence, type EvidenceSource } from "@/lib/consent/evidenceService";
 import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
+import { claimWindowFor } from "@/lib/consent/claimWindow";
+import { consentTextOf } from "@/lib/leadPost/validation";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 /**
  * LA-2.6 · the consent locker, read-only.
@@ -92,6 +95,27 @@ export async function GET(request: NextRequest) {
       status: (status as ConsentStatus | null) ?? null,
       limit: Number(params.get("limit")) || undefined,
     });
+    // `?words=1` (the phone's Consent proof, mobile board I5b): each certificate also carries the words the person
+    // agreed to as the lead post stored them, verbatim (the lead's consent_text; null when none was sent), and
+    // `claimClosesAt`: for a certificate not yet claimed, when the provider's claim window closes (null when the
+    // provider has none, or once claimed — the stored copy is ours from then on).
+    if (params.get("words") === "1") {
+      const leadIds = [...new Set(view.artefacts.map((a) => a.leadId).filter(Boolean))];
+      const words = new Map<string, string | null>();
+      if (leadIds.length) {
+        const { data } = await getSupabaseServiceClient().from("agent_leads").select("id, values").eq("tenant_id", auth.context.tenantId).in("id", leadIds);
+        for (const row of (data ?? []) as Array<{ id: string; values: Record<string, unknown> | null }>) words.set(row.id, consentTextOf(row.values ?? {}));
+      }
+      const now = new Date();
+      return NextResponse.json({
+        ...view,
+        artefacts: view.artefacts.map((a) => ({
+          ...a,
+          consentText: words.get(a.leadId) ?? null,
+          claimClosesAt: a.status === "claimed" ? null : claimWindowFor({ provider: a.provider, createdAt: a.consentTimestamp ?? a.capturedAt }, now).closesAt,
+        })),
+      }, { headers: { "Cache-Control": "no-store" } });
+    }
     return NextResponse.json(view, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json(

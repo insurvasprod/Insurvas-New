@@ -8,6 +8,9 @@ import { acceptBufferHandoff, BufferHandoffError, getBufferHandoffContext, listP
 import { rowVisible, scopeFor } from "@/lib/agency/visibility";
 import { guardWorkItem } from "@/lib/transferInbox/scope";
 
+import { myHandoffs } from "./mine";
+import { licensedStatesFor } from "../people";
+
 const uuid = z.string().uuid();
 const bodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("offer"), work_item_id: uuid, target_user_id: uuid }).strict(),
@@ -29,8 +32,17 @@ export async function GET(request: Request) {
   try {
     if (auth.context.role === "assistant") {
       if (!anyRoleHasPermission(contextRoles(auth.context), "inbound.buffer")) return NextResponse.json({ error: "Your role cannot offer handoffs." }, { status: 403 });
+      // Mobile board B5: ?mine=1 answers the handoffs this assistant offered and today's figures (mine.ts).
+      // Always the session's own rows in its own tenant; read-only.
+      if (new URL(request.url).searchParams.get("mine") === "1") {
+        return NextResponse.json(await myHandoffs(auth.context.tenantId, auth.context.userId), { headers: { "Cache-Control": "no-store" } });
+      }
       // AG-0.5: in an agency the buffer is offered only the producers he assists.
-      return NextResponse.json(await getBufferHandoffContext(auth.context.tenantId, auth.context.userId, await scopeFor(auth.context)));
+      const context = await getBufferHandoffContext(auth.context.tenantId, auth.context.userId, await scopeFor(auth.context));
+      // Phone board C4b (2026-11-26), additive: each listed agent's licensed states, so the sheet can
+      // say who is licensed where the caller lives. Null when they could not be read.
+      const licensedStates = await licensedStatesFor(auth.context.tenantId, context.licensedAgents.map((agent) => agent.id)).catch(() => null);
+      return NextResponse.json({ ...context, licensedStates });
     }
     const handoffs = await listPendingBufferHandoffs(auth.context.tenantId, auth.context.userId);
     const workItemId = new URL(request.url).searchParams.get("work_item_id");

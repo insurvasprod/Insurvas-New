@@ -14,6 +14,8 @@ import { zonedLocalToUtc } from "@/lib/dispositions/callbackTime";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 import { rowVisible, scopeFor, type ProducerScope } from "@/lib/agency/visibility";
+import { loadDialerVocabulary } from "@/lib/dialerScripts/service";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * AG-0.5 · one callback by id: in an agency a narrow session may act on a callback assigned to itself or
@@ -110,6 +112,41 @@ async function windowsFor(settingsRead: Promise<Awaited<ReturnType<typeof getCal
   }
 }
 
+type LooseRow = Record<string, unknown>;
+const str = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+
+/**
+ * The lead behind one callback, for its History (board C12): the city, when it arrived and from which
+ * vendor, and its calls with their outcomes in the agency's words. Calls by agents outside the session's
+ * scope are left out (AG-0.5, as the dialer panel does). Every read is filtered to the tenant and
+ * bounded; a failed read leaves that part empty rather than failing the callback.
+ */
+async function callbackLeadHistory(tenantId: string, leadId: string, scope: ProducerScope, viewerId: string) {
+  try {
+    const db = getSupabaseServiceClient() as unknown as SupabaseClient;
+    const [lead, attempts, vocabulary] = await Promise.all([
+      db.from("agent_leads").select("values, created_at, campaign_id").eq("tenant_id", tenantId).eq("id", leadId).maybeSingle<LooseRow>(),
+      db.from("tenant_call_attempts").select("id, attempted_at, disposition, agent_id, dial_clicked_at").eq("tenant_id", tenantId).eq("lead_id", leadId).order("attempted_at", { ascending: false }).limit(20),
+      loadDialerVocabulary(tenantId).catch(() => null),
+    ]);
+    const values = (lead.data?.values && typeof lead.data.values === "object" ? lead.data.values : {}) as LooseRow;
+    const campaignId = str(lead.data?.campaign_id);
+    const campaign = campaignId ? await db.from("tenant_campaigns").select("vendor:tenant_lead_vendors(name)").eq("tenant_id", tenantId).eq("id", campaignId).maybeSingle<LooseRow>() : null;
+    const vendorEmbed = campaign && !campaign.error && campaign.data ? (Array.isArray(campaign.data.vendor) ? campaign.data.vendor[0] : campaign.data.vendor) as LooseRow | null : null;
+    const calls = ((!attempts.error && Array.isArray(attempts.data) ? attempts.data : []) as LooseRow[])
+      .filter((row) => row.dial_clicked_at && (scope === null || str(row.agent_id) === viewerId || rowVisible(scope, str(row.agent_id) || null)))
+      .map((row) => ({ id: str(row.id), at: str(row.attempted_at), disposition: str(row.disposition) || null, outcome: str(row.disposition) ? vocabulary?.labels[str(row.disposition)] ?? null : null, byYou: str(row.agent_id) === viewerId }));
+    return {
+      city: str(values.city ?? values.address_city) || null,
+      arrivedAt: str(lead.data?.created_at) || null,
+      vendorName: str(vendorEmbed?.name) || null,
+      calls,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 export async function GET(request: Request) {
   const auth = await requireFeatureRole("callback_calendar", ["owner", "producer", "assistant"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
@@ -184,7 +221,12 @@ export async function GET(request: Request) {
     // the response for callers that want the agency's clock.
     // The viewer decides the Mine/All default (non-owners start on Mine) and the owner-only source rates.
     const viewerTimezone = ownZone.get(auth.context.userId) ?? null;
-    return NextResponse.json({ callbacks, windows, agencyTimezone, viewerTimezone, refusals, assignees, viewer: { userId: auth.context.userId, role: auth.context.role } });
+    // Board C12 (the phone's Callback detail): one callback's History mixes the callback's own events with
+    // the lead's calls and its arrival, and its sub-line names the city. Additive, single read only.
+    const leadHistory = parsed.data.callback_id && parsed.data.include_history && callbacks[0]
+      ? await callbackLeadHistory(auth.context.tenantId, callbacks[0].leadId, scope, auth.context.userId)
+      : undefined;
+    return NextResponse.json({ callbacks, windows, agencyTimezone, viewerTimezone, refusals, assignees, viewer: { userId: auth.context.userId, role: auth.context.role }, ...(leadHistory ? { leadHistory } : {}) });
   }
   catch (error) { return errorResponse(error); }
 }

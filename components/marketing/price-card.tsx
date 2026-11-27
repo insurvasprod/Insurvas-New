@@ -5,7 +5,8 @@ import Link from "next/link";
 import { Check, X } from "lucide-react";
 
 import styles from "@/components/marketing/price-card.module.css";
-import { featuresByModule, type PublicFeature, type PublicPlan } from "@/lib/publicPlans/types";
+import { CYCLE_MONTHS, parseDollarsToCents, type BillingCycle } from "@/lib/money";
+import { featuresByModule, publicPriceForCycle, type PublicFeature, type PublicPlan } from "@/lib/publicPlans/types";
 
 /**
  * The price card, one component for the landing page's pricing teaser and /pricing (pricing r1,
@@ -77,6 +78,23 @@ export function ladderRows(ladder: PublicPlan[], team: boolean): PublicFeature[]
 export function rowsFor(plan: PublicPlan, rows: PublicFeature[]): PriceCardRow[] {
   const has = new Set(plan.features.map((feature) => feature.key));
   return rows.map((row) => ({ key: row.key, label: row.label, included: has.has(row.key) }));
+}
+
+/**
+ * A card's price on the cycle: the yearly price shown per month with the yearly total beneath it.
+ * A plan the cycle does not price (the agency bands are monthly only today) keeps its monthly price
+ * and says so, rather than inventing a yearly one.
+ */
+export function cyclePrice(plan: PublicPlan, cycle: BillingCycle): PriceCardPrice | null {
+  const raw = publicPriceForCycle(plan, cycle);
+  const cents = raw ? parseDollarsToCents(raw) : null;
+  if (cents != null && cycle !== "monthly") {
+    const perMonth = Math.round(cents / CYCLE_MONTHS[cycle]);
+    return { kind: "amount", whole: wholeDollars(perMonth, "cents"), rank: perMonth, lines: ["/ month (USD)", `${wholeDollars(cents, "cents")} billed yearly`] };
+  }
+  if (!plan.price_monthly) return null;
+  const monthly = parseDollarsToCents(plan.price_monthly) ?? 0;
+  return { kind: "amount", whole: wholeDollars(plan.price_monthly), rank: monthly, lines: ["/ month (USD)", "Billed monthly"] };
 }
 
 /** The grid of cards. `swapKey` changes when a whole new ladder comes in, so its cards rise in turn. */
@@ -177,15 +195,17 @@ export function PriceCard({
         ) : null}
         {blurb && <p className={styles.blurb}>{blurb}</p>}
       </header>
-      <ul className={styles.rows}>
-        {rows.map((row) => (
-          <li key={row.key} data-included={row.included} data-lead={row.lead ? "true" : undefined}>
-            <span className={styles.mark} aria-hidden="true">{row.included ? <Check /> : <X />}</span>
-            <span>{row.label}</span>
-            {!row.included && <span className="sr-only"> (not included)</span>}
-          </li>
-        ))}
-      </ul>
+      {rows.length > 0 ? (
+        <ul className={styles.rows}>
+          {rows.map((row) => (
+            <li key={row.key} data-included={row.included} data-lead={row.lead ? "true" : undefined}>
+              <span className={styles.mark} aria-hidden="true">{row.included ? <Check /> : <X />}</span>
+              <span>{row.label}</span>
+              {!row.included && <span className="sr-only"> (not included)</span>}
+            </li>
+          ))}
+        </ul>
+      ) : <div className={styles.rowsEmpty} />}
       <footer className={styles.cardFoot}>
         {cta.href.startsWith("mailto:") ? (
           <a href={cta.href} className={`${styles.planCta} ${selected ? styles.planCtaFeatured : ""}`}>{cta.label}</a>

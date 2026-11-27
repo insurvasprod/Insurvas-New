@@ -15,6 +15,7 @@ import {
 } from "@/lib/callingWindow/service";
 import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 import { scopeFor } from "@/lib/agency/visibility";
+import { openNow } from "@/lib/callingWindow/openNow";
 import { readWeek, saveDaysOff, saveWeekDays, type WeekStore } from "@/lib/callingWindows/store";
 import { WEEKDAYS, dayRows, envelope, fitsWithoutDays, weekFrom, type DayOff, type Week } from "@/lib/callingWindows/week";
 
@@ -106,7 +107,15 @@ export async function GET() {
     // it — so a narrow session inside an agency gets null, and the board falls back to the states whose
     // rule bites (statesToList's "notable" basis).
     return NextResponse.json(
-      { ...settings, week, ...(scope === null ? {} : { dialingStates: null }), canEdit: auth.context.role === "owner" },
+      {
+        ...settings,
+        week,
+        ...(scope === null ? {} : { dialingStates: null }),
+        canEdit: auth.context.role === "owner",
+        // The phone Home's "open in 31 states · closes 9:00 pm ET" line (mobile board B1). A narrow session
+        // counts over every state, as the board above does without the worked list.
+        now: openNow({ ...settings, dialingStates: scope === null ? settings.dialingStates : null }, new Date(), week?.week ?? null),
+      },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

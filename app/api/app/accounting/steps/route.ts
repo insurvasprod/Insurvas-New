@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import type { AccountingStepCounts } from "@/lib/accounting/steps";
@@ -18,7 +18,11 @@ import { todoCounts } from "@/lib/accounting/todoCore";
  */
 const ROLES = ["owner", "bookkeeper"] as const;
 
-export async function GET() {
+/**
+ * `?items=1` (the phone's Money tab, release 3 board G3): the same To do rows Accounting › To do draws, oldest first,
+ * beside the counts, so the phone lists what waits without a second reading of every source. Same gate, same groups.
+ */
+export async function GET(request: NextRequest) {
   const auth = await requireFeatureRole("profit_and_loss", ROLES);
   if (auth instanceof NextResponse) return auth;
   const tenantId = auth.context.tenantId;
@@ -30,5 +34,6 @@ export async function GET() {
   const n = todoCounts(items);
   const counts: AccountingStepCounts = { todo: n.all };
   for (const key of ["bank", "bills", "expenses", "tax"] as const) if (!failed.includes(key)) counts[key] = n[key];
-  return NextResponse.json({ counts }, { headers: { "Cache-Control": "no-store" } });
+  const withItems = request.nextUrl.searchParams.get("items") === "1";
+  return NextResponse.json(withItems ? { counts, items, failed } : { counts }, { headers: { "Cache-Control": "no-store" } });
 }

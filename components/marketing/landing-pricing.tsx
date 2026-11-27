@@ -16,6 +16,7 @@ import type { PublicPlan } from "@/lib/publicPlans/types";
  *
  * The card itself is components/marketing/price-card.tsx since 2026-11-19, shared with /pricing so
  * both pages show the same card (pricing r1).
+ * The "Compare features" table lives on /pricing only (owner, 2026-11-27).
  *
  * Every price, plan name, blurb, feature and trial length is read from the live catalog — nothing
  * is typed in (UI-CONSISTENCY §13) — so the teaser can never promise what a plan does not grant.

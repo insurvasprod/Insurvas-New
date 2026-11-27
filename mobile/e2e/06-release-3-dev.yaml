@@ -1,0 +1,74 @@
+# Release 3's owner screens (Team · Money tabs, reports, compliance, setup, partner sign-in), opened after a
+# development sign-in as an OWNER test account. READ ONLY: it opens screens, waits for each one's own words and
+# takes screenshots; the one tap is the Money tab, and nothing that saves is pressed.
+# Run with: powershell -File mobile/scripts/e2e-android.ps1 -SignedIn -Email <owner test account>
+appId: host.exp.exponent
+---
+- launchApp:
+    clearState: true
+- openLink: "exp://10.0.2.2:8081?__expo_disable_onboarding=1&__expo_disable_fab=1"
+- runFlow:
+    file: subflows/dismiss-expo-intro.yaml
+- extendedWaitUntil:
+    visible:
+      id: "sign-in-submit"
+    timeout: 120000
+# The agency sign-in offers the partner door (board K0).
+- assertVisible:
+    id: "sign-in-partner"
+- openLink: ${MAESTRO_LINK}
+# B6 · the owner's Home
+- extendedWaitUntil:
+    visible: "Submitted premium"
+    timeout: 90000
+- takeScreenshot: e2e/screenshots/40-owner-home
+# I1 · Team tab (second tab for an owner)
+- openLink: "exp://10.0.2.2:8081/--/teamtab"
+- extendedWaitUntil:
+    visible: "Issued premium"
+    timeout: 60000
+- takeScreenshot: e2e/screenshots/41-team
+# G3 · Money tab (third)
+- tapOn:
+    point: "50%,96%"
+- extendedWaitUntil:
+    visible: "Waiting on you.*"
+    timeout: 60000
+- takeScreenshot: e2e/screenshots/42-money
+# G7 · Pay issues
+- openLink: "exp://10.0.2.2:8081/--/money/pay-issues"
+- extendedWaitUntil:
+    visible: "By carrier"
+    timeout: 60000
+- takeScreenshot: e2e/screenshots/43-pay-issues
+# I3 · Reports
+- openLink: "exp://10.0.2.2:8081/--/reports"
+- extendedWaitUntil:
+    visible: "Sales performance"
+    timeout: 60000
+- takeScreenshot: e2e/screenshots/44-reports
+# I6 · Complaints
+- openLink: "exp://10.0.2.2:8081/--/compliance/complaints"
+- extendedWaitUntil:
+    visible: "Open"
+    timeout: 60000
+- takeScreenshot: e2e/screenshots/45-complaints
+# I5 · Check a number, from the shortcut link with a heard number (nothing is checked until the button)
+- openLink: "exp://10.0.2.2:8081/--/check-number?number=7135550144"
+- extendedWaitUntil:
+    visible: "Check this number"
+    timeout: 60000
+- assertVisible: "7135550144"
+- takeScreenshot: e2e/screenshots/46-check-number
+# B9 · Get set up
+- openLink: "exp://10.0.2.2:8081/--/setup"
+- extendedWaitUntil:
+    visible: "Get set up"
+    timeout: 60000
+- takeScreenshot: e2e/screenshots/47-setup
+# K0 · Partner sign in (its own door; opens whatever the agency session)
+- openLink: "exp://10.0.2.2:8081/--/partner/sign-in"
+- extendedWaitUntil:
+    visible: "Partner sign in"
+    timeout: 60000
+- takeScreenshot: e2e/screenshots/48-partner-sign-in

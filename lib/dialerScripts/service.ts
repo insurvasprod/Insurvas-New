@@ -395,7 +395,7 @@ async function readSuppressionHits(db: Db, tenantId: string, normalizedPhone: st
 }
 
 function consentView(row: Row | null) {
-  if (!row) return { available: true, hasCertificate: false, provider: null, status: null, capturedAt: null, consentTimestamp: null, ageDays: null };
+  if (!row) return { available: true, hasCertificate: false, provider: null, status: null, capturedAt: null, consentTimestamp: null, ageDays: null, certificateRef: null };
   const capturedAt = text(row.captured_at) || null;
   const consentTimestamp = text(row.consent_timestamp) || capturedAt;
   const timestamp = Date.parse(consentTimestamp ?? "");
@@ -408,7 +408,15 @@ function consentView(row: Row | null) {
     capturedAt,
     consentTimestamp,
     ageDays,
+    // The phone's C7b line names the certificate the way the board does ("certificate 9a1f…22c0"): its first and
+    // last four characters only, never the whole id (2026-11-27, additive).
+    certificateRef: certificateRef(text(row.certificate_id)),
   };
+}
+
+function certificateRef(id: string): string | null {
+  const clean = id.trim();
+  return clean.length > 8 ? `${clean.slice(0, 4)}…${clean.slice(-4)}` : null;
 }
 
 /**
@@ -1336,6 +1344,10 @@ export type QueuePreviewRow = {
   campaignName: string | null;
   /** The number that will be dialled, "(512) 555-0142", read the way the lead panel reads it. */
   phone: string | null;
+  /** The IANA zone localTime was read in (the lead's state's), so a phone can say it in its own words. */
+  timezone: string | null;
+  /** The lead's product line from its values ("final_expense"), or null when the row has none. */
+  productLine: string | null;
 };
 
 /** The queue list reads the preview's own ceiling (dialer_queue_preview clamps p_limit to 100). */
@@ -1392,6 +1404,9 @@ export async function getQueuePreview(input: { tenantId: string; agentId: string
         campaignId: fact?.campaignId ?? null,
         campaignName: fact?.campaignName ?? null,
         phone: fact?.phone ?? null,
+        // The phone app's dialer (board C7): the customer's own clock and what the lead is for.
+        timezone,
+        productLine: fact?.productLine ?? null,
       };
     }),
   };
@@ -1403,7 +1418,7 @@ export async function getQueuePreview(input: { tenantId: string; agentId: string
  * read leaves the columns empty rather than failing the list: the queue still serves.
  */
 async function queueLeadFacts(db: Db, tenantId: string, leadIds: string[]) {
-  const facts = new Map<string, { campaignId: string | null; campaignName: string | null; phone: string | null }>();
+  const facts = new Map<string, { campaignId: string | null; campaignName: string | null; phone: string | null; productLine: string | null }>();
   const ids = [...new Set(leadIds.filter(Boolean))];
   if (ids.length === 0) return facts;
   const leads = await db.from("agent_leads").select("id, campaign_id, values").eq("tenant_id", tenantId).in("id", ids);
@@ -1414,7 +1429,7 @@ async function queueLeadFacts(db: Db, tenantId: string, leadIds: string[]) {
   for (const row of leadRows) {
     const campaignId = text(row.campaign_id) || null;
     const values = (row.values && typeof row.values === "object" ? row.values : {}) as Row;
-    facts.set(text(row.id), { campaignId, campaignName: campaignId ? names.get(campaignId) ?? null : null, phone: formatUsPhone(leadPhone(values)) || null });
+    facts.set(text(row.id), { campaignId, campaignName: campaignId ? names.get(campaignId) ?? null : null, phone: formatUsPhone(leadPhone(values)) || null, productLine: text(values.product_line) || null });
   }
   return facts;
 }

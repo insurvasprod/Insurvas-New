@@ -6,6 +6,7 @@ import { LeadPhoneScreeningError } from "@/lib/compliance/phoneEdit";
 import { audit } from "@/lib/audit/log";
 import { getLeadWorkspace } from "@/lib/leadWorkspace/service";
 import { leadLineageAndNext } from "@/lib/leadWorkspace/lineage";
+import { leadReadiness } from "@/lib/leadWorkspace/readiness";
 import { anyRoleHasPermission } from "@/lib/tenantAuth/permissions";
 import { contextRoles } from "@/lib/tenantAuth/requireTenant";
 import { recordOwnerStageFix } from "@/lib/pipelines/views";
@@ -26,10 +27,48 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       getLeadWorkspace(auth.context.tenantId, auth.context.userId, auth.context.role, id),
       leadLineageAndNext(auth.context.tenantId, id, anyRoleHasPermission(contextRoles(auth.context), "money.view")).catch(() => null),
     ]);
-    return NextResponse.json({ ...data, lineage: extra?.lineage ?? null, nextAction: extra?.nextAction ?? null, readOnly: auth.entitlement.access === "read_only" });
+    // The phone's lead page (2026-11-26, additive): what an application still needs, who ran the
+    // verification, and where each licensed agent a handoff may go to holds a licence. Read only after
+    // the workspace read (tenant and setter checks) succeeded; each one failing leaves it out.
+    const [readiness, verifierName, licensedStates] = await Promise.all([
+      leadReadiness(auth.context.tenantId, id, data.lead.values).catch(() => null),
+      userName(data.verification?.session.user_id ?? null),
+      agentLicensedStates(auth.context.tenantId, (data.licensedAgents ?? []).map((agent) => agent.id)),
+    ]);
+    return NextResponse.json({ ...data, lineage: extra?.lineage ?? null, nextAction: extra?.nextAction ?? null, readiness, verifierName, licensedStates, readOnly: auth.entitlement.access === "read_only" });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not load lead workspace";
     return NextResponse.json({ error: message }, { status: message === "Lead not found" ? 404 : 400 });
+  }
+}
+
+async function userName(userId: string | null): Promise<string | null> {
+  if (!userId) return null;
+  const { data, error } = await getSupabaseServiceClient().from("users").select("name").eq("id", userId).maybeSingle();
+  return error ? null : data?.name ?? null;
+}
+
+/** Each agent's unexpired licensed states (Team & access); {} when the table is not there yet or the read fails. */
+async function agentLicensedStates(tenantId: string, userIds: string[]): Promise<Record<string, string[]>> {
+  if (!userIds.length) return {};
+  type Read = PromiseLike<{ data: Array<{ user_id: string; state: string; expires_on?: string | null }> | null; error: { message: string } | null }>;
+  const table = () => (getSupabaseServiceClient() as unknown as { from(name: string): { select(columns: string): { eq(c: string, v: string): { in(c: string, v: string[]): Read } } } }).from("tenant_user_licensed_states");
+  try {
+    let read = await table().select("user_id, state, expires_on").eq("tenant_id", tenantId).in("user_id", userIds);
+    if (read.error) read = await table().select("user_id, state").eq("tenant_id", tenantId).in("user_id", userIds);
+    if (read.error) return {};
+    const today = new Date().toISOString().slice(0, 10);
+    const out: Record<string, string[]> = {};
+    for (const row of read.data ?? []) {
+      if (row.expires_on && row.expires_on < today) continue;
+      const state = String(row.state ?? "").trim().toUpperCase();
+      if (!state) continue;
+      const list = (out[row.user_id] ??= []);
+      if (!list.includes(state)) list.push(state);
+    }
+    return out;
+  } catch {
+    return {};
   }
 }
 

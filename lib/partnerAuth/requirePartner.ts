@@ -1,11 +1,12 @@
 import "server-only";
 import { cache } from "react";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { holdsAgencyMembership } from "@/lib/auth/planeSeparation";
-import { PARTNER_SESSION_COOKIE, verifyPartnerSessionToken, type PartnerSessionPayload } from "./session";
+import { bearerFrom } from "@/lib/tenantAuth/appClient";
+import { PARTNER_SESSION_COOKIE, partnerSessionCarriedRightly, verifyPartnerSessionToken, type PartnerSessionPayload } from "./session";
 import { isPartnerRole, type PartnerRole } from "./roles";
 import type { PartnerMember } from "./team";
 import { isTenantSuspended } from "@/lib/tenants/suspension";
@@ -34,10 +35,29 @@ export type PartnerContext = {
 };
 
 export async function getPartnerSession(): Promise<PartnerSessionPayload | null> {
+  return readPartnerSession();
+}
+
+// Memoised for one request, like the context below.
+const readPartnerSession = cache(async (): Promise<PartnerSessionPayload | null> => {
   const store = await cookies();
   const token = store.get(PARTNER_SESSION_COOKIE)?.value;
-  return token ? verifyPartnerSessionToken(token) : null;
-}
+  // A browser cookie wins whenever one is present, exactly as on the tenant plane, and must not hold
+  // a token issued to the app.
+  if (token) {
+    const session = await verifyPartnerSessionToken(token);
+    return partnerSessionCarriedRightly(session, "cookie") ? session : null;
+  }
+  // The phone app (2026-11-25): the same partner session token, carried as a Bearer header. Only a
+  // token issued to the app (cli: "app") is accepted this way. The key is the partner key, so a tenant
+  // app token in this header fails the signature check and is never read as a partner session.
+  // Every check below (membership, account and partner status, session version, agency suspension,
+  // the partner feature, an agency account refused) runs on it exactly as on a cookie.
+  const bearer = bearerFrom((await headers()).get("authorization"));
+  if (!bearer) return null;
+  const session = await verifyPartnerSessionToken(bearer);
+  return partnerSessionCarriedRightly(session, "bearer") ? session : null;
+});
 
 /** Resolve partner membership and account status from the database on every request. */
 export async function resolvePartnerContext(): Promise<PartnerContext | null> {

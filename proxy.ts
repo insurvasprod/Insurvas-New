@@ -7,11 +7,22 @@ import { siteHostMove } from "@/lib/security/siteHosts";
 import { TENANT_SESSION_COOKIE, verifyTenantSessionToken } from "@/lib/tenantAuth/session";
 import { PARTNER_SESSION_COOKIE, verifyPartnerSessionToken } from "@/lib/partnerAuth/session";
 import { APP_PATH_HEADER } from "@/lib/tenantAuth/teamAccess";
+import { appPreviewCorsHeaders, appPreviewOrigin } from "@/lib/security/appPreviewCors";
+import { appUpdateRequired, appUpdateRequiredBody } from "@/lib/mobile/appVersion";
 // --- maintenance gate (SA-4.9) ---
 import { maintenanceGateResponse } from "@/lib/system/maintenanceGate";
 // --- end maintenance gate ---
 
 export async function proxy(request: NextRequest) {
+  // The phone app's web preview (development only; lib/security/appPreviewCors.ts). Production: null.
+  const preview = appPreviewOrigin({ nodeEnv: process.env.NODE_ENV, pathname: request.nextUrl.pathname, origin: request.headers.get("origin") });
+  if (preview && request.method === "OPTIONS") return new NextResponse(null, { status: 204, headers: appPreviewCorsHeaders(preview) });
+  const response = await route(request);
+  if (preview) for (const [k, v] of Object.entries(appPreviewCorsHeaders(preview))) response.headers.set(k, v);
+  return response;
+}
+
+async function route(request: NextRequest) {
   const { pathname } = request.nextUrl;
   // The Host header, never a client-sent X-Forwarded-Host (security review 2026-11, H-2 / L-14).
   const hostname = requestHostname(request.headers.get("host"), request.nextUrl.hostname);
@@ -46,6 +57,12 @@ export async function proxy(request: NextRequest) {
   // maintenance gate below never applied to them (staff need in while customers are out).
   if (pathname.startsWith("/api/admin")) {
     return NextResponse.next();
+  }
+
+  // Phone app too old for this API (board M8): 426 + app_update_required, for the agency's and the partner's
+  // requests alike, sign-in included. Opt-in: a no-op until MOBILE_MIN_APP_VERSION is set. Rules: lib/mobile/appVersion.ts.
+  if (appUpdateRequired({ pathname, client: request.headers.get("x-insurvas-client"), userAgent: request.headers.get("user-agent"), minVersion: process.env.MOBILE_MIN_APP_VERSION })) {
+    return NextResponse.json(appUpdateRequiredBody(process.env.MOBILE_MIN_APP_VERSION!.trim()), { status: 426 });
   }
 
   // --- maintenance gate (SA-4.9) ---

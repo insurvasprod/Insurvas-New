@@ -1,0 +1,19 @@
+# Clears Expo Go and signs in with a minted development link (MAESTRO_LINK: an agency dev-sign-in or a
+# partner/dev-sign-in link). Then waits for WAIT_FOR. Used to switch the account a manual walk looks at.
+appId: host.exp.exponent
+tags:
+  - subflow
+---
+- launchApp:
+    clearState: true
+- openLink: "exp://10.0.2.2:8081?__expo_disable_onboarding=1&__expo_disable_fab=1"
+- runFlow:
+    file: dismiss-expo-intro.yaml
+- extendedWaitUntil:
+    visible:
+      id: "sign-in-submit"
+    timeout: 120000
+- openLink: ${MAESTRO_LINK}
+- extendedWaitUntil:
+    visible: ${WAIT_FOR}
+    timeout: 90000

@@ -1,0 +1,24 @@
+# Board A1 · the app opens on Sign in, and asks for both fields before calling the server.
+# Runs in Expo Go on the Android emulator: powershell -File mobile/scripts/e2e-android.ps1
+appId: host.exp.exponent
+---
+- launchApp:
+    clearState: true
+# 10.0.2.2 is the emulator's name for this PC. The flags turn off Expo Go's first-run intro and its
+# floating gear, as `expo start` itself does.
+- openLink: "exp://10.0.2.2:8081?__expo_disable_onboarding=1&__expo_disable_fab=1"
+- runFlow:
+    file: subflows/dismiss-expo-intro.yaml
+- extendedWaitUntil:
+    visible:
+      id: "sign-in-submit"
+    timeout: 120000
+- assertVisible: "Your calls, leads and book, wherever you are."
+- assertVisible:
+    id: "sign-in-email"
+- assertVisible:
+    id: "sign-in-password"
+- tapOn:
+    id: "sign-in-submit"
+- assertVisible: "Enter your email and password."
+- takeScreenshot: e2e/screenshots/01-sign-in

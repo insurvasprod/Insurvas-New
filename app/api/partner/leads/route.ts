@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
     consent_attested?: unknown;
     carrier_state?: unknown;
     draft_id?: unknown;
+    live_transfer?: unknown;
   } | null;
   if (
     typeof body?.product_code !== "string" ||
@@ -89,6 +90,13 @@ export async function POST(request: NextRequest) {
   )
     return NextResponse.json(
       { error: "The consent confirmation is invalid" },
+      { status: 400 },
+    );
+  // Board K2 · "Live transfer / Lead only": whether the caller is on the line. Optional and recorded on
+  // the submission's audit row; the agency's queue treats every partner submission the same today.
+  if (body.live_transfer !== undefined && typeof body.live_transfer !== "boolean")
+    return NextResponse.json(
+      { error: "The live transfer choice is invalid" },
       { status: 400 },
     );
   const slottedDraft = Object.prototype.hasOwnProperty.call(body, "draft_id");
@@ -381,6 +389,7 @@ export async function POST(request: NextRequest) {
         definitionVersion: template.assignment.definition_version,
         replayed: result.replayed,
         consentAttestedAt,
+        ...(typeof body.live_transfer === "boolean" ? { liveTransfer: body.live_transfer } : {}),
       },
       request,
     });
